@@ -3,11 +3,9 @@
 Dev only. All accounts use the password "password123".
 """
 
-from sqlalchemy import select
-
 from app.database import SessionLocal
-from app.models.user import Role, User
-from app.security import hash_password
+from app.models.user import Role
+from app.services import auth_service
 
 ACCOUNTS = [
     ("student@thesisflow.test", "Demo Student", Role.student),
@@ -19,11 +17,10 @@ ACCOUNTS = [
 def main():
     with SessionLocal() as db:
         for email, name, role in ACCOUNTS:
-            if db.scalar(select(User).where(User.email == email)):
+            if auth_service.get_by_email(db, email):
                 continue
-            db.add(User(email=email, full_name=name, role=role, password_hash=hash_password("password123")))
+            auth_service.create_user(db, email, name, "password123", role)
             print(f"created {email}")
-        db.commit()
 
 
 if __name__ == "__main__":

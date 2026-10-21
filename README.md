@@ -34,6 +34,8 @@ frontend/src/
   api/client.js fetch wrapper (adds JWT)
 ```
 
+**Rule: logic lives in the backend.** The frontend only shows what the API returns and sends what the user typed. Validation, permissions, status changes, calculations, filtering, sorting, and "can this user do X" checks all go in `services/`. If a page needs a derived value or a flag (e.g. `can_submit`), the API returns it. The frontend never decides it.
+
 ## Adding a feature
 
 Example for proposals (F11):
