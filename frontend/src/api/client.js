@@ -33,6 +33,22 @@ export async function api(path, { body, headers, ...options } = {}) {
   return data;
 }
 
+// Links can't send the JWT header, so fetch the file and hand it to the browser.
+export async function download(path, filename) {
+  const token = getToken();
+  const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new ApiError(res.status, typeof data?.detail === "string" ? data.detail : "Download failed");
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function login(email, password) {
   const form = new URLSearchParams({ username: email, password });
   const { access_token } = await api("/auth/login", { method: "POST", body: form });

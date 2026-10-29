@@ -1,6 +1,9 @@
 .DS_Store
 .env
 
+# Uploaded files (dev)
+backend/uploads/
+
 # Python
 __pycache__/
 *.pyc
