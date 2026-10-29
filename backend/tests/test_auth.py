@@ -26,3 +26,14 @@ def test_wrong_password_rejected(client):
 
 def test_me_requires_token(client):
     assert client.get("/api/auth/me").status_code == 401
+
+
+def test_me_works_for_seeded_reserved_domain(client, db):
+    from app.models.user import Role
+    from app.services import auth_service
+
+    auth_service.create_user(db, "student@thesisflow.test", "S", "password123", Role.student)
+    token = login(client, email="student@thesisflow.test").json()["access_token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["email"] == "student@thesisflow.test"
