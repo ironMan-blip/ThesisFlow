@@ -103,7 +103,7 @@ export default function ProposalPage() {
                       <p className="truncate font-medium">{v.title}</p>
                     </div>
                     <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>
-                    <p className="mt-1.5 text-xs text-zinc-500">
+                    <p className="mt-1.5 break-words text-xs text-zinc-500">
                       {v.original_filename} · {v.size_label} · {new Date(v.created_at).toLocaleString()}
                     </p>
                   </div>
