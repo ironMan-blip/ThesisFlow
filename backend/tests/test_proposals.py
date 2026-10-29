@@ -37,6 +37,8 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     versions = res.json()["versions"]
     assert [v["version_no"] for v in versions] == [2, 1]
     assert [v["title"] for v in versions] == ["v2", "v1"]
+    assert versions[0]["size_label"].endswith(" KB")
+    assert versions[0]["download_path"] == f"/proposals/versions/{versions[0]['id']}/file"
 
     old = client.get(f"/api/proposals/versions/{versions[1]['id']}/file", headers=h)
     assert old.status_code == 200

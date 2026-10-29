@@ -25,7 +25,7 @@ export default function ProposalPage() {
     }
   };
 
-  const get = (v) => download(`/proposals/versions/${v.id}/file`, v.original_filename).catch((err) => setError(err.message));
+  const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
   return (
     <div className="space-y-6">
@@ -63,7 +63,7 @@ export default function ProposalPage() {
                   <p className="font-medium">v{v.version_no} · {v.title}</p>
                   <p className="text-sm text-gray-600">{v.abstract}</p>
                   <p className="text-xs text-gray-500">
-                    {v.original_filename} · {(v.size_bytes / 1024).toFixed(0)} KB · {new Date(v.created_at).toLocaleString()}
+                    {v.original_filename} · {v.size_label} · {new Date(v.created_at).toLocaleString()}
                   </p>
                 </div>
                 <button onClick={() => get(v)} className="shrink-0 rounded border px-2 py-1 text-sm">Download</button>
