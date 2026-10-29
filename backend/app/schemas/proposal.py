@@ -30,9 +30,6 @@ class ProposalVersionOut(BaseModel):
 class ProposalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int | None  # None until the first upload
-    owner_id: int
-    created_at: datetime | None
     versions: list[ProposalVersionOut]  # newest first
 
     @model_validator(mode="after")

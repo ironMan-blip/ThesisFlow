@@ -29,6 +29,11 @@ def get_mine(db: Session, user: User) -> Proposal:
     return db.scalar(select(Proposal).where(Proposal.owner_id == user.id)) or Proposal(owner_id=user.id)
 
 
+def _lock_mine(db: Session, user: User) -> Proposal | None:
+    # Row lock so uploads and deletes for one student never race on version numbers.
+    return db.scalar(select(Proposal).where(Proposal.owner_id == user.id).with_for_update())
+
+
 def _save_pdf(file: UploadFile) -> tuple[str, int]:
     """Stream the upload to disk. Rejects non-PDF and oversized files."""
     max_bytes = settings.max_upload_mb * 1024 * 1024
@@ -63,8 +68,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
 
     stored, size = _save_pdf(file)
     try:
-        # Row lock so two uploads at once cannot get the same version number.
-        proposal = db.scalar(select(Proposal).where(Proposal.owner_id == user.id).with_for_update())
+        proposal = _lock_mine(db, user)
         if proposal is None:
             proposal = Proposal(owner_id=user.id)
             db.add(proposal)
@@ -94,13 +98,14 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
 
 
 def delete_version(db: Session, user: User, version_id: int) -> Proposal:
-    version = db.get(ProposalVersion, version_id)
-    # Only the owning student may remove; others get 404 so ids are not leaked.
-    if version is None or version.proposal.owner_id != user.id:
+    proposal = _lock_mine(db, user)
+    # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
+    version = proposal and db.scalar(
+        select(ProposalVersion).where(ProposalVersion.id == version_id, ProposalVersion.proposal_id == proposal.id)
+    )
+    if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
-    proposal, stored, removed_no = version.proposal, version.stored_filename, version.version_no
-    # Same row lock as upload_version, so renumbering never races a new upload.
-    db.scalar(select(Proposal).where(Proposal.id == proposal.id).with_for_update())
+    stored, removed_no = version.stored_filename, version.version_no
     db.delete(version)
     db.flush()
     # Close the gap: later versions move down by one. Two steps through negatives because
