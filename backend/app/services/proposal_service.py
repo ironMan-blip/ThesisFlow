@@ -24,8 +24,9 @@ def _can_view(user: User, proposal: Proposal) -> bool:
     return user.role in (Role.faculty, Role.coordinator) or proposal.owner_id == user.id
 
 
-def get_mine(db: Session, user: User) -> Proposal | None:
-    return db.scalar(select(Proposal).where(Proposal.owner_id == user.id))
+def get_mine(db: Session, user: User) -> Proposal:
+    # Before the first upload, return an unsaved empty proposal so the page always gets one shape.
+    return db.scalar(select(Proposal).where(Proposal.owner_id == user.id)) or Proposal(owner_id=user.id)
 
 
 def _save_pdf(file: UploadFile) -> tuple[str, int]:

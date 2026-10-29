@@ -94,12 +94,12 @@ export default function ProposalPage() {
             </div>
           ) : (
             <ul className="divide-y divide-zinc-100">
-              {proposal.versions.map((v, i) => (
+              {proposal.versions.map((v) => (
                 <li key={v.id} className="flex items-start justify-between gap-4 px-6 py-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-zinc-700">v{v.version_no}</span>
-                      {i === 0 && <span className="rounded-md bg-teal-50 px-1.5 py-0.5 text-xs font-medium text-teal-800">Latest</span>}
+                      {v.is_latest &&<span className="rounded-md bg-teal-50 px-1.5 py-0.5 text-xs font-medium text-teal-800">Latest</span>}
                       <p className="truncate font-medium">{v.title}</p>
                     </div>
                     <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>

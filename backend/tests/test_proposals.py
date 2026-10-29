@@ -29,7 +29,7 @@ def upload(client, headers, content=PDF, title="My thesis", name="p.pdf"):
 
 def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     h = auth(client, db, "s@x.com")
-    assert client.get("/api/proposals/mine", headers=h).json() is None
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
 
     assert upload(client, h, title="v1").status_code == 201
     res = upload(client, h, content=PDF + b"v2", title="v2", name="p2.pdf")
@@ -37,6 +37,7 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     versions = res.json()["versions"]
     assert [v["version_no"] for v in versions] == [2, 1]
     assert [v["title"] for v in versions] == ["v2", "v1"]
+    assert [v["is_latest"] for v in versions] == [True, False]
     assert versions[0]["size_label"].endswith(" KB")
     assert versions[0]["download_path"] == f"/proposals/versions/{versions[0]['id']}/file"
 
@@ -52,7 +53,7 @@ def test_rejects_non_pdf_and_oversize(client, db, monkeypatch):
     assert upload(client, h, title="  ").status_code == 422
     monkeypatch.setattr(settings, "max_upload_mb", 1)
     assert upload(client, h, content=PDF + b"x" * 1024 * 1024).status_code == 413
-    assert client.get("/api/proposals/mine", headers=h).json() is None
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
 
 
 def test_other_students_cannot_see_but_faculty_can(client, db):

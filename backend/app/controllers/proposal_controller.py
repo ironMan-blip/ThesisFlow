@@ -11,7 +11,7 @@ from app.services import proposal_service
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
 
 
-@router.get("/mine", response_model=ProposalOut | None)
+@router.get("/mine", response_model=ProposalOut)
 def mine(user: User = Depends(require_roles(Role.student)), db: Session = Depends(get_db)):
     return proposal_service.get_mine(db, user)
 
