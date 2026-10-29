@@ -27,11 +27,6 @@ def upload(
     return proposal_service.upload_version(db, user, title, abstract, file)
 
 
-@router.get("/{proposal_id}", response_model=ProposalOut)
-def get(proposal_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return proposal_service.get_proposal(db, user, proposal_id)
-
-
 @router.get("/versions/{version_id}/file")
 def download(version_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     path, filename = proposal_service.get_version_file(db, user, version_id)

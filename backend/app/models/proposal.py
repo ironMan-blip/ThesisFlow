@@ -26,7 +26,7 @@ class ProposalVersion(Base):
     __table_args__ = (UniqueConstraint("proposal_id", "version_no"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    proposal_id: Mapped[int] = mapped_column(ForeignKey("proposals.id", ondelete="CASCADE"), index=True)
+    proposal_id: Mapped[int] = mapped_column(ForeignKey("proposals.id", ondelete="CASCADE"))
     version_no: Mapped[int] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(255))
     abstract: Mapped[str] = mapped_column(Text)

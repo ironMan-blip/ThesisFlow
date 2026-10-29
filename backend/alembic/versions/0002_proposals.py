@@ -34,10 +34,8 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.UniqueConstraint("proposal_id", "version_no"),
     )
-    op.create_index("ix_proposal_versions_proposal_id", "proposal_versions", ["proposal_id"])
 
 
 def downgrade():
-    op.drop_index("ix_proposal_versions_proposal_id", table_name="proposal_versions")
     op.drop_table("proposal_versions")
     op.drop_table("proposals")

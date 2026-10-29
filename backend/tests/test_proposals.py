@@ -59,12 +59,9 @@ def test_other_students_cannot_see_but_faculty_can(client, db):
     owner = auth(client, db, "s@x.com")
     other = auth(client, db, "o@x.com")
     faculty = auth(client, db, "f@x.com", Role.faculty)
-    proposal = upload(client, owner).json()
-    vid = proposal["versions"][0]["id"]
+    vid = upload(client, owner).json()["versions"][0]["id"]
 
-    assert client.get(f"/api/proposals/{proposal['id']}", headers=other).status_code == 404
     assert client.get(f"/api/proposals/versions/{vid}/file", headers=other).status_code == 404
-    assert client.get(f"/api/proposals/{proposal['id']}", headers=faculty).status_code == 200
     assert client.get(f"/api/proposals/versions/{vid}/file", headers=faculty).status_code == 200
 
 

@@ -28,13 +28,6 @@ def get_mine(db: Session, user: User) -> Proposal | None:
     return db.scalar(select(Proposal).where(Proposal.owner_id == user.id))
 
 
-def get_proposal(db: Session, user: User, proposal_id: int) -> Proposal:
-    proposal = db.get(Proposal, proposal_id)
-    if proposal is None or not _can_view(user, proposal):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Proposal not found")
-    return proposal
-
-
 def _save_pdf(file: UploadFile) -> tuple[str, int]:
     """Stream the upload to disk. Rejects non-PDF and oversized files."""
     max_bytes = settings.max_upload_mb * 1024 * 1024
@@ -89,13 +82,11 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             )
         )
         db.commit()
-    except IntegrityError:
+    except BaseException as exc:
         db.rollback()
         (_upload_dir() / stored).unlink(missing_ok=True)
-        raise HTTPException(status.HTTP_409_CONFLICT, "Another upload happened at the same time, try again")
-    except BaseException:
-        db.rollback()
-        (_upload_dir() / stored).unlink(missing_ok=True)
+        if isinstance(exc, IntegrityError):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Another upload happened at the same time, try again")
         raise
     db.refresh(proposal)
     return proposal
