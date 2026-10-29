@@ -13,7 +13,8 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    email: EmailStr
+    # plain str: stored emails were validated on input; re-validating rejects seeded .test domains
+    email: str
     full_name: str
     role: Role
 

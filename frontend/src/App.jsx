@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import ProposalPage from "./pages/ProposalPage";
 
 export default function App() {
   return (
@@ -10,6 +11,7 @@ export default function App() {
       {/* Pages that need a logged-in user go inside Layout. */}
       <Route element={<Layout />}>
         <Route path="/" element={<HomePage />} />
+        <Route path="/proposal" element={<ProposalPage />} />
       </Route>
     </Routes>
   );

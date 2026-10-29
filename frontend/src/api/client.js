@@ -13,7 +13,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(path, { body, headers, ...options } = {}) {
+// Sends the request with the JWT; throws ApiError with the backend's detail on non-2xx.
+async function request(path, { body, headers, ...options } = {}) {
   const token = getToken();
   const isForm = body instanceof FormData || body instanceof URLSearchParams;
   const res = await fetch(`/api${path}`, {
@@ -25,12 +26,27 @@ export async function api(path, { body, headers, ...options } = {}) {
     },
     body: body && !isForm ? JSON.stringify(body) : body,
   });
-  const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
-    const detail = typeof data?.detail === "string" ? data.detail : "Something went wrong";
-    throw new ApiError(res.status, detail);
+    const data = await res.json().catch(() => null);
+    throw new ApiError(res.status, typeof data?.detail === "string" ? data.detail : "Something went wrong");
   }
-  return data;
+  return res;
+}
+
+export async function api(path, options) {
+  const res = await request(path, options);
+  return res.status === 204 ? null : res.json().catch(() => null);
+}
+
+// Links can't send the JWT header, so fetch the file and hand it to the browser.
+export async function download(path, filename) {
+  const res = await request(path);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function login(email, password) {
