@@ -92,6 +92,20 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
     return proposal
 
 
+def delete_version(db: Session, user: User, version_id: int) -> Proposal:
+    version = db.get(ProposalVersion, version_id)
+    # Only the owning student may remove; others get 404 so ids are not leaked.
+    if version is None or version.proposal.owner_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
+    proposal, stored = version.proposal, version.stored_filename
+    db.delete(version)
+    db.commit()
+    # File goes only after the row is gone, so a failed commit never loses a PDF.
+    (_upload_dir() / stored).unlink(missing_ok=True)
+    db.refresh(proposal)
+    return proposal
+
+
 def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, str]:
     version = db.get(ProposalVersion, version_id)
     if version is None or not _can_view(user, version.proposal):

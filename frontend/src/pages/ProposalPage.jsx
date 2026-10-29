@@ -27,11 +27,21 @@ export default function ProposalPage() {
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
+  const remove = async (v) => {
+    if (!window.confirm(`Remove v${v.version_no}? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      setProposal(await api(`/proposals/versions/${v.id}`, { method: "DELETE" }));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-semibold">Proposal</h1>
-        <p className="mt-2 max-w-prose text-zinc-600">Each upload is saved as a new version. Older versions stay available.</p>
+        <p className="mt-2 max-w-prose text-zinc-600">Each upload is saved as a new version. Older versions stay available until you remove them.</p>
       </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
@@ -89,7 +99,11 @@ export default function ProposalPage() {
                       {v.original_filename} · {v.size_label} · {new Date(v.created_at).toLocaleString()}
                     </p>
                   </div>
-                  <button onClick={() => get(v)} className="btn-secondary shrink-0 px-3 py-1.5">Download</button>
+                  <div className="flex shrink-0 gap-2">
+                    <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
+                    <button onClick={() => remove(v)} aria-label={`Remove v${v.version_no}`}
+                      className="btn-secondary px-3 py-1.5 text-red-700 hover:bg-red-50">Remove</button>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -20,7 +20,7 @@ class Proposal(Base):
 
 
 class ProposalVersion(Base):
-    """One upload. Versions are never edited or deleted, so old ones stay available."""
+    """One upload. Versions are never edited; the owning student may delete one."""
 
     __tablename__ = "proposal_versions"
     __table_args__ = (UniqueConstraint("proposal_id", "version_no"),)

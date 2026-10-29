@@ -68,3 +68,18 @@ def test_other_students_cannot_see_but_faculty_can(client, db):
 def test_only_students_upload(client, db):
     faculty = auth(client, db, "f@x.com", Role.faculty)
     assert upload(client, faculty).status_code == 403
+
+
+def test_owner_can_remove_a_version(client, db, tmp_path):
+    owner = auth(client, db, "s@x.com")
+    other = auth(client, db, "o@x.com")
+    upload(client, owner, title="v1")
+    v2, v1 = upload(client, owner, title="v2").json()["versions"]
+
+    assert client.delete(f"/api/proposals/versions/{v1['id']}", headers=other).status_code == 404
+    res = client.delete(f"/api/proposals/versions/{v1['id']}", headers=owner)
+    assert res.status_code == 200
+    assert [v["id"] for v in res.json()["versions"]] == [v2["id"]]
+    assert len(list((tmp_path / "proposals").iterdir())) == 1
+    assert client.get(f"/api/proposals/versions/{v1['id']}/file", headers=owner).status_code == 404
+    assert client.delete(f"/api/proposals/versions/{v1['id']}", headers=owner).status_code == 404
