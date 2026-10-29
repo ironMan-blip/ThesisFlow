@@ -83,3 +83,15 @@ def test_owner_can_remove_a_version(client, db, tmp_path):
     assert len(list((tmp_path / "proposals").iterdir())) == 1
     assert client.get(f"/api/proposals/versions/{v1['id']}/file", headers=owner).status_code == 404
     assert client.delete(f"/api/proposals/versions/{v1['id']}", headers=owner).status_code == 404
+
+
+def test_removing_a_version_renumbers_later_ones(client, db):
+    h = auth(client, db, "s@x.com")
+    for t in ("a", "b", "c"):
+        upload(client, h, title=t)
+    c, b, a = client.get("/api/proposals/mine", headers=h).json()["versions"]
+
+    versions = client.delete(f"/api/proposals/versions/{a['id']}", headers=h).json()["versions"]
+    assert [(v["title"], v["version_no"]) for v in versions] == [("c", 2), ("b", 1)]
+    versions = upload(client, h, title="d").json()["versions"]
+    assert [(v["title"], v["version_no"]) for v in versions] == [("d", 3), ("c", 2), ("b", 1)]

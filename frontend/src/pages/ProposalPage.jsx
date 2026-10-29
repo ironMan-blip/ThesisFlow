@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, download } from "../api/client";
 
 export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [pending, setPending] = useState(null);
+  const dialog = useRef(null);
 
   useEffect(() => {
     api("/proposals/mine").then(setProposal).catch((err) => setError(err.message));
@@ -27,8 +29,9 @@ export default function ProposalPage() {
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
-  const remove = async (v) => {
-    if (!window.confirm(`Remove v${v.version_no}? This cannot be undone.`)) return;
+  const confirmRemove = async () => {
+    const v = pending;
+    setPending(null);
     setError(null);
     try {
       setProposal(await api(`/proposals/versions/${v.id}`, { method: "DELETE" }));
@@ -36,6 +39,11 @@ export default function ProposalPage() {
       setError(err.message);
     }
   };
+
+  useEffect(() => {
+    if (pending) dialog.current.showModal();
+    else dialog.current.close();
+  }, [pending]);
 
   return (
     <div className="space-y-8">
@@ -101,7 +109,7 @@ export default function ProposalPage() {
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
-                    <button onClick={() => remove(v)} aria-label={`Remove v${v.version_no}`}
+                    <button onClick={() => setPending(v)} aria-label={`Remove v${v.version_no}`}
                       className="btn-secondary px-3 py-1.5 text-red-700 hover:bg-red-50">Remove</button>
                   </div>
                 </li>
@@ -110,6 +118,20 @@ export default function ProposalPage() {
           )}
         </section>
       </div>
+
+      {/* Esc closes the dialog natively; onClose keeps state in sync. */}
+      <dialog ref={dialog} onClose={() => setPending(null)} aria-labelledby="remove-title"
+        className="card m-auto w-full max-w-md p-6 backdrop:bg-zinc-900/40">
+        <h2 id="remove-title" className="font-semibold">Remove v{pending?.version_no}?</h2>
+        <p className="mt-2 text-sm text-zinc-600">
+          This permanently deletes the version and its PDF. It cannot be undone.
+          Later versions will be renumbered to fill the gap.
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button onClick={() => setPending(null)} autoFocus className="btn-secondary">Cancel</button>
+          <button onClick={confirmRemove} className="btn bg-red-700 text-white shadow-sm hover:bg-red-800">Yes, remove</button>
+        </div>
+      </dialog>
     </div>
   );
 }

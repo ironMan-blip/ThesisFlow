@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -97,8 +97,20 @@ def delete_version(db: Session, user: User, version_id: int) -> Proposal:
     # Only the owning student may remove; others get 404 so ids are not leaked.
     if version is None or version.proposal.owner_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
-    proposal, stored = version.proposal, version.stored_filename
+    proposal, stored, removed_no = version.proposal, version.stored_filename, version.version_no
+    # Same row lock as upload_version, so renumbering never races a new upload.
+    db.scalar(select(Proposal).where(Proposal.id == proposal.id).with_for_update())
     db.delete(version)
+    db.flush()
+    # Close the gap: later versions move down by one. Two steps through negatives because
+    # Postgres checks the (proposal_id, version_no) unique constraint row by row.
+    later = (ProposalVersion.proposal_id == proposal.id) & (ProposalVersion.version_no > removed_no)
+    db.execute(update(ProposalVersion).where(later).values(version_no=1 - ProposalVersion.version_no))
+    db.execute(
+        update(ProposalVersion)
+        .where(ProposalVersion.proposal_id == proposal.id, ProposalVersion.version_no < 0)
+        .values(version_no=-ProposalVersion.version_no)
+    )
     db.commit()
     # File goes only after the row is gone, so a failed commit never loses a PDF.
     (_upload_dir() / stored).unlink(missing_ok=True)
