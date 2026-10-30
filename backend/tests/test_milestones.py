@@ -15,6 +15,13 @@ def test_late_days_with_fixed_clock():
     assert milestone_service.late_days(T, T + timedelta(days=1, seconds=1)) == 2
 
 
+def test_grace_countdown_targets_closes_at(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    put(client, coord, "P1", datetime.now(timezone.utc) - timedelta(minutes=5), grace=60)
+    p1 = by_phase(client.get("/api/milestones", headers=coord))["P1"]
+    assert (p1["status"], p1["countdown_to"], p1["countdown_label"]) == ("grace", p1["closes_at"], "Grace ends in")
+
+
 def put(client, h, phase, due_at, grace=0, penalty=10):
     body = {"due_at": due_at.isoformat(), "grace_minutes": grace, "penalty_per_day": penalty}
     return client.put(f"/api/milestones/{phase}", headers=h, json=body)
@@ -38,8 +45,10 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     assert res.status_code == 200
     p1 = by_phase(res)["P1"]
     assert p1["closes_at"].startswith("2026-11-02T00:29")
-    assert p1["late_days"] is None  # staff get no personal late count
+    assert p1["late_days"] is None and p1["submission_status"] is None  # staff get no personal late count
     assert by_phase(res)["P2"]["status"] == "not_set"
+    assert res.json()["can_edit"] is True
+    assert client.get("/api/milestones", headers=student).json()["can_edit"] is False
 
     put(client, coord, "P1", T + timedelta(days=1))  # setting again replaces it
     assert by_phase(client.get("/api/milestones", headers=student))["P1"]["due_at"].startswith("2026-11-02T23:59")
@@ -58,6 +67,9 @@ def test_student_late_days_and_penalty(client, db):
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (3, 45)  # still counting
     assert (rows["P2"]["status"], rows["P2"]["late_days"]) == ("open", 0)
     assert rows["P3"]["penalty_percent"] == 100  # 10 days x 20% is capped
+    assert (rows["P1"]["countdown_to"], rows["P1"]["submission_status"]) == (None, "late")
+    assert (rows["P2"]["countdown_to"], rows["P2"]["countdown_label"]) == (rows["P2"]["due_at"], "Due in")
+    assert rows["P2"]["submission_status"] == "not_submitted"
 
     upload(client, student, phase="P1")
     upload(client, student, phase="P2")
@@ -65,6 +77,7 @@ def test_student_late_days_and_penalty(client, db):
     assert rows["P1"]["submitted_at"] is not None
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (3, 45)
     assert (rows["P2"]["late_days"], rows["P2"]["penalty_percent"]) == (0, 0)
+    assert rows["P2"]["submission_status"] == "on_time"
 
     # Another student's uploads don't count for this one.
     other = auth(client, db, "o@x.com")

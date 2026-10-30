@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
+from app.config import settings
 from app.models.milestone import Phase
 
 
@@ -34,6 +35,9 @@ class ProposalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     versions: list[ProposalVersionOut]  # newest first
+    # Upload form options, so the page never hardcodes them.
+    phases: list[Phase] = list(Phase)
+    max_upload_mb: int = settings.max_upload_mb
 
     @model_validator(mode="after")
     def _mark_latest(self):

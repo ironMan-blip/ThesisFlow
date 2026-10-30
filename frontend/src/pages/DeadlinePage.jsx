@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
 
 const STATUS = {
@@ -25,7 +24,6 @@ const toLocalInput = (iso) => {
 const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export default function DeadlinePage() {
-  const { user } = useOutletContext();
   const [data, setData] = useState(null);
   const [offset, setOffset] = useState(0); // server clock minus browser clock
   const [now, setNow] = useState(Date.now());
@@ -89,7 +87,6 @@ export default function DeadlinePage() {
         <ol className="relative space-y-4 border-l border-zinc-200 pl-6">
           {data.milestones.map((m) => {
             const [label, tone] = STATUS[m.status];
-            const target = m.status === "open" ? m.due_at : m.status === "grace" ? m.closes_at : null;
             return (
               <li key={m.phase} className="card relative p-6">
                 <span className="absolute -left-[31px] top-7 size-3 rounded-full bg-teal-700 ring-4 ring-zinc-50" aria-hidden="true" />
@@ -98,10 +95,10 @@ export default function DeadlinePage() {
                     <h2 className="text-lg font-semibold">{m.phase}</h2>
                     <span className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${tone}`}>{label}</span>
                   </div>
-                  {target && (
+                  {m.countdown_to && (
                     <p className="text-sm text-zinc-600">
-                      {m.status === "open" ? "Due in" : "Grace ends in"}{" "}
-                      <span className="font-semibold tabular-nums text-zinc-900">{countdown(new Date(target) - serverNow)}</span>
+                      {m.countdown_label}{" "}
+                      <span className="font-semibold tabular-nums text-zinc-900">{countdown(new Date(m.countdown_to) - serverNow)}</span>
                     </p>
                   )}
                 </div>
@@ -116,20 +113,19 @@ export default function DeadlinePage() {
                   <p className="mt-3 text-sm text-zinc-500">The coordinator has not set this deadline yet.</p>
                 )}
 
-                {m.late_days !== null && (
+                {m.submission_status && (
                   <p className="mt-4 rounded-lg bg-zinc-50 px-3 py-2 text-sm">
                     {m.submitted_at ? <>Submitted {when(m.submitted_at)}</> : "Not submitted yet"}
-                    {m.late_days > 0 ? (
+                    {m.submission_status === "late" && (
                       <span className="font-medium text-red-700">
                         {" "}· {m.late_days} late {m.late_days === 1 ? "day" : "days"} · −{m.penalty_percent}%
                       </span>
-                    ) : (
-                      m.submitted_at && <span className="font-medium text-teal-800"> · On time</span>
                     )}
+                    {m.submission_status === "on_time" && <span className="font-medium text-teal-800"> · On time</span>}
                   </p>
                 )}
 
-                {user.role === "coordinator" && (
+                {data.can_edit && (
                   <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-4">
                     <label className="label sm:col-span-2">
                       Due date
@@ -137,11 +133,11 @@ export default function DeadlinePage() {
                     </label>
                     <label className="label">
                       Grace (min)
-                      <input name="grace_minutes" type="number" min={0} max={10080} required defaultValue={m.grace_minutes} className="input" />
+                      <input name="grace_minutes" type="number" min={0} max={data.max_grace_minutes} required defaultValue={m.grace_minutes} className="input" />
                     </label>
                     <label className="label">
                       Penalty (%/day)
-                      <input name="penalty_per_day" type="number" min={0} max={100} required defaultValue={m.penalty_per_day} className="input" />
+                      <input name="penalty_per_day" type="number" min={0} max={data.max_penalty_per_day} required defaultValue={m.penalty_per_day} className="input" />
                     </label>
                     <button className="btn-primary sm:col-span-4 sm:justify-self-end">Save {m.phase}</button>
                   </form>

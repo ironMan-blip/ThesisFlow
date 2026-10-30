@@ -29,7 +29,8 @@ def upload(client, headers, content=PDF, title="My thesis", name="p.pdf", phase=
 
 def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     h = auth(client, db, "s@x.com")
-    assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
+    empty = client.get("/api/proposals/mine", headers=h).json()
+    assert (empty["versions"], empty["phases"]) == ([], ["P1", "P2", "P3"])
 
     assert upload(client, h, title="v1").status_code == 201
     res = upload(client, h, content=PDF + b"v2", title="v2", name="p2.pdf")

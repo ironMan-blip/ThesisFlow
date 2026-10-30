@@ -30,12 +30,17 @@ def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetim
         closes_at=closes_at,
         status=status,
     )
+    if status == "open":
+        out.countdown_to, out.countdown_label = m.due_at, "Due in"
+    elif status == "grace":
+        out.countdown_to, out.countdown_label = closes_at, "Grace ends in"
     if is_student:
         # Not submitted yet: late days keep counting from now.
         days = late_days(closes_at, submitted_at or now)
         out.submitted_at = submitted_at
         out.late_days = days
         out.penalty_percent = min(100, days * m.penalty_per_day)
+        out.submission_status = "late" if days else "on_time" if submitted_at else "not_submitted"
     return out
 
 
@@ -58,6 +63,7 @@ def timeline(db: Session, user: User, now: datetime | None = None) -> TimelineOu
         milestones=[
             _row(milestones.get(p), p, now, submitted.get(p), user.role == Role.student) for p in Phase
         ],
+        can_edit=user.role == Role.coordinator,
     )
 
 

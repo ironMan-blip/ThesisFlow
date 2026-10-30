@@ -57,10 +57,8 @@ export default function ProposalPage() {
           <h2 className="font-semibold">Upload a new version</h2>
           <label className="label">
             Phase
-            <select name="phase" required defaultValue="P1" className="input">
-              <option>P1</option>
-              <option>P2</option>
-              <option>P3</option>
+            <select name="phase" required className="input">
+              {proposal?.phases.map((p) => <option key={p}>{p}</option>)}
             </select>
           </label>
           <label className="label">
@@ -76,7 +74,7 @@ export default function ProposalPage() {
             <input name="file" type="file" accept="application/pdf" required
               className="mt-1.5 block w-full cursor-pointer rounded-lg border border-dashed border-zinc-300 p-2 text-sm text-zinc-600
                 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-teal-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-teal-800 hover:file:bg-teal-100" />
-            <span className="mt-1 block text-xs font-normal text-zinc-500">PDF only.</span>
+            <span className="mt-1 block text-xs font-normal text-zinc-500">PDF only{proposal && `, up to ${proposal.max_upload_mb} MB`}.</span>
           </label>
           {error && <p role="alert" className="alert-error">{error}</p>}
           <button disabled={saving} className="btn-primary w-full">
