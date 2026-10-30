@@ -172,13 +172,14 @@ Supervisor and panel member are not account roles. They will be links between a 
 - Everyone sees each phase's status: **not set**, **open**, **in grace**, or **closed**, with a live countdown ("Due in" while open, "Grace ends in" during grace).
 - Students also see, per phase, their own submission status:
   - **on time**, **late**, or **not submitted**,
-  - **late days**: every started day after the grace period ends counts as a full day, and keeps counting until they submit,
+  - **late days**: uploads during the grace period are accepted but late; every started day after the due date counts as a full day, and keeps counting until they submit or the grace period ends,
   - **penalty**: late days × penalty per day, capped at 100%.
 - The latest upload for a phase is the one that counts.
 
 ### 6. Proposal submission
 
 - Students can upload only for phases whose timeline is set and whose grace period has not ended; once it ends, uploads for that phase are closed.
+- A student who misses a phase (its grace period ends with no upload from them) cannot upload for any later phase until the next semester's deadlines are set.
 - Students upload a proposal version with a **phase** (P1/P2/P3), **title** (1 to 255 characters), **abstract** and a **PDF file**.
 - The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default).
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.

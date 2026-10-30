@@ -28,15 +28,31 @@ def _can_view(user: User, proposal: Proposal) -> bool:
     return user.role in (Role.faculty, Role.coordinator) or proposal.owner_id == user.id
 
 
-def _open_phases(db: Session) -> list[Phase]:
-    # Students submit only for phases whose timeline is set and whose grace period hasn't ended.
+def _upload_blocks(db: Session, owner_id: int) -> dict[Phase, str]:
+    """Why each phase is closed to this student. Phases not in the result are open."""
     now = datetime.now(timezone.utc)
-    open_phases = {m.phase for m in db.scalars(select(Milestone)) if now <= m.closes_at}
-    return [p for p in Phase if p in open_phases]
+    milestones = {m.phase: m for m in db.scalars(select(Milestone))}
+    submitted = set(
+        db.scalars(select(ProposalVersion.phase).join(Proposal).where(Proposal.owner_id == owner_id).distinct())
+    )
+    blocks, missed = {}, None
+    for p in Phase:
+        m = milestones.get(p)
+        if missed:
+            # A missed phase locks every later one until a new semester's deadlines are set.
+            blocks[p] = f"You missed {missed.value}, so uploads are closed until the next semester"
+        elif m is None:
+            blocks[p] = f"The {p.value} timeline is not set yet"
+        elif now > m.closes_at:
+            blocks[p] = f"The {p.value} deadline and grace period have passed"
+        if m and now > m.closes_at and p not in submitted:
+            missed = missed or p
+    return blocks
 
 
 def _out(db: Session, proposal: Proposal) -> ProposalOut:
-    return ProposalOut(versions=proposal.versions, phases=_open_phases(db))
+    blocks = _upload_blocks(db, proposal.owner_id)
+    return ProposalOut(versions=proposal.versions, phases=[p for p in Phase if p not in blocks])
 
 
 def get_mine(db: Session, user: User) -> ProposalOut:
@@ -90,11 +106,8 @@ def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
 
 
 def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> ProposalOut:
-    milestone = db.get(Milestone, phase)
-    if milestone is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"The {phase.value} timeline is not set yet")
-    if datetime.now(timezone.utc) > milestone.closes_at:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"The {phase.value} deadline and grace period have passed")
+    if block := _upload_blocks(db, user.id).get(phase):
+        raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title must be 1 to 255 characters")

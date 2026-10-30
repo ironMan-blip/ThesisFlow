@@ -139,7 +139,24 @@ def test_upload_closes_when_grace_period_ends(client, db):
     db.get(Milestone, Phase.P1).grace_minutes = 60  # past due, still in grace
     db.get(Milestone, Phase.P2).due_at = now - timedelta(minutes=5)  # no grace: closed
     db.flush()
-    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1", "P3"]
+    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1"]  # P2 missed locks P3
     assert upload(client, h, phase="P1").status_code == 201
     res = upload(client, h, phase="P2")
     assert (res.status_code, res.json()["detail"]) == (409, "The P2 deadline and grace period have passed")
+
+
+def test_missed_phase_locks_later_phases_until_new_semester(client, db):
+    on_time, missed = auth(client, db, "a@x.com"), auth(client, db, "b@x.com")
+    assert upload(client, on_time, phase="P1").status_code == 201
+    p1 = db.get(Milestone, Phase.P1)
+    p1.due_at = datetime.now(timezone.utc) - timedelta(minutes=5)  # P1 closes
+    db.flush()
+
+    assert client.get("/api/proposals/mine", headers=on_time).json()["phases"] == ["P2", "P3"]
+    assert client.get("/api/proposals/mine", headers=missed).json()["phases"] == []
+    res = upload(client, missed, phase="P2")
+    assert (res.status_code, res.json()["detail"]) == (409, "You missed P1, so uploads are closed until the next semester")
+
+    p1.due_at = datetime.now(timezone.utc) + timedelta(days=1)  # new semester: P1 open again
+    db.flush()
+    assert upload(client, missed, phase="P1").status_code == 201

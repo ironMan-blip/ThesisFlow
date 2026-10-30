@@ -13,9 +13,9 @@ from app.schemas.milestone import MilestoneIn, MilestoneOut, TimelineOut
 DAY = timedelta(days=1)
 
 
-def late_days(closes_at: datetime, at: datetime) -> int:
-    # Any part of a day after the grace time counts as a full late day.
-    return max(0, math.ceil((at - closes_at) / DAY))
+def late_days(due_at: datetime, at: datetime) -> int:
+    # Any part of a day after the due time counts as a full late day.
+    return max(0, math.ceil((at - due_at) / DAY))
 
 
 def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_student: bool):
@@ -36,8 +36,9 @@ def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetim
     elif status == "grace":
         out.countdown_to, out.countdown_label = closes_at, "Grace ends in"
     if is_student:
-        # Not submitted yet: late days keep counting from now.
-        days = late_days(closes_at, submitted_at or now)
+        # Grace is the late window: days count from the due date. Not submitted yet: they keep
+        # counting until grace ends, since no upload is accepted after that.
+        days = late_days(m.due_at, submitted_at or min(now, closes_at))
         out.submitted_at = submitted_at
         out.late_days = days
         out.penalty_percent = min(100, days * m.penalty_per_day)
