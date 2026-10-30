@@ -8,7 +8,7 @@ Stack: FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + 
 - Accounts: register / log in (JWT), password strength check, role-based tools on the dashboard.
 - Faculty approval: new faculty wait for coordinator approval.
 - Account deletion: request + coordinator approval, 48-hour lapse.
-- Deadlines: coordinator sets a deadline per phase; students see a countdown, on-time / late status and late days.
+- Deadlines: coordinator sets a deadline per phase (phase deadlines must stay in order: none before an earlier phase's or after a later one's); students see a countdown, on-time / late status and late days.
 - Proposals: students upload PDF versions (max `MAX_UPLOAD_MB`, default 20 MB) and delete them. Re-uploading an identical file (same sha256) moves it to the latest version instead of storing a copy.
 
 ## Run
@@ -39,7 +39,7 @@ backend/app/
 backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
-  pages/        View: one file per page
+  pages/        View: one file per page (RequestsPage = faculty + deletion requests)
   components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Alerts)
   api/client.js fetch wrapper (adds JWT)
   useAction.js  busy / error / success state for a page's API calls
