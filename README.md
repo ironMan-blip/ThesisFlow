@@ -128,7 +128,7 @@ There are three roles. Each one sees only its own tools in the navigation and on
 | Faculty | Deadlines, Account |
 | Coordinator | Deadlines, Accounts, Registration requests, Deletion requests |
 
-Tools with waiting work (registration or deletion requests) show a count badge in the nav and on the dashboard.
+Tools with waiting work (registration or deletion requests) show a count badge in the nav and on the dashboard. The nav is a fixed sidebar on desktop and a slide-out drawer on phones.
 
 Supervisor and panel member are not account roles. They will be links between a faculty user and a group or defense.
 
@@ -202,7 +202,8 @@ backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
   pages/        View: one file per page (RequestsPage = registration + deletion requests, AccountsPage = coordinator account list)
-  components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Skeleton, Alerts, Person, CountBadge)
+  components/   View: Layout (auth guard + sidebar nav, drawer on phones), ui.jsx (Icon/ICONS, Logo, PageHeader,
+                Skeleton, Alerts, Avatar, Person, EmptyState, CountBadge)
   api/client.js fetch wrapper (adds JWT)
   useAction.js  busy / error / success state for a page's API calls
   tools.jsx     nav + dashboard entry for each tool key the API returns in user.tools
