@@ -95,6 +95,23 @@ def test_faculty_initials(client, db):
     assert r.status_code == 201 and r.json()["initials"] is None
 
 
+def test_expired_request_frees_initials(client, db):
+    old_id = register(client, role="faculty", initials="MMR").json()["id"]
+    db.get(User, old_id).created_at -= timedelta(hours=48, minutes=1)
+    db.commit()
+    r = register(client, email="x@b.com", id_number="87654321", role="faculty", initials="MMR")
+    assert r.status_code == 201 and db.get(User, old_id) is None
+
+
+def test_parallel_signup_gives_409(client, db, monkeypatch):
+    assert register(client, role="faculty", initials="MMR").status_code == 201
+    # Simulate a parallel sign-up: the pre-checks see nothing, the unique constraint catches it.
+    monkeypatch.setattr(auth_service, "get_by_id_number", lambda db, n: None)
+    monkeypatch.setattr(auth_service, "get_by_email", lambda db, e: None)
+    r = register(client, email="x@b.com", role="faculty", initials="ZZ")
+    assert r.status_code == 409 and r.json()["detail"].startswith("Email, ID number or initials")
+
+
 def test_signups_wait_for_approval(client, db):
     r = register(client, email="f@b.com", role="faculty")
     assert r.status_code == 201 and r.json()["approved"] is False
