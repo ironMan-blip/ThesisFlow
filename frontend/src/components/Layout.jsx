@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken } from "../api/client";
 import { TOOLS } from "../tools";
@@ -36,6 +36,25 @@ export default function Layout() {
       });
   }, [navigate]);
 
+  // Badge counts per tool from the API (empty unless the user has requests to decide);
+  // refetched on page change, every 10s, and on tab focus.
+  const [counts, setCounts] = useState({});
+  const refreshCounts = useCallback(() => {
+    if (user) api("/auth/me/counts").then(setCounts).catch(() => {});
+  }, [user]);
+  useEffect(refreshCounts, [refreshCounts, pathname]);
+  const hasCounts = Object.keys(counts).length > 0;
+  useEffect(() => {
+    if (!hasCounts) return;
+    // shortcut: polling, not push; switch to SSE/WebSocket if many coordinators are online at once.
+    const id = setInterval(() => document.visibilityState === "visible" && refreshCounts(), 10000);
+    window.addEventListener("focus", refreshCounts);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", refreshCounts);
+    };
+  }, [hasCounts, refreshCounts]);
+
   if (!getToken()) return <Navigate to="/login" replace />;
   if (error)
     return (
@@ -59,8 +78,6 @@ export default function Layout() {
     clearToken();
     navigate("/login");
   };
-
-  const initials = user.full_name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
   const links = (
     <>
@@ -88,7 +105,7 @@ export default function Layout() {
               <p className="text-xs capitalize text-zinc-500">{user.role}</p>
             </div>
             <span className="grid size-9 place-items-center rounded-lg bg-teal-50 text-sm font-semibold text-teal-800">
-              {initials}
+              {user.monogram}
             </span>
             <button onClick={logout} className="btn-secondary px-3 py-1.5">Log out</button>
           </div>
@@ -97,7 +114,7 @@ export default function Layout() {
         <nav aria-label="Main" className="flex gap-1 overflow-x-auto border-t border-zinc-100 px-4 py-2 sm:hidden">{links}</nav>
       </header>
       <main id="main" className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        <Outlet context={{ user }} />
+        <Outlet context={{ user, counts, refreshCounts }} />
       </main>
     </div>
   );

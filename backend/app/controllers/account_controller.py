@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
@@ -49,3 +51,18 @@ def approve_deletion(user_id: int, db: Session = Depends(get_db)):
 @router.delete("/deletion-requests/{user_id}", response_model=UserOut, dependencies=[Depends(coordinator)])
 def reject_deletion(user_id: int, db: Session = Depends(get_db)):
     return account_service.reject_deletion(db, user_id)
+
+
+@router.get("/me/counts")
+def counts(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, int]:
+    return account_service.pending_counts(db, user)
+
+
+@router.get("/accounts", response_model=list[UserOut], dependencies=[Depends(coordinator)])
+def accounts(role: Literal[Role.student, Role.faculty] | None = None, id_prefix: str = "", db: Session = Depends(get_db)):
+    return account_service.list_accounts(db, role, id_prefix.strip())
+
+
+@router.delete("/accounts/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)])
+def delete_account(user_id: int, db: Session = Depends(get_db)):
+    account_service.delete_account(db, user_id)

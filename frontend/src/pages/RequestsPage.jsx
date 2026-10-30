@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, PageHeader } from "../components/ui";
+import { Alerts, PageHeader, Person } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
 // Coordinator inbox of requests to approve or reject; RegistrationRequestsPage and DeletionRequestsPage configure it.
 function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   const [requests, setRequests] = useState(null);
+  const { refreshCounts } = useOutletContext();
   const { busy, error, notice, setError, run } = useAction(); // busy key is the request id being decided
 
   useEffect(() => {
@@ -17,6 +19,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
     run(r.id, async () => {
       await api(`${path}/${r.id}${approve ? "/approve" : ""}`, { method: approve ? "POST" : "DELETE" });
       setRequests((rs) => rs.filter((x) => x.id !== r.id));
+      refreshCounts();
       return `${r.full_name} ${approve ? approved : rejected}.`;
     });
 
@@ -34,10 +37,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
         <ul className="space-y-3">
           {requests.map((r) => (
             <li key={r.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
-              <div>
-                <p className="font-medium">{r.full_name} <span className="text-sm font-normal capitalize text-zinc-500">· {r.role}</span></p>
-                <p className="text-sm text-zinc-600">ID {r.id_number} · {r.email} · requested {when(r[dateField])}</p>
-              </div>
+              <Person user={r}> · requested {when(r[dateField])}</Person>
               <div className="flex gap-2">
                 <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary">Reject</button>
                 <button onClick={() => decide(r, true)} disabled={busy === r.id} className="btn-primary">

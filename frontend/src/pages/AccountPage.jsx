@@ -24,6 +24,7 @@ export default function AccountPage() {
       <PageHeader title="Account">
         <dl className="mt-4 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
           <dt className="text-zinc-500">Name</dt><dd>{user.full_name}</dd>
+          {user.initials && <><dt className="text-zinc-500">Initials</dt><dd>{user.initials}</dd></>}
           <dt className="text-zinc-500">ID number</dt><dd>{user.id_number}</dd>
           <dt className="text-zinc-500">Email</dt><dd>{user.email}</dd>
           <dt className="text-zinc-500">Role</dt><dd className="capitalize">{user.role}</dd>
@@ -49,7 +50,7 @@ export default function AccountPage() {
             </p>
             <span className="text-sm font-medium">Send the deletion request?</span>
             <button onClick={() => setConfirming(false)} disabled={sending} className="btn-secondary">Cancel</button>
-            <button onClick={requestDeletion} disabled={sending} className="btn bg-red-600 text-white shadow-sm hover:bg-red-700">
+            <button onClick={requestDeletion} disabled={sending} className="btn-danger">
               {sending ? "Sending..." : "Yes, request deletion"}
             </button>
           </div>

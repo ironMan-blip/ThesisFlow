@@ -6,7 +6,72 @@ ThesisFlow brings the thesis process into one place: students submit their propo
 
 **Stack:** FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + Tailwind, all run with Docker Compose.
 
-![System architecture](architecture.png)
+## Architecture
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff", "primaryColor": "#ffffff", "primaryTextColor": "#111111", "lineColor": "#666666", "fontFamily": "Helvetica, Arial, sans-serif"}}}%%
+flowchart LR
+  subgraph canvas[" "]
+    direction LR
+    subgraph users["Users"]
+      direction TB
+      student["🎓 <b>Student</b><br/>Sees deadlines + late days,<br/>uploads / deletes proposal PDFs"]
+      faculty["🧑‍🏫 <b>Faculty</b><br/>Signs up with initials,<br/>waits for coordinator approval"]
+      coord["🛠️ <b>Coordinator</b><br/>Sets deadlines, approves sign-ups<br/>+ deletions, manages accounts"]
+      everyone["<b>Everyone</b><br/>Sign up (needs approval), log in<br/>with 8-digit ID, ask to delete account"]
+      student ~~~ faculty ~~~ coord ~~~ everyone
+    end
+
+    subgraph fe["FRONTEND · port 5173 — React + Vite + Tailwind (frontend/src/)"]
+      direction TB
+      pages["<b>pages/</b> one file per screen: Login, Home,<br/>Deadlines, Proposal, Account, Accounts, Requests"]
+      client["<b>api/client.js</b> sends requests,<br/>attaches the login token (JWT)"]
+      tools["<b>tools.jsx</b> shows the menu items the server<br/>says this user may use (+ pending badges)"]
+      ferule["<b>Rule:</b> only <i>shows</i> data. No business logic here."]
+      pages ~~~ client ~~~ tools ~~~ ferule
+    end
+
+    subgraph be["BACKEND · port 8000 — FastAPI (backend/app/, API docs at /docs)"]
+      direction TB
+      controllers["<b>controllers/</b><br/>URLs: /api/auth, /api/proposals, /api/milestones.<br/>Check who is logged in + their role, then call a service."]
+      services["<b>services/</b><br/>All the rules: ID format, sign-up approval, password strength,<br/>deadline order, late days, PDF size/type, duplicate files."]
+      models["<b>models/ + schemas/</b><br/>Database tables (SQLAlchemy) and<br/>request/response shapes (Pydantic)."]
+      controllers --> services --> models
+    end
+
+    subgraph store["Storage"]
+      direction TB
+      db["<b>DATABASE — PostgreSQL 16</b><br/>Tables: users (ID, role, initials, approved),<br/>proposals, proposal versions, milestones.<br/>Schema changes = Alembic migrations"]
+      files["<b>FILE STORAGE — uploads/ folder</b><br/>The proposal PDFs themselves. The DB only<br/>keeps name, size and sha256."]
+      db ~~~ files
+    end
+
+    users -- "uses a browser" --> fe
+    fe <-- "HTTP + JSON /api/...<br/>JWT in header" --> be
+    be <-- "SQL" --> db
+    be --> files
+  end
+
+  style canvas fill:#ffffff,stroke:#ffffff
+  style users fill:#ffffff,stroke:#d0d7de
+  style fe fill:#ffffff,stroke:#3b9cf0,stroke-width:2px
+  style be fill:#ffffff,stroke:#3fb950,stroke-width:2px
+  style store fill:#ffffff,stroke:#b57bee,stroke-width:2px
+  classDef box fill:#ffffff,stroke:#d0d7de,color:#111111
+  classDef layer fill:#f3fbf4,stroke:#3fb950,stroke-dasharray:4 3,color:#111111
+  class student,faculty,coord,everyone,pages,client,tools,ferule,db,files box
+  class controllers,services,models layer
+```
+
+**Example — a student uploads a proposal PDF:**
+
+1. Student picks a file on the **Proposal page**.
+2. **client.js** sends `POST /api/proposals/mine/versions` + token.
+3. **Controller** checks: logged in? a student?
+4. **Service** checks PDF + size, saves the file, adds a version row.
+5. Server replies with JSON; the page shows the new version list.
+
+Run everything with `docker compose up` — it starts 3 containers: **frontend**, **backend**, **db**. Secrets + coordinator account come from `.env` (no defaults). Tests: `pytest` in `backend/tests/`.
 
 ## Getting started
 
@@ -14,7 +79,7 @@ You only need [Docker](https://www.docker.com/) (with Docker Compose).
 
 ```bash
 git clone https://github.com/ironMan-blip/ThesisFlow.git && cd ThesisFlow
-cp .env.example .env                              # optional, the defaults work for local dev
+cp .env.example .env                              # required: fill in every value
 docker compose up --build                         # starts db, backend and frontend
 docker compose exec backend python -m app.seed    # optional: adds a dev student and faculty
 ```
@@ -32,18 +97,24 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 
 | Role | ID number | Password |
 |------|-----------|----------|
-| Student (seed) | `100001` | `password123` |
-| Faculty (seed) | `200001` | `password123` |
-| Coordinator | `ADMIN_ID_NUMBER` (default `000000`) | `ADMIN_PASSWORD` (default `password123`) |
+| Student (seed) | `10000001` | `SEED_PASSWORD` |
+| Faculty (seed) | `20000001` | `SEED_PASSWORD` |
+| Coordinator | `ADMIN_ID_NUMBER` | `ADMIN_PASSWORD` |
 
 ### Configuration (`.env`)
 
+Sensitive values have no defaults. The backend and `docker compose` refuse to start if one is missing.
+
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Change it outside dev. |
-| `ADMIN_EMAIL` | `coordinator@thesisflow.test` | The one coordinator account. |
-| `ADMIN_ID_NUMBER` | `000000` | Coordinator login ID. Set again on every backend start. |
-| `ADMIN_PASSWORD` | `password123` | Coordinator password. Set again on every backend start. |
+| `POSTGRES_USER` | required | Database user. Used to build `DATABASE_URL` in Docker. |
+| `POSTGRES_PASSWORD` | required | Database password. Only applied when the db volume is first created. |
+| `JWT_SECRET` | required | Secret used to sign login tokens. |
+| `ADMIN_NAME` | required | Coordinator display name. Set again on every backend start. |
+| `ADMIN_EMAIL` | required | The one coordinator account. |
+| `ADMIN_ID_NUMBER` | required | Coordinator login ID. Set again on every backend start. |
+| `ADMIN_PASSWORD` | required | Coordinator password. Set again on every backend start. |
+| `SEED_PASSWORD` | none | Password for the seed accounts. Only `app.seed` needs it. |
 | `MAX_UPLOAD_MB` | `20` | Largest proposal PDF allowed. |
 | `JWT_EXPIRE_MINUTES` | `1440` | How long a login lasts (24 hours). |
 
@@ -55,18 +126,21 @@ There are three roles. Each one sees only its own tools in the navigation and on
 |------|-------|
 | Student | Proposal, Deadlines, Account |
 | Faculty | Deadlines, Account |
-| Coordinator | Deadlines, Registration requests, Deletion requests |
+| Coordinator | Deadlines, Accounts, Registration requests, Deletion requests |
+
+Tools with waiting work (registration or deletion requests) show a count badge in the nav and on the dashboard.
 
 Supervisor and panel member are not account roles. They will be links between a faculty user and a group or defense.
 
 ### 1. Accounts and login
 
-- Register with full name, email, a 6-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
+- Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
+- Faculty must also give their **initials** (1 to 10 capital letters, e.g. `ABK`), unique across faculty.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
-- ID numbers are exactly 6 digits and must be unique across students and faculty. Log in with ID number and password.
+- ID numbers are exactly 8 digits and must be unique across students and faculty. Log in with ID number and password.
 - Login returns a JWT (valid 24 hours by default). The frontend sends it with every request.
-- **Coordinator account:** there is exactly one. It is created from `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
+- **Coordinator account:** there is exactly one. It is created from `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
 
 ### 2. Registration approval
 
@@ -83,7 +157,12 @@ Supervisor and panel member are not account roles. They will be links between a 
 - Approving deletes the user, their proposal, all its versions and the stored PDF files.
 - The coordinator account cannot be deleted.
 
-### 4. Deadlines (phases P1, P2, P3)
+### 4. Account management (coordinator)
+
+- **Accounts** lists every approved student and faculty account, with Students / Faculty tabs and a search by ID number prefix. Waiting sign-ups and the coordinator account are not listed.
+- The coordinator can delete any listed account directly. This removes the user, their proposal, all versions and the stored PDF files.
+
+### 5. Deadlines (phases P1, P2, P3)
 
 - The thesis has three phases: **P1, P2, P3**. The coordinator sets, for each phase:
   - a **due date and time**,
@@ -97,7 +176,7 @@ Supervisor and panel member are not account roles. They will be links between a 
   - **penalty**: late days × penalty per day, capped at 100%.
 - The latest upload for a phase is the one that counts, so a late re-upload makes that phase late.
 
-### 5. Proposal submission
+### 6. Proposal submission
 
 - Students upload a proposal version with a **phase** (P1/P2/P3), **title** (1 to 255 characters), **abstract** and a **PDF file**.
 - The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default).
@@ -120,8 +199,8 @@ backend/app/
 backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
-  pages/        View: one file per page (RequestsPage = registration + deletion requests)
-  components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Alerts)
+  pages/        View: one file per page (RequestsPage = registration + deletion requests, AccountsPage = coordinator account list)
+  components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Alerts, Person, CountBadge)
   api/client.js fetch wrapper (adds JWT)
   useAction.js  busy / error / success state for a page's API calls
   tools.jsx     nav + dashboard entry for each tool key the API returns in user.tools
@@ -138,6 +217,8 @@ frontend/src/
 | POST | `/api/auth/login` | anyone |
 | GET | `/api/auth/me` | logged in |
 | POST | `/api/auth/me/deletion-request` | student, faculty |
+| GET | `/api/auth/me/counts` (pending-request badges per tool) | logged in |
+| GET / DELETE | `/api/auth/accounts[/{id}]` (`?role=&id_prefix=` filters) | coordinator |
 | GET / POST / DELETE | `/api/auth/registration-requests[/{id}[/approve]]` | coordinator |
 | GET / POST / DELETE | `/api/auth/deletion-requests[/{id}[/approve]]` | coordinator |
 | GET | `/api/milestones` | logged in |

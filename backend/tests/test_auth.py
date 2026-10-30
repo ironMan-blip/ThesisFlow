@@ -1,19 +1,26 @@
 from datetime import timedelta
 
+from sqlalchemy import select
+
 from app.config import settings
 from app.models.user import Role, User
 from app.services import auth_service
 from tests.helpers import auth, upload
 
 
-def register(client, email="a@b.com", password="Password123", id_number="123456", role="student"):
+def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
+    if initials is None and role == "faculty":
+        initials = "ABC"
     return client.post(
         "/api/auth/register",
-        json={"email": email, "id_number": id_number, "full_name": "A", "password": password, "role": role},
+        json={
+            "email": email, "id_number": id_number, "full_name": "A", "password": password, "role": role,
+            "initials": initials,
+        },
     )
 
 
-def login(client, id_number="123456", password="Password123"):
+def login(client, id_number="12345678", password="Password123"):
     return client.post("/api/auth/login", data={"username": id_number, "password": password})
 
 
@@ -31,18 +38,18 @@ def test_register_login_me(client, db):
 
 
 def test_duplicate_email_rejected(client, db):
-    auth_service.create_user(db, "a@b.com", "123456", "A", "Password123", Role.student)
-    r = register(client, email="A@B.com", id_number="654321")
+    auth_service.create_user(db, "a@b.com", "12345678", "A", "Password123", Role.student)
+    r = register(client, email="A@B.com", id_number="87654321")
     assert r.status_code == 409
     assert r.json()["detail"] == "User already exists"
     # Same email under the other role is also taken.
-    r = register(client, id_number="654321", role="faculty")
+    r = register(client, id_number="87654321", role="faculty")
     assert r.status_code == 409
     assert r.json()["detail"] == "User already exists"
 
 
 def test_duplicate_id_number_rejected(client, db):
-    auth_service.create_user(db, "a@b.com", "123456", "A", "Password123", Role.student)
+    auth_service.create_user(db, "a@b.com", "12345678", "A", "Password123", Role.student)
     for role in ["student", "faculty"]:
         r = register(client, email="other@b.com", role=role)
         assert r.status_code == 409
@@ -52,7 +59,7 @@ def test_duplicate_id_number_rejected(client, db):
 def test_login_needs_id_number_not_email(client):
     register(client)
     assert login(client, id_number="a@b.com").status_code == 401
-    assert login(client, id_number="999999").status_code == 401
+    assert login(client, id_number="99999999").status_code == 401
 
 
 def test_wrong_password_rejected(client):
@@ -65,8 +72,8 @@ def test_me_requires_token(client):
 
 
 def test_me_works_for_seeded_reserved_domain(client, db):
-    auth_service.create_user(db, "student@thesisflow.test", "100001", "S", "Password123", Role.student)
-    token = login(client, id_number="100001").json()["access_token"]
+    auth_service.create_user(db, "student@thesisflow.test", "10000001", "S", "Password123", Role.student)
+    token = login(client, id_number="10000001").json()["access_token"]
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
     assert me.json()["email"] == "student@thesisflow.test"
@@ -76,11 +83,23 @@ def test_coordinator_signup_rejected(client):
     assert register(client, role="coordinator").status_code == 422
 
 
+def test_faculty_initials(client, db):
+    for bad in ["", "abc", "AB1", "A B", "ABCDEFGHIJK"]:
+        assert register(client, role="faculty", initials=bad).status_code == 422
+    r = register(client, role="faculty", initials="MMR")
+    assert r.status_code == 201 and r.json()["initials"] == "MMR"
+    r = register(client, email="x@b.com", id_number="87654321", role="faculty", initials="MMR")
+    assert r.status_code == 409 and r.json()["detail"] == "Initials already registered"
+    # Students never carry initials.
+    r = register(client, email="s@b.com", id_number="11111111", initials="ZZ")
+    assert r.status_code == 201 and r.json()["initials"] is None
+
+
 def test_signups_wait_for_approval(client, db):
     r = register(client, email="f@b.com", role="faculty")
     assert r.status_code == 201 and r.json()["approved"] is False
     assert login(client).status_code == 403
-    assert register(client, email="s@x.com", id_number="333333").json()["approved"] is False
+    assert register(client, email="s@x.com", id_number="33333333").json()["approved"] is False
 
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     student = auth(client, db, "s@b.com")
@@ -91,7 +110,7 @@ def test_signups_wait_for_approval(client, db):
     for p in pending:
         assert client.post(f"/api/auth/registration-requests/{p['id']}/approve", headers=coord).status_code == 200
     assert login(client).status_code == 200
-    assert login(client, id_number="333333").status_code == 200
+    assert login(client, id_number="33333333").status_code == 200
     assert client.get("/api/auth/registration-requests", headers=coord).json() == []
     # Already approved, so no longer a request.
     uid = pending[0]["id"]
@@ -99,7 +118,7 @@ def test_signups_wait_for_approval(client, db):
 
 
 def test_reject_frees_email(client, db):
-    body = {"email": "f@b.com", "id_number": "222222", "full_name": "F", "password": "Password123", "role": "faculty"}
+    body = {"email": "f@b.com", "id_number": "22222222", "full_name": "F", "password": "Password123", "role": "faculty", "initials": "FB"}
     uid = client.post("/api/auth/register", json=body).json()["id"]
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert client.delete(f"/api/auth/registration-requests/{uid}", headers=coord).status_code == 204
@@ -108,22 +127,24 @@ def test_reject_frees_email(client, db):
 
 def test_ensure_admin_creates_and_resets(client, db, monkeypatch):
     monkeypatch.setattr(settings, "admin_email", "Admin@B.com")
-    monkeypatch.setattr(settings, "admin_id_number", "000000")
+    monkeypatch.setattr(settings, "admin_id_number", "00000000")
     monkeypatch.setattr(settings, "admin_password", "first-pass1")
     auth_service.ensure_admin(db)
-    assert login(client, id_number="000000", password="first-pass1").status_code == 200
+    assert login(client, id_number="00000000", password="first-pass1").status_code == 200
 
-    monkeypatch.setattr(settings, "admin_id_number", "000009")
+    monkeypatch.setattr(settings, "admin_name", "New Name")
+    monkeypatch.setattr(settings, "admin_email", "New@B.com")
     monkeypatch.setattr(settings, "admin_password", "second-pass2")
     auth_service.ensure_admin(db)
-    assert login(client, id_number="000009", password="first-pass1").status_code == 401
-    token = login(client, id_number="000009", password="second-pass2").json()["access_token"]
+    assert login(client, id_number="00000000", password="first-pass1").status_code == 401
+    token = login(client, id_number="00000000", password="second-pass2").json()["access_token"]
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).json()
     assert me["role"] == "coordinator"
+    assert me["full_name"] == "New Name"
 
 
 def test_cannot_reregister_within_48_hours(client, db):
-    body = {"email": "s@b.com", "id_number": "222222", "full_name": "S", "password": "Password123", "role": "student"}
+    body = {"email": "s@b.com", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
     old_id = client.post("/api/auth/register", json=body).json()["id"]
     r = client.post("/api/auth/register", json=body)
     assert r.status_code == 409
@@ -142,7 +163,7 @@ def test_register_rejects_bad_email_and_weak_password(client):
     r = register(client, email="no-at-sign")
     assert r.status_code == 422
     assert r.json()["detail"].startswith("email:")
-    for bad_id in ["12345", "1234567", "12a456", "１２３４５６"]:
+    for bad_id in ["1234567", "123456789", "12a45678", "１２３４５６７８"]:
         r = register(client, id_number=bad_id)
         assert r.status_code == 422, bad_id
         assert r.json()["detail"].startswith("id_number:"), bad_id
@@ -201,3 +222,42 @@ def test_deletion_request_lapses_after_48_hours(client, db):
     assert me["deletion_pending"] is False
     # The user may ask again.
     assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+
+
+def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path):
+    student = auth(client, db, "s@b.com")
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    assert upload(client, student).status_code == 201
+    assert register(client).status_code == 201  # unapproved sign-up: not an account yet
+
+    assert client.get("/api/auth/accounts", headers=student).status_code == 403
+    accounts = client.get("/api/auth/accounts", headers=coord).json()
+    by_email = {a["email"]: a["id"] for a in accounts}
+    assert set(by_email) == {"s@b.com"}  # coordinator is the admin login, not listed
+    student_id = db.scalar(select(User.id_number).where(User.email == "s@b.com"))
+    emails = lambda q: [a["email"] for a in client.get(f"/api/auth/accounts?{q}", headers=coord).json()]
+    assert emails(f"role=student&id_prefix={student_id[:3]}") == ["s@b.com"]
+    assert emails("role=faculty") == []
+    assert emails("id_prefix=%25") == []  # LIKE wildcards are matched literally
+    assert client.get("/api/auth/accounts?role=coordinator", headers=coord).status_code == 422
+
+    coord_id = db.scalar(select(User.id).where(User.email == "coord@b.com"))
+    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=student).status_code == 403
+    assert client.delete(f"/api/auth/accounts/{coord_id}", headers=coord).status_code == 403
+    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 204
+    assert db.get(User, by_email["s@b.com"]) is None
+    assert not list(tmp_path.rglob("*.pdf"))
+    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 404
+
+
+def test_pending_counts_and_name_fields(client, db):
+    student = auth(client, db, "s@b.com")
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    assert register(client).status_code == 201
+    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+
+    assert client.get("/api/auth/me/counts", headers=student).json() == {}
+    assert client.get("/api/auth/me/counts", headers=coord).json() == {"registration_requests": 1, "deletion_requests": 1}
+
+    user = User(full_name="ada byron king")
+    assert (user.first_name, user.monogram) == ("ada", "AB")

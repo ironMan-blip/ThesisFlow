@@ -130,7 +130,7 @@ export default function ProposalPage() {
         </p>
         <div className="mt-6 flex justify-end gap-2">
           <button onClick={() => setPending(null)} autoFocus className="btn-secondary">Cancel</button>
-          <button onClick={confirmRemove} className="btn bg-red-700 text-white shadow-sm hover:bg-red-800">Yes, remove</button>
+          <button onClick={confirmRemove} className="btn-danger">Yes, remove</button>
         </div>
       </dialog>
     </div>

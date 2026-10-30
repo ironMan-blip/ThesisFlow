@@ -1,17 +1,25 @@
-"""Requests the coordinator decides: sign-ups (student and faculty) and account deletions."""
+"""Requests the coordinator decides (sign-ups and account deletions), plus the coordinator's account list."""
 
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models.user import REVIEW_WINDOW, Role, User
 from app.services import proposal_service
 
 
+def _registrations() -> Select:
+    return select(User).where(User.approved.is_(False))
+
+
+def _deletions() -> Select:
+    return select(User).where(User.deletion_requested_at > datetime.now(timezone.utc) - REVIEW_WINDOW)
+
+
 def pending_registrations(db: Session) -> list[User]:
-    return list(db.scalars(select(User).where(User.approved.is_(False)).order_by(User.created_at)))
+    return list(db.scalars(_registrations().order_by(User.created_at)))
 
 
 def _pending(db: Session, user_id: int) -> User:
@@ -48,10 +56,7 @@ def request_deletion(db: Session, user: User) -> User:
 
 
 def pending_deletions(db: Session) -> list[User]:
-    since = datetime.now(timezone.utc) - REVIEW_WINDOW
-    return list(
-        db.scalars(select(User).where(User.deletion_requested_at > since).order_by(User.deletion_requested_at))
-    )
+    return list(db.scalars(_deletions().order_by(User.deletion_requested_at)))
 
 
 def _deletion_pending(db: Session, user_id: int) -> User:
@@ -62,7 +67,39 @@ def _deletion_pending(db: Session, user_id: int) -> User:
 
 
 def approve_deletion(db: Session, user_id: int) -> None:
-    user = _deletion_pending(db, user_id)
+    _delete(db, _deletion_pending(db, user_id))
+
+
+def pending_counts(db: Session, user: User) -> dict[str, int]:
+    # Badge counts keyed by tool; only the coordinator decides requests.
+    if user.role != Role.coordinator:
+        return {}
+    # Polled every 10s by the UI, so count in SQL instead of loading the rows.
+    count = lambda q: db.scalar(q.with_only_columns(func.count()))
+    return {"registration_requests": count(_registrations()), "deletion_requests": count(_deletions())}
+
+
+def list_accounts(db: Session, role: Role | None = None, id_prefix: str = "") -> list[User]:
+    # Unapproved sign-ups are not accounts yet; they live in pending_registrations.
+    # The coordinator is the admin login, not a member account.
+    query = select(User).where(
+        User.approved.is_(True), User.role != Role.coordinator, User.id_number.startswith(id_prefix, autoescape=True)
+    )
+    if role:
+        query = query.where(User.role == role)
+    return list(db.scalars(query.order_by(User.role, User.full_name)))
+
+
+def delete_account(db: Session, user_id: int) -> None:
+    user = db.get(User, user_id)
+    if user is None or not user.approved:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No account with that id")
+    if user.role == Role.coordinator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The coordinator account cannot be deleted")
+    _delete(db, user)
+
+
+def _delete(db: Session, user: User) -> None:
     files = proposal_service.delete_owned(db, user)
     db.delete(user)
     db.commit()

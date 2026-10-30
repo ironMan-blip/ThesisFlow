@@ -20,7 +20,7 @@ class Role(str, enum.Enum):
 ROLE_TOOLS = {
     Role.student: ["proposal", "deadlines", "account"],
     Role.faculty: ["deadlines", "account"],
-    Role.coordinator: ["deadlines", "registration_requests", "deletion_requests"],
+    Role.coordinator: ["deadlines", "accounts", "registration_requests", "deletion_requests"],
 }
 
 # The coordinator has this long to decide a sign-up or an account deletion request.
@@ -32,9 +32,11 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    # 6-digit university ID; this is what users log in with.
-    id_number: Mapped[str] = mapped_column(String(6), unique=True, index=True)
+    # 8-digit university ID; this is what users log in with.
+    id_number: Mapped[str] = mapped_column(String(8), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(255))
+    # Faculty only, e.g. "MMR"; uppercase letters, unique among faculty.
+    initials: Mapped[str | None] = mapped_column(String(10), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"))
     # Sign-ups start unapproved and cannot log in until the coordinator approves them.
@@ -46,6 +48,15 @@ class User(Base):
     @property
     def tools(self) -> list[str]:
         return ROLE_TOOLS[self.role]
+
+    @property
+    def first_name(self) -> str:
+        return (self.full_name.split() or [""])[0]
+
+    @property
+    def monogram(self) -> str:
+        # Avatar letters, e.g. "Ada Byron King" -> "AB".
+        return "".join(p[0] for p in self.full_name.split()[:2]).upper()
 
     @property
     def deletion_pending(self) -> bool:

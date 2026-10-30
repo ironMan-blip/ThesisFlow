@@ -20,16 +20,20 @@ def get_by_id_number(db: Session, id_number: str) -> User | None:
 
 
 def create_user(
-    db: Session, email: str, id_number: str, full_name: str, password: str, role: Role, approved: bool = True
+    db: Session, email: str, id_number: str, full_name: str, password: str, role: Role, approved: bool = True,
+    initials: str | None = None,
 ) -> User:
     if get_by_email(db, email):
         raise HTTPException(status.HTTP_409_CONFLICT, "User already exists")
     if get_by_id_number(db, id_number):
         raise HTTPException(status.HTTP_409_CONFLICT, "ID number already registered")
+    if initials and db.scalar(select(User).where(User.initials == initials)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Initials already registered")
     user = User(
         email=email.lower(),
         id_number=id_number,
         full_name=full_name,
+        initials=initials,
         password_hash=hash_password(password),
         role=role,
         approved=approved,
@@ -50,17 +54,19 @@ def register(db: Session, data: UserCreate) -> User:
         # The review window ran out: the new submission replaces the old request.
         db.delete(existing)
         db.flush()
-    return create_user(db, data.email, data.id_number, data.full_name, data.password, data.role, approved=False)
+    return create_user(
+        db, data.email, data.id_number, data.full_name, data.password, data.role, approved=False, initials=data.initials
+    )
 
 
 def ensure_admin(db: Session) -> User:
-    """Make the single coordinator account match ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD. Runs at startup."""
-    user = get_by_email(db, settings.admin_email)
+    """Make the single coordinator account match ADMIN_NAME / ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD. Runs at startup."""
+    user = get_by_id_number(db, settings.admin_id_number)
     if user is None:
         return create_user(
-            db, settings.admin_email, settings.admin_id_number, "Coordinator", settings.admin_password, Role.coordinator
+            db, settings.admin_email, settings.admin_id_number, settings.admin_name, settings.admin_password, Role.coordinator
         )
-    user.role, user.approved, user.id_number = Role.coordinator, True, settings.admin_id_number
+    user.role, user.approved, user.email, user.full_name = Role.coordinator, True, settings.admin_email.lower(), settings.admin_name
     if not verify_password(settings.admin_password, user.password_hash):
         user.password_hash = hash_password(settings.admin_password)
     db.commit()

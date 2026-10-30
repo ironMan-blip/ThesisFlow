@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import AccountPage from "./pages/AccountPage";
+import AccountsPage from "./pages/AccountsPage";
 import DeadlinePage from "./pages/DeadlinePage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/proposal" element={<ProposalPage />} />
         <Route path="/deadlines" element={<DeadlinePage />} />
+        <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/registration-requests" element={<RegistrationRequestsPage />} />
         <Route path="/deletion-requests" element={<DeletionRequestsPage />} />
         <Route path="/account" element={<AccountPage />} />
