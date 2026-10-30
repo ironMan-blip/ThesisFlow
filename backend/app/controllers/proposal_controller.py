@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, require_roles
+from app.models.milestone import Phase
 from app.models.user import Role, User
 from app.schemas.proposal import ProposalOut
 from app.services import proposal_service
@@ -18,13 +19,14 @@ def mine(user: User = Depends(require_roles(Role.student)), db: Session = Depend
 
 @router.post("/mine/versions", response_model=ProposalOut, status_code=status.HTTP_201_CREATED)
 def upload(
+    phase: Phase = Form(...),
     title: str = Form(...),
     abstract: str = Form(...),
     file: UploadFile = File(...),
     user: User = Depends(require_roles(Role.student)),
     db: Session = Depends(get_db),
 ):
-    return proposal_service.upload_version(db, user, title, abstract, file)
+    return proposal_service.upload_version(db, user, phase, title, abstract, file)
 
 
 @router.delete("/versions/{version_id}", response_model=ProposalOut)

@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(data: UserCreate, db: Session = Depends(get_db)):
-    return auth_service.register_student(db, data)
+    return auth_service.register(db, data)
 
 
 @router.post("/login", response_model=Token)

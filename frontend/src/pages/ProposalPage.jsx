@@ -1,44 +1,41 @@
 import { useEffect, useRef, useState } from "react";
 import { api, download } from "../api/client";
+import { Alerts, PageHeader } from "../components/ui";
+import { when } from "../format";
+import { useAction } from "../useAction";
 
 export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
-  const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [pending, setPending] = useState(null);
+  const { busy, error, notice, setError, run } = useAction();
   const dialog = useRef(null);
 
   useEffect(() => {
     api("/proposals/mine").then(setProposal).catch((err) => setError(err.message));
-  }, []);
+  }, [setError]);
 
-  const submit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    setError(null);
-    setSaving(true);
-    try {
+    run("upload", async () => {
       setProposal(await api("/proposals/mine/versions", { method: "POST", body: new FormData(form) }));
       form.reset();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      return "Upload complete. Your new version is at the top of the list.";
+    });
   };
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
-  const confirmRemove = async () => {
+  const confirmRemove = () => {
     const v = pending;
     setPending(null);
-    setError(null);
-    try {
+    run("remove", async () => {
       setProposal(await api(`/proposals/versions/${v.id}`, { method: "DELETE" }));
-    } catch (err) {
-      setError(err.message);
-    }
+      return `v${v.version_no} was removed.`;
+    });
   };
+
+  const saving = busy === "upload";
 
   useEffect(() => {
     if (pending) dialog.current.showModal();
@@ -47,14 +44,17 @@ export default function ProposalPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold">Proposal</h1>
-        <p className="mt-2 max-w-prose text-zinc-600">Each upload is saved as a new version. Older versions stay available until you remove them.</p>
-      </div>
+      <PageHeader title="Proposal" intro="Each upload is saved as a new version. Older versions stay available until you remove them." />
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
           <h2 className="font-semibold">Upload a new version</h2>
+          <label className="label">
+            Phase
+            <select name="phase" required className="input">
+              {proposal?.phases.map((p) => <option key={p}>{p}</option>)}
+            </select>
+          </label>
           <label className="label">
             Title
             <input name="title" required maxLength={255} placeholder="Working title of your thesis" className="input" />
@@ -68,9 +68,9 @@ export default function ProposalPage() {
             <input name="file" type="file" accept="application/pdf" required
               className="mt-1.5 block w-full cursor-pointer rounded-lg border border-dashed border-zinc-300 p-2 text-sm text-zinc-600
                 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-teal-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-teal-800 hover:file:bg-teal-100" />
-            <span className="mt-1 block text-xs font-normal text-zinc-500">PDF only.</span>
+            <span className="mt-1 block text-xs font-normal text-zinc-500">PDF only{proposal && `, up to ${proposal.max_upload_mb} MB`}.</span>
           </label>
-          {error && <p role="alert" className="alert-error">{error}</p>}
+          <Alerts error={error} notice={notice} />
           <button disabled={saving} className="btn-primary w-full">
             {saving ? "Uploading..." : "Upload version"}
           </button>
@@ -95,16 +95,17 @@ export default function ProposalPage() {
           ) : (
             <ul className="divide-y divide-zinc-100">
               {proposal.versions.map((v) => (
-                <li key={v.id} className="flex items-start justify-between gap-4 px-6 py-4">
+                <li key={v.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-zinc-700">v{v.version_no}</span>
+                      <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-700">{v.phase}</span>
                       {v.is_latest &&<span className="rounded-md bg-teal-50 px-1.5 py-0.5 text-xs font-medium text-teal-800">Latest</span>}
                       <p className="truncate font-medium">{v.title}</p>
                     </div>
                     <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>
                     <p className="mt-1.5 break-words text-xs text-zinc-500">
-                      {v.original_filename} · {v.size_label} · {new Date(v.created_at).toLocaleString()}
+                      {v.original_filename} · {v.size_label} · {when(v.created_at)}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">

@@ -1,4 +1,7 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import Role
 
@@ -7,6 +10,17 @@ class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=8, max_length=128)
+    # Coordinator is the single admin account from settings; nobody can sign up as one.
+    role: Literal[Role.student, Role.faculty] = Role.student
+
+    @field_validator("password")
+    @classmethod
+    def strong_password(cls, v: str) -> str:
+        if not (any(c.isupper() for c in v) and any(c.islower() for c in v) and any(c.isdigit() for c in v)):
+            raise ValueError("Password must contain an uppercase letter, a lowercase letter and a number")
+        if any(c.isspace() for c in v):
+            raise ValueError("Password must not contain spaces")
+        return v
 
 
 class UserOut(BaseModel):
@@ -17,6 +31,17 @@ class UserOut(BaseModel):
     email: str
     full_name: str
     role: Role
+    approved: bool
+    tools: list[str]
+    deletion_pending: bool
+
+
+class FacultyRequestOut(UserOut):
+    created_at: datetime
+
+
+class DeletionRequestOut(UserOut):
+    deletion_requested_at: datetime
 
 
 class Token(BaseModel):
