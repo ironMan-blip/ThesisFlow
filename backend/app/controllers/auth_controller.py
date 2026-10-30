@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.user import Role, User
-from app.schemas.user import FacultyRequestOut, Token, UserCreate, UserOut
+from app.schemas.user import DeletionRequestOut, FacultyRequestOut, Token, UserCreate, UserOut
 from app.services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -27,6 +27,11 @@ def me(user: User = Depends(get_current_user)):
     return user
 
 
+@router.post("/me/deletion-request", response_model=UserOut)
+def request_deletion(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return auth_service.request_deletion(db, user)
+
+
 @router.get("/faculty-requests", response_model=list[FacultyRequestOut])
 def faculty_requests(_: User = Depends(require_roles(Role.coordinator)), db: Session = Depends(get_db)):
     return auth_service.pending_faculty(db)
@@ -40,3 +45,18 @@ def approve(user_id: int, _: User = Depends(require_roles(Role.coordinator)), db
 @router.delete("/faculty-requests/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def reject(user_id: int, _: User = Depends(require_roles(Role.coordinator)), db: Session = Depends(get_db)):
     auth_service.reject_faculty(db, user_id)
+
+
+@router.get("/deletion-requests", response_model=list[DeletionRequestOut])
+def deletion_requests(_: User = Depends(require_roles(Role.coordinator)), db: Session = Depends(get_db)):
+    return auth_service.pending_deletions(db)
+
+
+@router.post("/deletion-requests/{user_id}/approve", status_code=status.HTTP_204_NO_CONTENT)
+def approve_deletion(user_id: int, _: User = Depends(require_roles(Role.coordinator)), db: Session = Depends(get_db)):
+    auth_service.approve_deletion(db, user_id)
+
+
+@router.delete("/deletion-requests/{user_id}", response_model=UserOut)
+def reject_deletion(user_id: int, _: User = Depends(require_roles(Role.coordinator)), db: Session = Depends(get_db)):
+    return auth_service.reject_deletion(db, user_id)

@@ -15,6 +15,7 @@ docker compose exec backend python -m app.seed   # dev student + faculty, passwo
 
 - App: http://localhost:5173 (log in as `student@thesisflow.test` or `faculty@thesisflow.test`; coordinator is `ADMIN_EMAIL` / `ADMIN_PASSWORD`, default `coordinator@thesisflow.test` / `password123`)
 - Sign-up: students can log in right away. Faculty wait for the coordinator to approve them under "Faculty requests". There is no coordinator sign-up; the one coordinator account is created/updated from `ADMIN_EMAIL` / `ADMIN_PASSWORD` when the backend starts.
+- Account deletion: students and faculty request it under "Account". The coordinator approves or rejects it under "Deletion requests"; a request not approved within 48 hours lapses and the account is kept. The coordinator account cannot be deleted.
 - API docs: http://localhost:8000/docs
 - Tests: `docker compose exec backend pytest`
 

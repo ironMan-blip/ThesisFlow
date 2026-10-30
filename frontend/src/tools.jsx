@@ -13,4 +13,12 @@ export const TOOLS = {
     to: "/faculty-requests", title: "Faculty requests", text: "Approve or reject faculty who registered.",
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 11l2 2 4-4" /></>,
   },
+  deletion_requests: {
+    to: "/deletion-requests", title: "Deletion requests", text: "Approve or reject users who asked to delete their account.",
+    icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 10l5 5M21 10l-5 5" /></>,
+  },
+  account: {
+    to: "/account", title: "Account", text: "Your account details, and asking to delete your account.",
+    icon: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  },
 };

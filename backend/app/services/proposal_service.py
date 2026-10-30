@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -161,6 +161,16 @@ def delete_version(db: Session, user: User, version_id: int) -> Proposal:
     (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(proposal)
     return proposal
+
+
+def delete_owned(db: Session, user: User) -> list[Path]:
+    """Delete the user's proposal and its versions (no commit). Returns their PDFs for the caller to remove after commit."""
+    names = list(
+        db.scalars(select(ProposalVersion.stored_filename).join(Proposal).where(Proposal.owner_id == user.id))
+    )
+    # Explicit, not the users FK cascade: proposal_versions.uploaded_by_id would block that.
+    db.execute(delete(Proposal).where(Proposal.owner_id == user.id))
+    return [_upload_dir() / name for name in names]
 
 
 def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, str]:

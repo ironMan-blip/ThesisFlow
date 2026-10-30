@@ -2,24 +2,25 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { when } from "../format";
 
-export default function FacultyRequestsPage() {
+// Coordinator inbox of requests to approve or reject; FacultyRequestsPage and DeletionRequestsPage configure it.
+function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   const [requests, setRequests] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(null); // id of the request being decided
 
   useEffect(() => {
-    api("/auth/faculty-requests").then(setRequests).catch((err) => setError(err.message));
-  }, []);
+    api(path).then(setRequests).catch((err) => setError(err.message));
+  }, [path]);
 
   const decide = async (r, approve) => {
     setError(null);
     setNotice(null);
     setBusy(r.id);
     try {
-      await api(`/auth/faculty-requests/${r.id}${approve ? "/approve" : ""}`, { method: approve ? "POST" : "DELETE" });
+      await api(`${path}/${r.id}${approve ? "/approve" : ""}`, { method: approve ? "POST" : "DELETE" });
       setRequests((rs) => rs.filter((x) => x.id !== r.id));
-      setNotice(`${r.full_name} was ${approve ? "approved and can now log in" : "rejected"}.`);
+      setNotice(`${r.full_name} ${approve ? approved : rejected}.`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -30,10 +31,8 @@ export default function FacultyRequestsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold">Faculty requests</h1>
-        <p className="mt-2 max-w-prose text-zinc-600">
-          Faculty who registered wait here until you approve them. Please review each request within 48 hours.
-        </p>
+        <h1 className="text-3xl font-semibold">{title}</h1>
+        <p className="mt-2 max-w-prose text-zinc-600">{intro}</p>
       </div>
 
       {error && <p role="alert" className="alert-error">{error}</p>}
@@ -49,7 +48,7 @@ export default function FacultyRequestsPage() {
             <li key={r.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
               <div>
                 <p className="font-medium">{r.full_name}</p>
-                <p className="text-sm text-zinc-600">{r.email} · requested {when(r.created_at)}</p>
+                <p className="text-sm text-zinc-600">{r.email} · requested {when(r[dateField])}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary">Reject</button>
@@ -64,3 +63,25 @@ export default function FacultyRequestsPage() {
     </div>
   );
 }
+
+export const FacultyRequestsPage = () => (
+  <RequestsPage
+    path="/auth/faculty-requests"
+    title="Faculty requests"
+    intro="Faculty who registered wait here until you approve them. Please review each request within 48 hours."
+    approved="was approved and can now log in"
+    rejected="was rejected"
+    dateField="created_at"
+  />
+);
+
+export const DeletionRequestsPage = () => (
+  <RequestsPage
+    path="/auth/deletion-requests"
+    title="Deletion requests"
+    intro="Users who asked to delete their account. Approving deletes the account and its proposal for good. A request you do not approve within 48 hours lapses and the account is kept."
+    approved="was deleted"
+    rejected="keeps their account"
+    dateField="deletion_requested_at"
+  />
+);

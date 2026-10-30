@@ -1,11 +1,12 @@
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import AccountPage from "./pages/AccountPage";
 import DeadlinePage from "./pages/DeadlinePage";
-import FacultyRequestsPage from "./pages/FacultyRequestsPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import ProposalPage from "./pages/ProposalPage";
+import { DeletionRequestsPage, FacultyRequestsPage } from "./pages/RequestsPage";
 
 export default function App() {
   return (
@@ -17,6 +18,8 @@ export default function App() {
         <Route path="/proposal" element={<ProposalPage />} />
         <Route path="/deadlines" element={<DeadlinePage />} />
         <Route path="/faculty-requests" element={<FacultyRequestsPage />} />
+        <Route path="/deletion-requests" element={<DeletionRequestsPage />} />
+        <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

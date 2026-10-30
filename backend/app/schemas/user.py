@@ -33,10 +33,15 @@ class UserOut(BaseModel):
     role: Role
     approved: bool
     tools: list[str]
+    deletion_pending: bool
 
 
 class FacultyRequestOut(UserOut):
     created_at: datetime
+
+
+class DeletionRequestOut(UserOut):
+    deletion_requested_at: datetime
 
 
 class Token(BaseModel):
