@@ -157,6 +157,29 @@ def test_missed_phase_locks_later_phases_until_new_semester(client, db):
     res = upload(client, missed, phase="P2")
     assert (res.status_code, res.json()["detail"]) == (409, "You missed P1, so uploads are closed until the next semester")
 
+    mine = client.get("/api/proposals/mine", headers=missed).json()
+    assert mine["missed_notice"] == "You missed P1, so uploads are closed until the next semester"
+    assert client.get("/api/proposals/mine", headers=on_time).json()["missed_notice"] is None
+
     p1.due_at = datetime.now(timezone.utc) + timedelta(days=1)  # new semester: P1 open again
     db.flush()
     assert upload(client, missed, phase="P1").status_code == 201
+
+
+def test_versions_of_a_closed_phase_cannot_be_removed(client, db):
+    h = auth(client, db, "s@x.com")
+    p1 = upload(client, h, phase="P1").json()["versions"][0]
+    p2 = upload(client, h, content=PDF + b"p2", phase="P2").json()["versions"][0]
+    assert (p1["can_delete"], p2["can_delete"]) == (True, True)
+    db.get(Milestone, Phase.P1).due_at = datetime.now(timezone.utc) - timedelta(minutes=5)  # P1 closes
+    db.flush()
+
+    versions = client.get("/api/proposals/mine", headers=h).json()["versions"]
+    assert [(v["phase"], v["can_delete"]) for v in versions] == [("P2", True), ("P1", False)]
+    res = client.delete(f"/api/proposals/versions/{p1['id']}", headers=h)
+    assert (res.status_code, res.json()["detail"]) == (
+        409,
+        "The P1 deadline and grace period have passed, so it can't be removed",
+    )
+    assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 2
+    assert client.delete(f"/api/proposals/versions/{p2['id']}", headers=h).status_code == 200

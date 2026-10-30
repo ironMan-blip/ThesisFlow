@@ -54,7 +54,9 @@ export default function ProposalPage() {
             <select name="phase" required className="input">
               {proposal?.phases.map((p) => <option key={p}>{p}</option>)}
             </select>
-            {proposal?.phases.length === 0 && (
+            {proposal?.missed_notice ? (
+              <span className="mt-1 block text-xs font-normal text-red-700">{proposal.missed_notice}.</span>
+            ) : proposal?.phases.length === 0 && (
               <span className="mt-1 block text-xs font-normal text-zinc-500">No phase is open for uploads right now.</span>
             )}
           </label>
@@ -113,8 +115,10 @@ export default function ProposalPage() {
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
-                    <button onClick={() => setPending(v)} aria-label={`Remove v${v.version_no}`}
-                      className="btn-secondary px-3 py-1.5 text-red-700 hover:bg-red-50">Remove</button>
+                    {v.can_delete && (
+                      <button onClick={() => setPending(v)} aria-label={`Remove v${v.version_no}`}
+                        className="btn-secondary px-3 py-1.5 text-red-700 hover:bg-red-50">Remove</button>
+                    )}
                   </div>
                 </li>
               ))}

@@ -184,7 +184,7 @@ Supervisor and panel member are not account roles. They will be links between a 
 - The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default).
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract does not store a copy: that existing version moves to the top as the latest.
-- Students can delete a version (with a confirmation dialog). Later versions shift down so numbers stay in order, and the PDF file is removed.
+- Students can delete a version (with a confirmation dialog) until its phase's grace period ends; after that it is final and the Remove button is hidden. Later versions shift down so numbers stay in order, and the PDF file is removed.
 - Students see only their own proposal. Faculty and the coordinator can download any version (for review).
 - Uploads and deletes by the same student are locked against each other, so version numbers never clash.
 

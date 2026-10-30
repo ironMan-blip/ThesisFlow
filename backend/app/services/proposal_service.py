@@ -28,31 +28,48 @@ def _can_view(user: User, proposal: Proposal) -> bool:
     return user.role in (Role.faculty, Role.coordinator) or proposal.owner_id == user.id
 
 
-def _upload_blocks(db: Session, owner_id: int) -> dict[Phase, str]:
-    """Why each phase is closed to this student. Phases not in the result are open."""
+def _closed_phases(db: Session) -> set[Phase]:
+    # Phases whose due date and grace period have both passed.
     now = datetime.now(timezone.utc)
-    milestones = {m.phase: m for m in db.scalars(select(Milestone))}
+    return {m.phase for m in db.scalars(select(Milestone)) if now > m.closes_at}
+
+
+def _missed_notice(phase: Phase) -> str:
+    return f"You missed {phase.value}, so uploads are closed until the next semester"
+
+
+def _upload_blocks(db: Session, owner_id: int) -> tuple[dict[Phase, str], Phase | None]:
+    """Why each phase is closed to this student (phases not in the result are open), and the first phase they missed."""
+    set_phases = set(db.scalars(select(Milestone.phase)))
+    closed = _closed_phases(db)
     submitted = set(
         db.scalars(select(ProposalVersion.phase).join(Proposal).where(Proposal.owner_id == owner_id).distinct())
     )
     blocks, missed = {}, None
     for p in Phase:
-        m = milestones.get(p)
         if missed:
             # A missed phase locks every later one until a new semester's deadlines are set.
-            blocks[p] = f"You missed {missed.value}, so uploads are closed until the next semester"
-        elif m is None:
+            blocks[p] = _missed_notice(missed)
+        elif p not in set_phases:
             blocks[p] = f"The {p.value} timeline is not set yet"
-        elif now > m.closes_at:
+        elif p in closed:
             blocks[p] = f"The {p.value} deadline and grace period have passed"
-        if m and now > m.closes_at and p not in submitted:
+        if p in closed and p not in submitted:
             missed = missed or p
-    return blocks
+    return blocks, missed
 
 
 def _out(db: Session, proposal: Proposal) -> ProposalOut:
-    blocks = _upload_blocks(db, proposal.owner_id)
-    return ProposalOut(versions=proposal.versions, phases=[p for p in Phase if p not in blocks])
+    blocks, missed = _upload_blocks(db, proposal.owner_id)
+    out = ProposalOut(
+        versions=proposal.versions,
+        phases=[p for p in Phase if p not in blocks],
+        missed_notice=missed and _missed_notice(missed),
+    )
+    closed = _closed_phases(db)
+    for v in out.versions:
+        v.can_delete = v.phase not in closed
+    return out
 
 
 def get_mine(db: Session, user: User) -> ProposalOut:
@@ -106,7 +123,7 @@ def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
 
 
 def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> ProposalOut:
-    if block := _upload_blocks(db, user.id).get(phase):
+    if block := _upload_blocks(db, user.id)[0].get(phase):
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
@@ -184,6 +201,11 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     )
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
+    if version.phase in _closed_phases(db):
+        # Submissions are final once the phase closes; removing one would also turn it into a missed phase.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"The {version.phase.value} deadline and grace period have passed, so it can't be removed"
+        )
     stored, removed_no = version.stored_filename, version.version_no
     db.delete(version)
     db.flush()
