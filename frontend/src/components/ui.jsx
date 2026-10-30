@@ -28,13 +28,16 @@ export function Alerts({ error, notice }) {
   );
 }
 
-// Pending-request count in the corner of a link or card; parent must be `relative`.
-export function CountBadge({ count, className = "-right-1 -top-1.5" }) {
+// Live pending-request count, shown as a "3 pending" pill with a pulsing dot.
+export function CountBadge({ count, className = "" }) {
   if (!count) return null;
   return (
-    <span className={`absolute grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white ${className}`}>
-      {count}
-      <span className="sr-only"> pending</span>
+    <span className={`inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-600/20 ring-inset ${className}`}>
+      <span className="relative flex size-2" aria-hidden="true">
+        <span className="absolute inline-flex size-full rounded-full bg-amber-400 opacity-75 motion-safe:animate-ping" />
+        <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
+      </span>
+      <span className="tabular-nums">{count > 99 ? "99+" : count}</span> pending
     </span>
   );
 }

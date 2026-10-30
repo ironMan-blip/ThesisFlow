@@ -10,7 +10,7 @@ function ToolCard({ to, icon, title, count, children }) {
           {icon}
         </svg>
       </span>
-      <CountBadge count={count} className="right-4 top-4" />
+      <CountBadge count={count} className="absolute right-5 top-5" />
       <h2 className="mt-4 font-semibold">{title}</h2>
       <p className="mt-1 text-sm text-zinc-600">{children}</p>
       <p className="mt-4 text-sm font-medium text-teal-700">Open <span className="inline-block transition group-hover:translate-x-0.5">→</span></p>

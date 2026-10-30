@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken } from "../api/client";
 import { TOOLS } from "../tools";
-import { CountBadge, Logo } from "./ui";
+import { Logo } from "./ui";
 
 const navClass = ({ isActive }) =>
-  `relative shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none ${
+  `shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none ${
     isActive ? "bg-zinc-100 text-zinc-900" : "text-zinc-600 hover:text-zinc-900"
   }`;
 
@@ -86,10 +86,7 @@ export default function Layout() {
     <>
       <NavLink to="/" end className={navClass}>Dashboard</NavLink>
       {user.tools.map((key) => (
-        <NavLink key={key} to={TOOLS[key].to} className={navClass}>
-          {TOOLS[key].title}
-          <CountBadge count={counts[key]} />
-        </NavLink>
+        <NavLink key={key} to={TOOLS[key].to} className={navClass}>{TOOLS[key].title}</NavLink>
       ))}
     </>
   );
