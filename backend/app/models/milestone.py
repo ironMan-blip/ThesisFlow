@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import DateTime, Enum, Integer
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,3 +22,8 @@ class Milestone(Base):
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     grace_minutes: Mapped[int] = mapped_column(Integer)
     penalty_per_day: Mapped[int] = mapped_column(Integer)  # percent of the phase mark
+
+    @property
+    def closes_at(self) -> datetime:
+        # Uploads stop once the grace period after the due date ends.
+        return self.due_at + timedelta(minutes=self.grace_minutes)

@@ -81,10 +81,10 @@ def test_student_late_days_and_penalty(client, db):
     assert (rows["P2"]["countdown_to"], rows["P2"]["countdown_label"]) == (rows["P2"]["due_at"], "Due in")
     assert rows["P2"]["submission_status"] == "not_submitted"
 
-    upload(client, student, phase="P1")
+    assert upload(client, student, phase="P1").status_code == 409  # closed phases take no uploads
     upload(client, student, content=PDF + b"p2", phase="P2")
     rows = by_phase(client.get("/api/milestones", headers=student))
-    assert rows["P1"]["submitted_at"] is not None
+    assert rows["P1"]["submitted_at"] is None
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (3, 45)
     assert (rows["P2"]["late_days"], rows["P2"]["penalty_percent"]) == (0, 0)
     assert rows["P2"]["submission_status"] == "on_time"

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.config import settings
@@ -128,3 +130,16 @@ def test_upload_needs_the_phase_timeline(client, db):
     res = upload(client, h, phase="P2")
     assert (res.status_code, res.json()["detail"]) == (409, "The P2 timeline is not set yet")
     assert upload(client, h, phase="P1").status_code == 201
+
+
+def test_upload_closes_when_grace_period_ends(client, db):
+    h = auth(client, db, "s@x.com")
+    now = datetime.now(timezone.utc)
+    db.get(Milestone, Phase.P1).due_at = now - timedelta(minutes=5)
+    db.get(Milestone, Phase.P1).grace_minutes = 60  # past due, still in grace
+    db.get(Milestone, Phase.P2).due_at = now - timedelta(minutes=5)  # no grace: closed
+    db.flush()
+    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1", "P3"]
+    assert upload(client, h, phase="P1").status_code == 201
+    res = upload(client, h, phase="P2")
+    assert (res.status_code, res.json()["detail"]) == (409, "The P2 deadline and grace period have passed")

@@ -55,7 +55,7 @@ export default function ProposalPage() {
               {proposal?.phases.map((p) => <option key={p}>{p}</option>)}
             </select>
             {proposal?.phases.length === 0 && (
-              <span className="mt-1 block text-xs font-normal text-zinc-500">No phase timeline is set yet, so uploads are closed.</span>
+              <span className="mt-1 block text-xs font-normal text-zinc-500">No phase is open for uploads right now.</span>
             )}
           </label>
           <label className="label">

@@ -174,10 +174,11 @@ Supervisor and panel member are not account roles. They will be links between a 
   - **on time**, **late**, or **not submitted**,
   - **late days**: every started day after the grace period ends counts as a full day, and keeps counting until they submit,
   - **penalty**: late days × penalty per day, capped at 100%.
-- The latest upload for a phase is the one that counts, so a late re-upload makes that phase late.
+- The latest upload for a phase is the one that counts.
 
 ### 6. Proposal submission
 
+- Students can upload only for phases whose timeline is set and whose grace period has not ended; once it ends, uploads for that phase are closed.
 - Students upload a proposal version with a **phase** (P1/P2/P3), **title** (1 to 255 characters), **abstract** and a **PDF file**.
 - The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default).
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
