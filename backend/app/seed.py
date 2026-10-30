@@ -1,6 +1,6 @@
-"""Create one dev account per role. Run: docker compose exec backend python -m app.seed
+"""Create a dev student and faculty account. Run: docker compose exec backend python -m app.seed
 
-Dev only. All accounts use the password "password123".
+Dev only. Both use the password "password123". The coordinator comes from ADMIN_EMAIL / ADMIN_PASSWORD.
 """
 
 from app.database import SessionLocal
@@ -10,7 +10,6 @@ from app.services import auth_service
 ACCOUNTS = [
     ("student@thesisflow.test", "Demo Student", Role.student),
     ("faculty@thesisflow.test", "Demo Faculty", Role.faculty),
-    ("coordinator@thesisflow.test", "Demo Coordinator", Role.coordinator),
 ]
 
 

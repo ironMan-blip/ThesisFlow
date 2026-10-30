@@ -10,10 +10,11 @@ Needs Docker only.
 ```bash
 cp .env.example .env          # optional, defaults work for dev
 docker compose up --build
-docker compose exec backend python -m app.seed   # dev accounts, password: password123
+docker compose exec backend python -m app.seed   # dev student + faculty, password: password123
 ```
 
-- App: http://localhost:5173 (log in as `student@thesisflow.test`, `faculty@thesisflow.test` or `coordinator@thesisflow.test`)
+- App: http://localhost:5173 (log in as `student@thesisflow.test` or `faculty@thesisflow.test`; coordinator is `ADMIN_EMAIL` / `ADMIN_PASSWORD`, default `coordinator@thesisflow.test` / `password123`)
+- Sign-up: students can log in right away. Faculty wait for the coordinator to approve them under "Faculty requests". There is no coordinator sign-up; the one coordinator account is created/updated from `ADMIN_EMAIL` / `ADMIN_PASSWORD` when the backend starts.
 - API docs: http://localhost:8000/docs
 - Tests: `docker compose exec backend pytest`
 

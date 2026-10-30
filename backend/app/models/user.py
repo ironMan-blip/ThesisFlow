@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, String, func
+from sqlalchemy import Boolean, DateTime, Enum, String, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -23,4 +23,6 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"))
+    # Faculty sign-ups start unapproved and cannot log in until the coordinator approves them.
+    approved: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
