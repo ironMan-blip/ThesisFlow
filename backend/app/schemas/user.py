@@ -1,18 +1,22 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 
 from app.models.user import Role
 
 
 class UserCreate(BaseModel):
+    # Run validators on defaults too, so faculty cannot skip initials by leaving them out.
+    model_config = ConfigDict(validate_default=True)
+
     email: EmailStr
     id_number: str
     full_name: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=8, max_length=128)
     # Coordinator is the single admin account from settings; nobody can sign up as one.
     role: Literal[Role.student, Role.faculty] = Role.student
+    initials: str | None = None  # faculty only
 
     @field_validator("id_number")
     @classmethod
@@ -30,6 +34,17 @@ class UserCreate(BaseModel):
             raise ValueError("Password must not contain spaces")
         return v
 
+    @field_validator("initials")
+    @classmethod
+    def faculty_initials(cls, v: str | None, info: ValidationInfo) -> str | None:
+        if info.data.get("role") != Role.faculty:
+            return None
+        if not v:
+            raise ValueError("Faculty must give their initials")
+        if not (len(v) <= 10 and v.isascii() and v.isalpha() and v.isupper()):
+            raise ValueError("Initials must be 1 to 10 capital letters")
+        return v
+
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -39,6 +54,7 @@ class UserOut(BaseModel):
     email: str
     id_number: str
     full_name: str
+    initials: str | None
     role: Role
     approved: bool
     tools: list[str]

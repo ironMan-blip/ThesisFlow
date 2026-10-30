@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("student");
+  const [initials, setInitials] = useState("");
   const { busy, error, notice, setError, setNotice, run } = useAction();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -32,7 +33,7 @@ export default function LoginPage() {
     run("submit", async () => {
       // Every sign-up waits for coordinator approval, so registering never logs in.
       if (registering) {
-        await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role } });
+        await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role, initials: role === "faculty" ? initials : null } });
         setMode("login");
         return "Request sent. The coordinator will review your account within 48 hours. You can log in once it is approved.";
       }
@@ -70,6 +71,13 @@ export default function LoginPage() {
                 Full name
                 <input required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="input" />
               </label>
+              {role === "faculty" && (
+                <label className="label">
+                  Initials
+                  <input required pattern="[A-Z]{1,10}" maxLength={10} title="Capital letters only" placeholder="ABC" value={initials}
+                    onChange={(e) => setInitials(e.target.value.toUpperCase())} className="input" />
+                </label>
+              )}
               <label className="label">
                 Email
                 <input type="email" required autoComplete="email" placeholder="you@university.edu" value={email}

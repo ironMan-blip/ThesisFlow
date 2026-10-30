@@ -39,7 +39,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
           {requests.map((r) => (
             <li key={r.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
               <div>
-                <p className="font-medium">{r.full_name} <span className="text-sm font-normal capitalize text-zinc-500">· {r.role}</span></p>
+                <p className="font-medium">{r.full_name}{r.initials && ` (${r.initials})`} <span className="text-sm font-normal capitalize text-zinc-500">· {r.role}</span></p>
                 <p className="text-sm text-zinc-600">ID {r.id_number} · {r.email} · requested {when(r[dateField])}</p>
               </div>
               <div className="flex gap-2">

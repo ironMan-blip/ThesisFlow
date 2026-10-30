@@ -6,10 +6,15 @@ from app.services import auth_service
 from tests.helpers import auth, upload
 
 
-def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student"):
+def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
+    if initials is None and role == "faculty":
+        initials = "ABC"
     return client.post(
         "/api/auth/register",
-        json={"email": email, "id_number": id_number, "full_name": "A", "password": password, "role": role},
+        json={
+            "email": email, "id_number": id_number, "full_name": "A", "password": password, "role": role,
+            "initials": initials,
+        },
     )
 
 
@@ -76,6 +81,18 @@ def test_coordinator_signup_rejected(client):
     assert register(client, role="coordinator").status_code == 422
 
 
+def test_faculty_initials(client, db):
+    for bad in ["", "abc", "AB1", "A B", "ABCDEFGHIJK"]:
+        assert register(client, role="faculty", initials=bad).status_code == 422
+    r = register(client, role="faculty", initials="MMR")
+    assert r.status_code == 201 and r.json()["initials"] == "MMR"
+    r = register(client, email="x@b.com", id_number="87654321", role="faculty", initials="MMR")
+    assert r.status_code == 409 and r.json()["detail"] == "Initials already registered"
+    # Students never carry initials.
+    r = register(client, email="s@b.com", id_number="11111111", initials="ZZ")
+    assert r.status_code == 201 and r.json()["initials"] is None
+
+
 def test_signups_wait_for_approval(client, db):
     r = register(client, email="f@b.com", role="faculty")
     assert r.status_code == 201 and r.json()["approved"] is False
@@ -99,7 +116,7 @@ def test_signups_wait_for_approval(client, db):
 
 
 def test_reject_frees_email(client, db):
-    body = {"email": "f@b.com", "id_number": "22222222", "full_name": "F", "password": "Password123", "role": "faculty"}
+    body = {"email": "f@b.com", "id_number": "22222222", "full_name": "F", "password": "Password123", "role": "faculty", "initials": "FB"}
     uid = client.post("/api/auth/register", json=body).json()["id"]
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert client.delete(f"/api/auth/registration-requests/{uid}", headers=coord).status_code == 204

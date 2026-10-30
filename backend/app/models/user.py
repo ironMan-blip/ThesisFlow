@@ -35,6 +35,8 @@ class User(Base):
     # 8-digit university ID; this is what users log in with.
     id_number: Mapped[str] = mapped_column(String(8), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(255))
+    # Faculty only, e.g. "MMR"; uppercase letters, unique among faculty.
+    initials: Mapped[str | None] = mapped_column(String(10), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"))
     # Sign-ups start unapproved and cannot log in until the coordinator approves them.
