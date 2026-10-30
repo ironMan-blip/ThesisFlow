@@ -61,13 +61,16 @@ There are three roles. Each one sees only its own tools in the navigation and on
 |------|-------|
 | Student | Proposal, Deadlines, Account |
 | Faculty | Deadlines, Account |
-| Coordinator | Deadlines, Registration requests, Deletion requests |
+| Coordinator | Deadlines, Accounts, Registration requests, Deletion requests |
+
+Tools with waiting work (registration or deletion requests) show a count badge in the nav and on the dashboard.
 
 Supervisor and panel member are not account roles. They will be links between a faculty user and a group or defense.
 
 ### 1. Accounts and login
 
 - Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
+- Faculty must also give their **initials** (1 to 10 capital letters, e.g. `ABK`), unique across faculty.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
 - ID numbers are exactly 8 digits and must be unique across students and faculty. Log in with ID number and password.
@@ -89,7 +92,12 @@ Supervisor and panel member are not account roles. They will be links between a 
 - Approving deletes the user, their proposal, all its versions and the stored PDF files.
 - The coordinator account cannot be deleted.
 
-### 4. Deadlines (phases P1, P2, P3)
+### 4. Account management (coordinator)
+
+- **Accounts** lists every approved student and faculty account, with Students / Faculty tabs and a search by ID number prefix. Waiting sign-ups and the coordinator account are not listed.
+- The coordinator can delete any listed account directly. This removes the user, their proposal, all versions and the stored PDF files.
+
+### 5. Deadlines (phases P1, P2, P3)
 
 - The thesis has three phases: **P1, P2, P3**. The coordinator sets, for each phase:
   - a **due date and time**,
@@ -103,7 +111,7 @@ Supervisor and panel member are not account roles. They will be links between a 
   - **penalty**: late days × penalty per day, capped at 100%.
 - The latest upload for a phase is the one that counts, so a late re-upload makes that phase late.
 
-### 5. Proposal submission
+### 6. Proposal submission
 
 - Students upload a proposal version with a **phase** (P1/P2/P3), **title** (1 to 255 characters), **abstract** and a **PDF file**.
 - The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default).
@@ -126,7 +134,7 @@ backend/app/
 backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
-  pages/        View: one file per page (RequestsPage = registration + deletion requests)
+  pages/        View: one file per page (RequestsPage = registration + deletion requests, AccountsPage = coordinator account list)
   components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Alerts, Person, CountBadge)
   api/client.js fetch wrapper (adds JWT)
   useAction.js  busy / error / success state for a page's API calls
