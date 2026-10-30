@@ -20,7 +20,7 @@ def get_by_email(db: Session, email: str) -> User | None:
 
 def create_user(db: Session, email: str, full_name: str, password: str, role: Role, approved: bool = True) -> User:
     if get_by_email(db, email):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+        raise HTTPException(status.HTTP_409_CONFLICT, "User already exists")
     user = User(
         email=email.lower(), full_name=full_name, password_hash=hash_password(password), role=role, approved=approved
     )
@@ -36,11 +36,7 @@ def register(db: Session, data: UserCreate) -> User:
     if existing and existing.role == Role.faculty and not existing.approved:
         retry_at = existing.created_at + FACULTY_REVIEW_WINDOW
         if datetime.now(timezone.utc) < retry_at:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "Registration already submitted and waiting for coordinator approval. "
-                f"You can register again after {retry_at:%Y-%m-%d %H:%M} UTC.",
-            )
+            raise HTTPException(status.HTTP_409_CONFLICT, "User already applied to register, waiting for approval")
         # The review window ran out: the new submission replaces the old request.
         db.delete(existing)
         db.flush()

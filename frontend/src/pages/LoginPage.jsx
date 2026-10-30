@@ -97,7 +97,7 @@ export default function LoginPage() {
             <input id="password" type={showPassword ? "text" : "password"} required minLength={registering ? 8 : undefined}
               autoComplete={registering ? "new-password" : "current-password"} value={password}
               onChange={(e) => setPassword(e.target.value)} aria-describedby={registering ? "password-hint" : undefined} className="input" />
-            {registering && <p id="password-hint" className="mt-1 text-xs text-zinc-500">At least 8 characters.</p>}
+            {registering && <p id="password-hint" className="mt-1 text-xs text-zinc-500">At least 8 characters, with an uppercase letter, a lowercase letter and a number. No spaces.</p>}
           </div>
           {error && <p role="alert" className="alert-error">{error}</p>}
           {notice && <p role="status" className="alert-success">{notice}</p>}

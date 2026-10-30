@@ -5,8 +5,8 @@ PDF = b"%PDF-1.4\n% test\n"
 
 
 def auth(client, db, email, role=Role.student):
-    auth_service.create_user(db, email, "U", "password123", role)
-    token = client.post("/api/auth/login", data={"username": email, "password": "password123"}).json()["access_token"]
+    auth_service.create_user(db, email, "U", "Password123", role)
+    token = client.post("/api/auth/login", data={"username": email, "password": "Password123"}).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
