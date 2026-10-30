@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, login } from "../api/client";
-import { Logo } from "../components/Layout";
+import { Alerts, Logo } from "../components/ui";
+import { useAction } from "../useAction";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -10,9 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("student");
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const { busy, error, notice, setError, setNotice, run } = useAction();
   const [showPassword, setShowPassword] = useState(false);
 
   const registering = mode === "register";
@@ -27,28 +26,22 @@ export default function LoginPage() {
     setNotice(null);
   };
 
-  const submit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
-    setError(null);
-    setNotice(null);
-    setLoading(true);
-    try {
+    run("submit", async () => {
       if (registering) {
         const user = await api("/auth/register", { method: "POST", body: { email, password, full_name: fullName, role } });
         if (!user.approved) {
           setMode("login");
-          setNotice("Request sent. The coordinator will review your faculty account within 48 hours. You can log in once it is approved.");
-          return;
+          return "Request sent. The coordinator will review your faculty account within 48 hours. You can log in once it is approved.";
         }
       }
       await login(email, password);
       navigate("/");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
+
+  const loading = busy === "submit";
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-[radial-gradient(ellipse_at_top,var(--color-teal-50),transparent_60%)] p-4">
@@ -99,8 +92,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)} aria-describedby={registering ? "password-hint" : undefined} className="input" />
             {registering && <p id="password-hint" className="mt-1 text-xs text-zinc-500">At least 8 characters, with an uppercase letter, a lowercase letter and a number. No spaces.</p>}
           </div>
-          {error && <p role="alert" className="alert-error">{error}</p>}
-          {notice && <p role="status" className="alert-success">{notice}</p>}
+          <Alerts error={error} notice={notice} />
           <button disabled={loading} className="btn-primary w-full py-2.5">
             {loading ? "Please wait..." : registering ? "Register" : "Log in"}
           </button>

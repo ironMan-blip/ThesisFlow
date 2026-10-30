@@ -2,15 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken } from "../api/client";
 import { TOOLS } from "../tools";
-
-export function Logo() {
-  return (
-    <span className="flex items-center gap-2 font-semibold tracking-tight">
-      <span className="grid size-8 place-items-center rounded-lg bg-teal-700 text-sm font-bold text-white">T</span>
-      ThesisFlow
-    </span>
-  );
-}
+import { Logo } from "./ui";
 
 const navClass = ({ isActive }) =>
   `shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none ${

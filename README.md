@@ -40,8 +40,9 @@ backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
   pages/        View: one file per page
-  components/   View: shared pieces
+  components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Alerts)
   api/client.js fetch wrapper (adds JWT)
+  useAction.js  busy / error / success state for a page's API calls
   tools.jsx     nav + dashboard entry for each tool key the API returns in user.tools
   format.js     shared display formatting
 ```

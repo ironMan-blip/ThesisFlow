@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Alerts, PageHeader } from "../components/ui";
 import { when } from "../format";
+import { useAction } from "../useAction";
 
 const STATUS = {
   not_set: ["Not set", "bg-zinc-100 text-zinc-600"],
@@ -26,9 +28,7 @@ export default function DeadlinePage() {
   const [data, setData] = useState(null);
   const [offset, setOffset] = useState(0); // server clock minus browser clock
   const [now, setNow] = useState(Date.now());
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-  const [saving, setSaving] = useState(null); // phase being saved
+  const { busy: saving, error, notice, setError, run } = useAction(); // busy key is the phase being saved
 
   const show = (res) => {
     setData(res);
@@ -45,15 +45,12 @@ export default function DeadlinePage() {
       clearInterval(refresh);
       clearInterval(tick);
     };
-  }, []);
+  }, [setError]);
 
-  const save = async (e, phase) => {
+  const save = (e, phase) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    setError(null);
-    setNotice(null);
-    setSaving(phase);
-    try {
+    run(phase, async () => {
       show(
         await api(`/milestones/${phase}`, {
           method: "PUT",
@@ -64,27 +61,20 @@ export default function DeadlinePage() {
           },
         }),
       );
-      setNotice(`${phase} deadline saved.`);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(null);
-    }
+      return `${phase} deadline saved.`;
+    });
   };
 
   const serverNow = now + offset;
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold">Deadlines</h1>
-        <p className="mt-2 max-w-prose text-zinc-600">
-          Each phase has a due date and a grace time. Work handed in after the grace time loses marks for every late day.
-        </p>
-      </div>
+      <PageHeader
+        title="Deadlines"
+        intro="Each phase has a due date and a grace time. Work handed in after the grace time loses marks for every late day."
+      />
 
-      {error && <p role="alert" className="alert-error">{error}</p>}
-      {notice && <p role="status" className="alert-success">{notice}</p>}
+      <Alerts error={error} notice={notice} />
 
       {!data ? (
         <div className="space-y-4" aria-hidden="true">

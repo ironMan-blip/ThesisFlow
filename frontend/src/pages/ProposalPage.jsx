@@ -1,50 +1,41 @@
 import { useEffect, useRef, useState } from "react";
 import { api, download } from "../api/client";
+import { Alerts, PageHeader } from "../components/ui";
 import { when } from "../format";
+import { useAction } from "../useAction";
 
 export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
-  const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState(null);
   const [pending, setPending] = useState(null);
+  const { busy, error, notice, setError, run } = useAction();
   const dialog = useRef(null);
 
   useEffect(() => {
     api("/proposals/mine").then(setProposal).catch((err) => setError(err.message));
-  }, []);
+  }, [setError]);
 
-  const submit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    setError(null);
-    setNotice(null);
-    setSaving(true);
-    try {
+    run("upload", async () => {
       setProposal(await api("/proposals/mine/versions", { method: "POST", body: new FormData(form) }));
       form.reset();
-      setNotice("Upload complete. Your new version is at the top of the list.");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      return "Upload complete. Your new version is at the top of the list.";
+    });
   };
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
-  const confirmRemove = async () => {
+  const confirmRemove = () => {
     const v = pending;
     setPending(null);
-    setError(null);
-    setNotice(null);
-    try {
+    run("remove", async () => {
       setProposal(await api(`/proposals/versions/${v.id}`, { method: "DELETE" }));
-      setNotice(`v${v.version_no} was removed.`);
-    } catch (err) {
-      setError(err.message);
-    }
+      return `v${v.version_no} was removed.`;
+    });
   };
+
+  const saving = busy === "upload";
 
   useEffect(() => {
     if (pending) dialog.current.showModal();
@@ -53,10 +44,7 @@ export default function ProposalPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold">Proposal</h1>
-        <p className="mt-2 max-w-prose text-zinc-600">Each upload is saved as a new version. Older versions stay available until you remove them.</p>
-      </div>
+      <PageHeader title="Proposal" intro="Each upload is saved as a new version. Older versions stay available until you remove them." />
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
@@ -82,8 +70,7 @@ export default function ProposalPage() {
                 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-teal-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-teal-800 hover:file:bg-teal-100" />
             <span className="mt-1 block text-xs font-normal text-zinc-500">PDF only{proposal && `, up to ${proposal.max_upload_mb} MB`}.</span>
           </label>
-          {error && <p role="alert" className="alert-error">{error}</p>}
-          {notice && <p role="status" className="alert-success">{notice}</p>}
+          <Alerts error={error} notice={notice} />
           <button disabled={saving} className="btn-primary w-full">
             {saving ? "Uploading..." : "Upload version"}
           </button>

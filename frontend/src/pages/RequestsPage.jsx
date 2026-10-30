@@ -1,42 +1,30 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Alerts, PageHeader } from "../components/ui";
 import { when } from "../format";
+import { useAction } from "../useAction";
 
 // Coordinator inbox of requests to approve or reject; FacultyRequestsPage and DeletionRequestsPage configure it.
 function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   const [requests, setRequests] = useState(null);
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-  const [busy, setBusy] = useState(null); // id of the request being decided
+  const { busy, error, notice, setError, run } = useAction(); // busy key is the request id being decided
 
   useEffect(() => {
     api(path).then(setRequests).catch((err) => setError(err.message));
-  }, [path]);
+  }, [path, setError]);
 
-  const decide = async (r, approve) => {
-    setError(null);
-    setNotice(null);
-    setBusy(r.id);
-    try {
+  const decide = (r, approve) =>
+    run(r.id, async () => {
       await api(`${path}/${r.id}${approve ? "/approve" : ""}`, { method: approve ? "POST" : "DELETE" });
       setRequests((rs) => rs.filter((x) => x.id !== r.id));
-      setNotice(`${r.full_name} ${approve ? approved : rejected}.`);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(null);
-    }
-  };
+      return `${r.full_name} ${approve ? approved : rejected}.`;
+    });
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold">{title}</h1>
-        <p className="mt-2 max-w-prose text-zinc-600">{intro}</p>
-      </div>
+      <PageHeader title={title} intro={intro} />
 
-      {error && <p role="alert" className="alert-error">{error}</p>}
-      {notice && <p role="status" className="alert-success">{notice}</p>}
+      <Alerts error={error} notice={notice} />
 
       {!requests ? (
         <div className="h-24 animate-pulse rounded-xl bg-zinc-100" aria-hidden="true" />

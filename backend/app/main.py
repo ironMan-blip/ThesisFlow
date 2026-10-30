@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.controllers import auth_controller, milestone_controller, proposal_controller
+from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller
 from app.database import SessionLocal
 from app.services import auth_service
 
@@ -30,6 +30,7 @@ app.add_middleware(
 
 # Register each feature's router here.
 app.include_router(auth_controller.router)
+app.include_router(account_controller.router)
 app.include_router(proposal_controller.router)
 app.include_router(milestone_controller.router)
 
