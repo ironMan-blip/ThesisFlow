@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
@@ -8,9 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.milestone import Phase
+from app.models.milestone import Milestone, Phase
 from app.models.proposal import Proposal, ProposalVersion
 from app.models.user import Role, User
+from app.schemas.proposal import ProposalOut
 
 CHUNK = 1024 * 1024
 
@@ -26,9 +28,65 @@ def _can_view(user: User, proposal: Proposal) -> bool:
     return user.role in (Role.faculty, Role.coordinator) or proposal.owner_id == user.id
 
 
-def get_mine(db: Session, user: User) -> Proposal:
-    # Before the first upload, return an unsaved empty proposal so the page always gets one shape.
-    return db.scalar(select(Proposal).where(Proposal.owner_id == user.id)) or Proposal(owner_id=user.id)
+def _phases(db: Session) -> tuple[set[Phase], set[Phase]]:
+    """Phases whose timeline is set, and those whose due date and grace period have both passed."""
+    now = datetime.now(timezone.utc)
+    milestones = list(db.scalars(select(Milestone)))
+    return {m.phase for m in milestones}, {m.phase for m in milestones if now > m.closes_at}
+
+
+def last_upload_by_phase(db: Session, owner_id: int) -> dict[Phase, datetime]:
+    # The latest upload per phase is the one that counts, so a late re-upload is late.
+    return dict(
+        db.execute(
+            select(ProposalVersion.phase, func.max(ProposalVersion.created_at))
+            .join(Proposal)
+            .where(Proposal.owner_id == owner_id)
+            .group_by(ProposalVersion.phase)
+        ).all()
+    )
+
+
+def _missed_notice(phase: Phase) -> str:
+    return f"You missed {phase.value}, so uploads are closed until the next semester"
+
+
+def _upload_blocks(
+    db: Session, owner_id: int, set_phases: set[Phase], closed: set[Phase]
+) -> tuple[dict[Phase, str], Phase | None]:
+    """Why each phase is closed to this student (phases not in the result are open), and the first phase they missed."""
+    submitted = last_upload_by_phase(db, owner_id)
+    blocks, missed = {}, None
+    for p in Phase:
+        if missed:
+            # A missed phase locks every later one until a new semester's deadlines are set.
+            blocks[p] = _missed_notice(missed)
+        elif p not in set_phases:
+            blocks[p] = f"The {p.value} timeline is not set yet"
+        elif p in closed:
+            blocks[p] = f"The {p.value} deadline and grace period have passed"
+        if p in closed and p not in submitted:
+            missed = missed or p
+    return blocks, missed
+
+
+def _out(db: Session, proposal: Proposal) -> ProposalOut:
+    set_phases, closed = _phases(db)
+    blocks, missed = _upload_blocks(db, proposal.owner_id, set_phases, closed)
+    out = ProposalOut(
+        versions=proposal.versions,
+        phases=[p for p in Phase if p not in blocks],
+        missed_notice=missed and _missed_notice(missed),
+    )
+    for v in out.versions:
+        v.can_delete = v.phase not in closed
+    return out
+
+
+def get_mine(db: Session, user: User) -> ProposalOut:
+    # Before the first upload, use an unsaved empty proposal so the page always gets one shape.
+    proposal = db.scalar(select(Proposal).where(Proposal.owner_id == user.id)) or Proposal(owner_id=user.id)
+    return _out(db, proposal)
 
 
 def _lock_mine(db: Session, user: User) -> Proposal | None:
@@ -75,7 +133,9 @@ def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
     )
 
 
-def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> Proposal:
+def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> ProposalOut:
+    if block := _upload_blocks(db, user.id, *_phases(db))[0].get(phase):
+        raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title must be 1 to 255 characters")
@@ -141,10 +201,10 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
         if not keep_new_file:
             (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(proposal)
-    return proposal
+    return _out(db, proposal)
 
 
-def delete_version(db: Session, user: User, version_id: int) -> Proposal:
+def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     proposal = _lock_mine(db, user)
     # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
     version = proposal and db.scalar(
@@ -152,6 +212,11 @@ def delete_version(db: Session, user: User, version_id: int) -> Proposal:
     )
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
+    if version.phase in _phases(db)[1]:
+        # Submissions are final once the phase closes; removing one would also turn it into a missed phase.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"The {version.phase.value} deadline and grace period have passed, so it can't be removed"
+        )
     stored, removed_no = version.stored_filename, version.version_no
     db.delete(version)
     db.flush()
@@ -160,7 +225,7 @@ def delete_version(db: Session, user: User, version_id: int) -> Proposal:
     # File goes only after the row is gone, so a failed commit never loses a PDF.
     (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(proposal)
-    return proposal
+    return _out(db, proposal)
 
 
 def delete_owned(db: Session, user: User) -> list[Path]:

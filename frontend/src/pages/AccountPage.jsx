@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, PageHeader } from "../components/ui";
+import { Alerts, Avatar, PageHeader } from "../components/ui";
 import { useAction } from "../useAction";
 
 export default function AccountPage() {
@@ -21,18 +21,29 @@ export default function AccountPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Account">
-        <dl className="mt-4 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-          <dt className="text-zinc-500">Name</dt><dd>{user.full_name}</dd>
-          {user.initials && <><dt className="text-zinc-500">Initials</dt><dd>{user.initials}</dd></>}
-          <dt className="text-zinc-500">ID number</dt><dd>{user.id_number}</dd>
-          <dt className="text-zinc-500">Email</dt><dd>{user.email}</dd>
-          <dt className="text-zinc-500">Role</dt><dd className="capitalize">{user.role}</dd>
-        </dl>
-      </PageHeader>
+      <PageHeader title="Account" intro="Your details as the university has them. Contact the coordinator if something is wrong." />
 
-      <section className="card max-w-xl space-y-3 p-5" aria-labelledby="delete-heading">
-        <h2 id="delete-heading" className="font-semibold">Delete account</h2>
+      <section className="card max-w-2xl" aria-labelledby="profile-heading">
+        <div className="flex items-center gap-4 border-b border-zinc-200 p-6">
+          <Avatar user={user} className="size-14 text-lg" />
+          <div>
+            <h2 id="profile-heading" className="text-lg font-semibold">{user.full_name}</h2>
+            <p className="text-sm capitalize text-zinc-500">{user.role}</p>
+          </div>
+        </div>
+        <dl className="grid gap-x-6 gap-y-4 p-6 text-sm sm:grid-cols-2">
+          {[
+            ["ID number", user.id_number],
+            ["Email", user.email],
+            user.initials && ["Initials", user.initials],
+          ].filter(Boolean).map(([k, v]) => (
+            <div key={k}><dt className="text-zinc-500">{k}</dt><dd className="mt-0.5 break-words font-medium tabular-nums">{v}</dd></div>
+          ))}
+        </dl>
+      </section>
+
+      <section className="card max-w-2xl space-y-3 p-6 ring-red-200" aria-labelledby="delete-heading">
+        <h2 id="delete-heading" className="font-semibold text-red-800">Delete account</h2>
         <p className="text-sm text-zinc-600">
           Your request goes to the coordinator. If they approve it within 48 hours, your account and your proposal
           are deleted for good. If they don't, your account is kept and you can ask again.
@@ -55,7 +66,7 @@ export default function AccountPage() {
             </button>
           </div>
         ) : (
-          <button onClick={() => setConfirming(true)} className="btn-secondary text-red-700 hover:text-red-800">
+          <button onClick={() => setConfirming(true)} className="btn-secondary text-red-700 hover:bg-red-50 hover:text-red-800">
             Request account deletion
           </button>
         )}

@@ -190,7 +190,7 @@ def test_register_rejects_bad_email_and_weak_password(client):
         assert r.json()["detail"].startswith("password:"), weak
 
 
-def test_account_deletion_needs_coordinator_approval(client, db, tmp_path):
+def test_account_deletion_needs_coordinator_approval(client, db, tmp_path, timelines):
     student = auth(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
@@ -241,7 +241,7 @@ def test_deletion_request_lapses_after_48_hours(client, db):
     assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
 
 
-def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path):
+def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path, timelines):
     student = auth(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201

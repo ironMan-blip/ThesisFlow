@@ -70,18 +70,18 @@ def test_student_late_days_and_penalty(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     student = auth(client, db, "s@x.com")
     now = datetime.now(timezone.utc)
-    put(client, coord, "P1", now - timedelta(days=3), grace=60, penalty=15)  # closed ~2d23h ago
+    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4 * 24 * 60, penalty=15)  # ~3 days into grace
     put(client, coord, "P2", now + timedelta(days=5), penalty=10)
 
     rows = by_phase(client.get("/api/milestones", headers=student))
-    assert rows["P1"]["status"] == "closed" and rows["P1"]["submitted_at"] is None
+    assert rows["P1"]["status"] == "grace" and rows["P1"]["submitted_at"] is None
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (3, 45)  # still counting
     assert (rows["P2"]["status"], rows["P2"]["late_days"]) == ("open", 0)
-    assert (rows["P1"]["countdown_to"], rows["P1"]["submission_status"]) == (None, "late")
+    assert (rows["P1"]["countdown_to"], rows["P1"]["submission_status"]) == (rows["P1"]["closes_at"], "late")
     assert (rows["P2"]["countdown_to"], rows["P2"]["countdown_label"]) == (rows["P2"]["due_at"], "Due in")
     assert rows["P2"]["submission_status"] == "not_submitted"
 
-    upload(client, student, phase="P1")
+    assert upload(client, student, phase="P1").status_code == 201  # late upload in grace is accepted
     upload(client, student, content=PDF + b"p2", phase="P2")
     rows = by_phase(client.get("/api/milestones", headers=student))
     assert rows["P1"]["submitted_at"] is not None
@@ -89,9 +89,14 @@ def test_student_late_days_and_penalty(client, db):
     assert (rows["P2"]["late_days"], rows["P2"]["penalty_percent"]) == (0, 0)
     assert rows["P2"]["submission_status"] == "on_time"
 
-    put(client, coord, "P1", now - timedelta(days=3), grace=60, penalty=40)
+    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4 * 24 * 60, penalty=40)
     assert by_phase(client.get("/api/milestones", headers=student))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
-    # Another student's uploads don't count for this one.
+    # Grace over and never submitted: late days stop at grace end (1h grace = 1 day).
+    put(client, coord, "P1", now - timedelta(days=3), grace=60, penalty=15)
     other = auth(client, db, "o@x.com")
+    rows = by_phase(client.get("/api/milestones", headers=other))
+    assert (rows["P1"]["status"], rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == ("closed", 1, 15)
+
+    # Another student's uploads don't count for this one.
     assert by_phase(client.get("/api/milestones", headers=other))["P2"]["submitted_at"] is None

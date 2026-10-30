@@ -2,6 +2,8 @@
 
 @theme {
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --shadow-card: 0 1px 2px rgb(24 24 27 / 0.04), 0 1px 1px rgb(24 24 27 / 0.03);
+  --shadow-lift: 0 8px 24px -8px rgb(15 118 110 / 0.18), 0 2px 4px rgb(24 24 27 / 0.04);
 }
 
 @layer base {
@@ -9,16 +11,19 @@
     scroll-behavior: smooth;
   }
   body {
-    @apply bg-zinc-50 text-zinc-900 antialiased;
+    @apply bg-zinc-50 text-zinc-900 antialiased selection:bg-teal-100 selection:text-teal-900;
   }
   h1, h2, h3 {
     @apply tracking-tight text-balance;
+  }
+  p {
+    text-wrap: pretty;
   }
 }
 
 /* Shared building blocks so every page looks the same. */
 @utility card {
-  @apply rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80;
+  @apply rounded-2xl bg-white shadow-card ring-1 ring-zinc-200/70;
 }
 
 @utility label {
@@ -27,12 +32,13 @@
 
 @utility input {
   @apply mt-1.5 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-xs transition
-    placeholder:text-zinc-400 focus:border-teal-600 focus:ring-3 focus:ring-teal-600/15 focus:outline-none;
+    placeholder:text-zinc-400 hover:border-zinc-400 focus:border-teal-600 focus:ring-3 focus:ring-teal-600/15 focus:outline-none
+    user-invalid:border-red-400 user-invalid:focus:ring-red-500/15;
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition
-    focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none active:translate-y-px
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition duration-200
+    focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none active:scale-[0.98]
     disabled:pointer-events-none disabled:opacity-50;
 }
 
@@ -41,17 +47,29 @@
 }
 
 @utility btn-secondary {
-  @apply btn bg-white text-zinc-700 ring-1 ring-zinc-300 hover:bg-zinc-50 hover:text-zinc-900;
+  @apply btn bg-white text-zinc-700 shadow-xs ring-1 ring-zinc-300 hover:bg-zinc-50 hover:text-zinc-900;
 }
 
 @utility btn-danger {
-  @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700;
+  @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-600/30;
+}
+
+@utility btn-ghost-danger {
+  @apply btn text-red-700 hover:bg-red-50 focus-visible:ring-red-600/30;
+}
+
+@utility badge {
+  @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset;
+}
+
+@utility alert {
+  @apply flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm;
 }
 
 @utility alert-error {
-  @apply rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700;
+  @apply alert border-red-200 bg-red-50 text-red-800;
 }
 
 @utility alert-success {
-  @apply rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800;
+  @apply alert border-teal-200 bg-teal-50 text-teal-900;
 }

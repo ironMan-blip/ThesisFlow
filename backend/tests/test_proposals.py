@@ -1,6 +1,13 @@
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
 from app.config import settings
+from app.models.milestone import Milestone, Phase
 from app.models.user import Role
 from tests.helpers import PDF, auth, upload
+
+pytestmark = pytest.mark.usefixtures("timelines")
 
 
 def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
@@ -112,3 +119,67 @@ def test_same_pdf_with_new_title_or_abstract_is_a_new_version(client, db):
         ("a renamed", "About it", 2),
         ("a", "About it", 1),
     ]
+
+
+def test_upload_needs_the_phase_timeline(client, db):
+    h = auth(client, db, "s@x.com")
+    db.delete(db.get(Milestone, Phase.P2))
+    db.delete(db.get(Milestone, Phase.P3))
+    db.flush()
+    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1"]
+    res = upload(client, h, phase="P2")
+    assert (res.status_code, res.json()["detail"]) == (409, "The P2 timeline is not set yet")
+    assert upload(client, h, phase="P1").status_code == 201
+
+
+def test_upload_closes_when_grace_period_ends(client, db):
+    h = auth(client, db, "s@x.com")
+    now = datetime.now(timezone.utc)
+    db.get(Milestone, Phase.P1).due_at = now - timedelta(minutes=5)
+    db.get(Milestone, Phase.P1).grace_minutes = 60  # past due, still in grace
+    db.get(Milestone, Phase.P2).due_at = now - timedelta(minutes=5)  # no grace: closed
+    db.flush()
+    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1"]  # P2 missed locks P3
+    assert upload(client, h, phase="P1").status_code == 201
+    res = upload(client, h, phase="P2")
+    assert (res.status_code, res.json()["detail"]) == (409, "The P2 deadline and grace period have passed")
+
+
+def test_missed_phase_locks_later_phases_until_new_semester(client, db):
+    on_time, missed = auth(client, db, "a@x.com"), auth(client, db, "b@x.com")
+    assert upload(client, on_time, phase="P1").status_code == 201
+    p1 = db.get(Milestone, Phase.P1)
+    p1.due_at = datetime.now(timezone.utc) - timedelta(minutes=5)  # P1 closes
+    db.flush()
+
+    assert client.get("/api/proposals/mine", headers=on_time).json()["phases"] == ["P2", "P3"]
+    assert client.get("/api/proposals/mine", headers=missed).json()["phases"] == []
+    res = upload(client, missed, phase="P2")
+    assert (res.status_code, res.json()["detail"]) == (409, "You missed P1, so uploads are closed until the next semester")
+
+    mine = client.get("/api/proposals/mine", headers=missed).json()
+    assert mine["missed_notice"] == "You missed P1, so uploads are closed until the next semester"
+    assert client.get("/api/proposals/mine", headers=on_time).json()["missed_notice"] is None
+
+    p1.due_at = datetime.now(timezone.utc) + timedelta(days=1)  # new semester: P1 open again
+    db.flush()
+    assert upload(client, missed, phase="P1").status_code == 201
+
+
+def test_versions_of_a_closed_phase_cannot_be_removed(client, db):
+    h = auth(client, db, "s@x.com")
+    p1 = upload(client, h, phase="P1").json()["versions"][0]
+    p2 = upload(client, h, content=PDF + b"p2", phase="P2").json()["versions"][0]
+    assert (p1["can_delete"], p2["can_delete"]) == (True, True)
+    db.get(Milestone, Phase.P1).due_at = datetime.now(timezone.utc) - timedelta(minutes=5)  # P1 closes
+    db.flush()
+
+    versions = client.get("/api/proposals/mine", headers=h).json()["versions"]
+    assert [(v["phase"], v["can_delete"]) for v in versions] == [("P2", True), ("P1", False)]
+    res = client.delete(f"/api/proposals/versions/{p1['id']}", headers=h)
+    assert (res.status_code, res.json()["detail"]) == (
+        409,
+        "The P1 deadline and grace period have passed, so it can't be removed",
+    )
+    assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 2
+    assert client.delete(f"/api/proposals/versions/{p2['id']}", headers=h).status_code == 200

@@ -18,6 +18,7 @@ class ProposalVersionOut(BaseModel):
     size_bytes: int
     created_at: datetime
     is_latest: bool = False  # set by ProposalOut
+    can_delete: bool = True  # set by the service: false once the version's phase has closed
 
     @computed_field
     @property
@@ -35,8 +36,9 @@ class ProposalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     versions: list[ProposalVersionOut]  # newest first
-    # Upload form options, so the page never hardcodes them.
-    phases: list[Phase] = list(Phase)
+    # Upload form options, so the page never hardcodes them: only phases this student can upload to now.
+    phases: list[Phase]
+    missed_notice: str | None = None  # set when a missed phase has locked later uploads
     max_upload_mb: int = settings.max_upload_mb
 
     @model_validator(mode="after")

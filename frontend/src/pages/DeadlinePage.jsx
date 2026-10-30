@@ -1,21 +1,33 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Alerts, PageHeader } from "../components/ui";
+import { Alerts, PageHeader, Skeleton } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
+// status -> [label, badge tone, timeline dot]
 const STATUS = {
-  not_set: ["Not set", "bg-zinc-100 text-zinc-600"],
-  open: ["Open", "bg-teal-50 text-teal-800"],
-  grace: ["Grace time", "bg-amber-50 text-amber-800"],
-  closed: ["Closed", "bg-zinc-100 text-zinc-700"],
+  not_set: ["Not set", "bg-zinc-50 text-zinc-600 ring-zinc-200", "bg-zinc-300"],
+  open: ["Open", "bg-teal-50 text-teal-800 ring-teal-600/20", "bg-teal-600"],
+  grace: ["Grace time", "bg-amber-50 text-amber-800 ring-amber-600/20", "bg-amber-500"],
+  closed: ["Closed", "bg-zinc-100 text-zinc-700 ring-zinc-300", "bg-zinc-400"],
 };
 
 const pad = (n) => String(n).padStart(2, "0");
 
-function countdown(ms) {
+function Countdown({ ms }) {
   const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s / 86400)}d ${pad(Math.floor(s / 3600) % 24)}h ${pad(Math.floor(s / 60) % 60)}m ${pad(s % 60)}s`;
+  const parts = [[Math.floor(s / 86400), "days"], [pad(Math.floor(s / 3600) % 24), "hrs"], [pad(Math.floor(s / 60) % 60), "min"], [pad(s % 60), "sec"]];
+  return (
+    <span className="flex gap-1.5">
+      <span className="sr-only">{parts.map(([v, u]) => `${v} ${u}`).join(" ")}</span>
+      {parts.map(([v, u]) => (
+        <span key={u} className="min-w-11 rounded-lg bg-zinc-900 px-1.5 py-1 text-center text-white" aria-hidden="true">
+          <span className="block text-sm font-semibold leading-tight tabular-nums">{v}</span>
+          <span className="block text-[10px] uppercase tracking-wide text-zinc-400">{u}</span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 // ISO string -> value for <input type="datetime-local"> in the browser's time zone.
@@ -77,26 +89,24 @@ export default function DeadlinePage() {
       <Alerts error={error} notice={notice} />
 
       {!data ? (
-        <div className="space-y-4" aria-hidden="true">
-          {[0, 1, 2].map((i) => <div key={i} className="h-36 animate-pulse rounded-xl bg-zinc-100" />)}
-        </div>
+        <Skeleton rows={3} row="h-36 rounded-xl" className="space-y-4" />
       ) : (
         <ol className="relative space-y-4 border-l border-zinc-200 pl-6">
           {data.milestones.map((m) => {
-            const [label, tone] = STATUS[m.status];
+            const [label, tone, dot] = STATUS[m.status];
             return (
               <li key={m.phase} className="card relative p-6">
-                <span className="absolute -left-[31px] top-7 size-3 rounded-full bg-teal-700 ring-4 ring-zinc-50" aria-hidden="true" />
+                <span className={`absolute -left-[31px] top-8 size-3 rounded-full ring-4 ring-zinc-50 ${dot}`} aria-hidden="true" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold">{m.phase}</h2>
-                    <span className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${tone}`}>{label}</span>
+                    <span className={`badge ${tone}`}>{label}</span>
                   </div>
                   {m.countdown_to && (
-                    <p className="text-sm text-zinc-600">
-                      {m.countdown_label}{" "}
-                      <span className="font-semibold tabular-nums text-zinc-900">{countdown(new Date(m.countdown_to) - serverNow)}</span>
-                    </p>
+                    <div className="flex items-center gap-3 text-sm text-zinc-600">
+                      {m.countdown_label}
+                      <Countdown ms={new Date(m.countdown_to) - serverNow} />
+                    </div>
                   )}
                 </div>
 
@@ -111,7 +121,7 @@ export default function DeadlinePage() {
                 )}
 
                 {m.submission_status && (
-                  <p className="mt-4 rounded-lg bg-zinc-50 px-3 py-2 text-sm">
+                  <p className="mt-4 rounded-lg bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-200/70 ring-inset">
                     {m.submitted_at ? <>Submitted {when(m.submitted_at)}</> : "Not submitted yet"}
                     {m.submission_status === "late" && (
                       <span className="font-medium text-red-700">
