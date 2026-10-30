@@ -54,7 +54,7 @@ def test_owner_can_remove_a_version(client, db, tmp_path):
     owner = auth(client, db, "s@x.com")
     other = auth(client, db, "o@x.com")
     upload(client, owner, title="v1")
-    v2, v1 = upload(client, owner, title="v2").json()["versions"]
+    v2, v1 = upload(client, owner, content=PDF + b"v2", title="v2").json()["versions"]
 
     assert client.delete(f"/api/proposals/versions/{v1['id']}", headers=other).status_code == 404
     res = client.delete(f"/api/proposals/versions/{v1['id']}", headers=owner)
@@ -68,10 +68,47 @@ def test_owner_can_remove_a_version(client, db, tmp_path):
 def test_removing_a_version_renumbers_later_ones(client, db):
     h = auth(client, db, "s@x.com")
     for t in ("a", "b", "c"):
-        upload(client, h, title=t)
+        upload(client, h, content=PDF + t.encode(), title=t)
     c, b, a = client.get("/api/proposals/mine", headers=h).json()["versions"]
 
     versions = client.delete(f"/api/proposals/versions/{a['id']}", headers=h).json()["versions"]
     assert [(v["title"], v["version_no"]) for v in versions] == [("c", 2), ("b", 1)]
-    versions = upload(client, h, title="d").json()["versions"]
+    versions = upload(client, h, content=PDF + b"d", title="d").json()["versions"]
     assert [(v["title"], v["version_no"]) for v in versions] == [("d", 3), ("c", 2), ("b", 1)]
+
+
+def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
+    h = auth(client, db, "s@x.com")
+    for t in ("a", "b", "c"):
+        upload(client, h, content=PDF + t.encode(), title=t)
+    a_id = client.get("/api/proposals/mine", headers=h).json()["versions"][2]["id"]
+
+    res = upload(client, h, content=PDF + b"a", title="a", phase="P2")
+    assert res.status_code == 201
+    versions = res.json()["versions"]
+    assert [(v["title"], v["version_no"]) for v in versions] == [("a", 3), ("c", 2), ("b", 1)]
+    assert (versions[0]["id"], versions[0]["phase"], versions[0]["is_latest"]) == (a_id, "P2", True)
+    assert len(list((tmp_path / "proposals").iterdir())) == 3
+    assert client.get(f"/api/proposals/versions/{a_id}/file", headers=h).content == PDF + b"a"
+
+    # Re-submitting the current latest keeps the order.
+    versions = upload(client, h, content=PDF + b"a", title="a").json()["versions"]
+    assert [(v["title"], v["version_no"]) for v in versions] == [("a", 3), ("c", 2), ("b", 1)]
+
+
+def test_same_pdf_with_new_title_or_abstract_is_a_new_version(client, db):
+    h = auth(client, db, "s@x.com")
+    upload(client, h, title="a")
+    upload(client, h, title="a renamed")
+    res = client.post(
+        "/api/proposals/mine/versions",
+        headers=h,
+        data={"phase": "P1", "title": "a renamed", "abstract": "New abstract"},
+        files={"file": ("p.pdf", PDF, "application/pdf")},
+    )
+    versions = res.json()["versions"]
+    assert [(v["title"], v["abstract"], v["version_no"]) for v in versions] == [
+        ("a renamed", "New abstract", 3),
+        ("a renamed", "About it", 2),
+        ("a", "About it", 1),
+    ]

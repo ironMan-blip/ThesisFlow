@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.user import Role
 from app.services import milestone_service
-from tests.helpers import auth, upload
+from tests.helpers import PDF, auth, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
 
@@ -72,7 +72,7 @@ def test_student_late_days_and_penalty(client, db):
     assert rows["P2"]["submission_status"] == "not_submitted"
 
     upload(client, student, phase="P1")
-    upload(client, student, phase="P2")
+    upload(client, student, content=PDF + b"p2", phase="P2")
     rows = by_phase(client.get("/api/milestones", headers=student))
     assert rows["P1"]["submitted_at"] is not None
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (3, 45)

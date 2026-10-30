@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from pathlib import Path
 
@@ -35,8 +36,8 @@ def _lock_mine(db: Session, user: User) -> Proposal | None:
     return db.scalar(select(Proposal).where(Proposal.owner_id == user.id).with_for_update())
 
 
-def _save_pdf(file: UploadFile) -> tuple[str, int]:
-    """Stream the upload to disk. Rejects non-PDF and oversized files."""
+def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
+    """Stream the upload to disk. Rejects non-PDF and oversized files. Returns name, size and sha256."""
     max_bytes = settings.max_upload_mb * 1024 * 1024
     head = file.file.read(5)
     if head != b"%PDF-":
@@ -44,6 +45,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int]:
     stored = f"{uuid.uuid4().hex}.pdf"
     path = _upload_dir() / stored
     size = len(head)
+    digest = hashlib.sha256(head)
     try:
         with path.open("wb") as out:
             out.write(head)
@@ -54,10 +56,23 @@ def _save_pdf(file: UploadFile) -> tuple[str, int]:
                         status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File is larger than {settings.max_upload_mb} MB"
                     )
                 out.write(chunk)
+                digest.update(chunk)
     except BaseException:
         path.unlink(missing_ok=True)
         raise
-    return stored, size
+    return stored, size, digest.hexdigest()
+
+
+def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
+    # Later versions move down by one. Two steps through negatives because
+    # Postgres checks the (proposal_id, version_no) unique constraint row by row.
+    later = (ProposalVersion.proposal_id == proposal_id) & (ProposalVersion.version_no > removed_no)
+    db.execute(update(ProposalVersion).where(later).values(version_no=1 - ProposalVersion.version_no))
+    db.execute(
+        update(ProposalVersion)
+        .where(ProposalVersion.proposal_id == proposal_id, ProposalVersion.version_no < 0)
+        .values(version_no=-ProposalVersion.version_no)
+    )
 
 
 def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> Proposal:
@@ -67,7 +82,8 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
     if not abstract:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Abstract is required")
 
-    stored, size = _save_pdf(file)
+    stored, size, sha256 = _save_pdf(file)
+    keep_new_file = True
     try:
         proposal = _lock_mine(db, user)
         if proposal is None:
@@ -75,26 +91,55 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
             db.add(proposal)
             db.flush()
         last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.proposal_id == proposal.id))
-        db.add(
-            ProposalVersion(
-                proposal_id=proposal.id,
-                version_no=(last or 0) + 1,
-                phase=phase,
-                title=title,
-                abstract=abstract,
-                original_filename=Path(file.filename or "proposal.pdf").name[:255],
-                stored_filename=stored,
-                size_bytes=size,
-                uploaded_by_id=user.id,
+        fields = dict(
+            phase=phase,
+            original_filename=Path(file.filename or "proposal.pdf").name[:255],
+            uploaded_by_id=user.id,
+        )
+        # Same PDF with a different title or abstract is a real new version.
+        same = db.scalar(
+            select(ProposalVersion).where(
+                ProposalVersion.proposal_id == proposal.id,
+                ProposalVersion.sha256 == sha256,
+                ProposalVersion.title == title,
+                ProposalVersion.abstract == abstract,
             )
         )
+        if same is None:
+            db.add(
+                ProposalVersion(
+                    proposal_id=proposal.id,
+                    version_no=(last or 0) + 1,
+                    title=title,
+                    abstract=abstract,
+                    stored_filename=stored,
+                    size_bytes=size,
+                    sha256=sha256,
+                    **fields,
+                )
+            )
+        else:
+            # Identical submission already stored: reuse its file and move that version to the top.
+            keep_new_file = False
+            moved_from = same.version_no
+            same.version_no = 0
+            db.flush()
+            _close_gap(db, proposal.id, moved_from)
+            db.execute(
+                update(ProposalVersion)
+                .where(ProposalVersion.id == same.id)
+                .values(version_no=last, created_at=func.now(), **fields)
+            )
         db.commit()
     except BaseException as exc:
         db.rollback()
-        (_upload_dir() / stored).unlink(missing_ok=True)
+        keep_new_file = False
         if isinstance(exc, IntegrityError):
             raise HTTPException(status.HTTP_409_CONFLICT, "Another upload happened at the same time, try again")
         raise
+    finally:
+        if not keep_new_file:
+            (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(proposal)
     return proposal
 
@@ -110,15 +155,7 @@ def delete_version(db: Session, user: User, version_id: int) -> Proposal:
     stored, removed_no = version.stored_filename, version.version_no
     db.delete(version)
     db.flush()
-    # Close the gap: later versions move down by one. Two steps through negatives because
-    # Postgres checks the (proposal_id, version_no) unique constraint row by row.
-    later = (ProposalVersion.proposal_id == proposal.id) & (ProposalVersion.version_no > removed_no)
-    db.execute(update(ProposalVersion).where(later).values(version_no=1 - ProposalVersion.version_no))
-    db.execute(
-        update(ProposalVersion)
-        .where(ProposalVersion.proposal_id == proposal.id, ProposalVersion.version_no < 0)
-        .values(version_no=-ProposalVersion.version_no)
-    )
+    _close_gap(db, proposal.id, removed_no)
     db.commit()
     # File goes only after the row is gone, so a failed commit never loses a PDF.
     (_upload_dir() / stored).unlink(missing_ok=True)

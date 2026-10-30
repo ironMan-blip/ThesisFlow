@@ -21,7 +21,7 @@ class Proposal(Base):
 
 
 class ProposalVersion(Base):
-    """One upload. Versions are never edited; the owning student may delete one."""
+    """One upload. Re-submitting the same PDF, title and abstract moves that version to the top; the owning student may delete one."""
 
     __tablename__ = "proposal_versions"
     __table_args__ = (UniqueConstraint("proposal_id", "version_no"),)
@@ -36,6 +36,8 @@ class ProposalVersion(Base):
     original_filename: Mapped[str] = mapped_column(String(255))
     stored_filename: Mapped[str] = mapped_column(String(64), unique=True)
     size_bytes: Mapped[int] = mapped_column(Integer)
+    # Null for rows uploaded before hashing existed.
+    sha256: Mapped[str | None] = mapped_column(String(64))
     uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
