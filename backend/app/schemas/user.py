@@ -8,10 +8,18 @@ from app.models.user import Role
 
 class UserCreate(BaseModel):
     email: EmailStr
+    id_number: str
     full_name: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=8, max_length=128)
     # Coordinator is the single admin account from settings; nobody can sign up as one.
     role: Literal[Role.student, Role.faculty] = Role.student
+
+    @field_validator("id_number")
+    @classmethod
+    def six_digits(cls, v: str) -> str:
+        if not (len(v) == 6 and v.isascii() and v.isdigit()):
+            raise ValueError("ID number must be exactly 6 digits")
+        return v
 
     @field_validator("password")
     @classmethod
@@ -29,6 +37,7 @@ class UserOut(BaseModel):
     id: int
     # plain str: stored emails were validated on input; re-validating rejects seeded .test domains
     email: str
+    id_number: str
     full_name: str
     role: Role
     approved: bool

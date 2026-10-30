@@ -8,6 +8,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState("login"); // or "register"
   const [email, setEmail] = useState("");
+  const [idNumber, setIdNumber] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("student");
@@ -30,13 +31,13 @@ export default function LoginPage() {
     e.preventDefault();
     run("submit", async () => {
       if (registering) {
-        const user = await api("/auth/register", { method: "POST", body: { email, password, full_name: fullName, role } });
+        const user = await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role } });
         if (!user.approved) {
           setMode("login");
           return "Request sent. The coordinator will review your faculty account within 48 hours. You can log in once it is approved.";
         }
       }
-      await login(email, password);
+      await login(idNumber, password);
       navigate("/");
     });
   };
@@ -50,7 +51,7 @@ export default function LoginPage() {
         <form onSubmit={submit} className="card space-y-5 p-7">
           <div>
             <h1 className="text-xl font-semibold">{registering ? "Create an account" : "Log in"}</h1>
-            <p className="mt-1 text-sm text-zinc-600">Use your university email to continue.</p>
+            <p className="mt-1 text-sm text-zinc-600">Use your 6-digit university ID to continue.</p>
           </div>
           {registering && (
             <>
@@ -72,12 +73,17 @@ export default function LoginPage() {
                 Full name
                 <input required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="input" />
               </label>
+              <label className="label">
+                Email
+                <input type="email" required autoComplete="email" placeholder="you@university.edu" value={email}
+                  onChange={(e) => setEmail(e.target.value)} className="input" />
+              </label>
             </>
           )}
           <label className="label">
-            Email
-            <input type="email" required autoComplete="email" placeholder="you@university.edu" value={email}
-              onChange={(e) => setEmail(e.target.value)} className="input" />
+            ID number
+            <input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} title="Exactly 6 digits" autoComplete="username"
+              placeholder="123456" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} className="input" />
           </label>
           <div>
             <div className="flex items-center justify-between">

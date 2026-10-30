@@ -18,7 +18,7 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # OAuth2 form uses "username"; we treat it as the email.
+    # OAuth2 form uses "username"; we treat it as the 6-digit ID number.
     return Token(access_token=auth_service.login(db, form.username, form.password))
 
 
