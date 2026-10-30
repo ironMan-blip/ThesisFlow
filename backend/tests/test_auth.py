@@ -132,11 +132,11 @@ def test_ensure_admin_creates_and_resets(client, db, monkeypatch):
     auth_service.ensure_admin(db)
     assert login(client, id_number="00000000", password="first-pass1").status_code == 200
 
-    monkeypatch.setattr(settings, "admin_id_number", "00000009")
+    monkeypatch.setattr(settings, "admin_email", "New@B.com")
     monkeypatch.setattr(settings, "admin_password", "second-pass2")
     auth_service.ensure_admin(db)
-    assert login(client, id_number="00000009", password="first-pass1").status_code == 401
-    token = login(client, id_number="00000009", password="second-pass2").json()["access_token"]
+    assert login(client, id_number="00000000", password="first-pass1").status_code == 401
+    token = login(client, id_number="00000000", password="second-pass2").json()["access_token"]
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).json()
     assert me["role"] == "coordinator"
 
