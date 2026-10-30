@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     admin_id_number: str = "000000"
     admin_password: str = "password123"
     jwt_expire_minutes: int = 60 * 24
-    cors_origins: list[str] = ["http://localhost:5173"]
     upload_dir: str = "uploads"
     max_upload_mb: int = 20
 

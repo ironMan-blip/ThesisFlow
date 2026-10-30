@@ -26,18 +26,12 @@ export default function HomePage() {
         <p className="mt-2 max-w-prose text-zinc-600">Here is where your thesis work lives.</p>
       </div>
 
-      {user.tools.length ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {user.tools.map((key) => {
-            const t = TOOLS[key];
-            return <ToolCard key={key} to={t.to} title={t.title} icon={t.icon}>{t.text}</ToolCard>;
-          })}
-        </div>
-      ) : (
-        <p className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
-          No tools are available for your account yet.
-        </p>
-      )}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {user.tools.map((key) => {
+          const t = TOOLS[key];
+          return <ToolCard key={key} to={t.to} title={t.title} icon={t.icon}>{t.text}</ToolCard>;
+        })}
+      </div>
     </div>
   );
 }

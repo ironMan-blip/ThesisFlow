@@ -30,12 +30,11 @@ export default function LoginPage() {
   const submit = (e) => {
     e.preventDefault();
     run("submit", async () => {
+      // Every sign-up waits for coordinator approval, so registering never logs in.
       if (registering) {
-        const user = await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role } });
-        if (!user.approved) {
-          setMode("login");
-          return "Request sent. The coordinator will review your account within 48 hours. You can log in once it is approved.";
-        }
+        await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role } });
+        setMode("login");
+        return "Request sent. The coordinator will review your account within 48 hours. You can log in once it is approved.";
       }
       await login(idNumber, password);
       navigate("/");
