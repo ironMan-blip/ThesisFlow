@@ -17,8 +17,12 @@ def login(client, id_number="123456", password="Password123"):
     return client.post("/api/auth/login", data={"username": id_number, "password": password})
 
 
-def test_register_login_me(client):
-    assert register(client).status_code == 201
+def test_register_login_me(client, db):
+    r = register(client)
+    assert r.status_code == 201 and r.json()["approved"] is False
+    assert login(client).status_code == 403
+    db.get(User, r.json()["id"]).approved = True
+    db.commit()
     token = login(client).json()["access_token"]
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
@@ -26,8 +30,8 @@ def test_register_login_me(client):
     assert me.json()["tools"] == ["proposal", "deadlines", "account"]
 
 
-def test_duplicate_email_rejected(client):
-    register(client)
+def test_duplicate_email_rejected(client, db):
+    auth_service.create_user(db, "a@b.com", "123456", "A", "Password123", Role.student)
     r = register(client, email="A@B.com", id_number="654321")
     assert r.status_code == 409
     assert r.json()["detail"] == "User already exists"
@@ -37,8 +41,8 @@ def test_duplicate_email_rejected(client):
     assert r.json()["detail"] == "User already exists"
 
 
-def test_duplicate_id_number_rejected(client):
-    register(client)
+def test_duplicate_id_number_rejected(client, db):
+    auth_service.create_user(db, "a@b.com", "123456", "A", "Password123", Role.student)
     for role in ["student", "faculty"]:
         r = register(client, email="other@b.com", role=role)
         assert r.status_code == 409
@@ -72,30 +76,33 @@ def test_coordinator_signup_rejected(client):
     assert register(client, role="coordinator").status_code == 422
 
 
-def test_faculty_waits_for_approval(client, db):
+def test_signups_wait_for_approval(client, db):
     r = register(client, email="f@b.com", role="faculty")
     assert r.status_code == 201 and r.json()["approved"] is False
     assert login(client).status_code == 403
+    assert register(client, email="s@x.com", id_number="333333").json()["approved"] is False
 
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     student = auth(client, db, "s@b.com")
-    assert client.get("/api/auth/faculty-requests", headers=student).status_code == 403
-    pending = client.get("/api/auth/faculty-requests", headers=coord).json()
-    assert [p["email"] for p in pending] == ["f@b.com"]
+    assert client.get("/api/auth/registration-requests", headers=student).status_code == 403
+    pending = client.get("/api/auth/registration-requests", headers=coord).json()
+    assert [(p["email"], p["role"]) for p in pending] == [("f@b.com", "faculty"), ("s@x.com", "student")]
 
-    uid = pending[0]["id"]
-    assert client.post(f"/api/auth/faculty-requests/{uid}/approve", headers=coord).status_code == 200
+    for p in pending:
+        assert client.post(f"/api/auth/registration-requests/{p['id']}/approve", headers=coord).status_code == 200
     assert login(client).status_code == 200
-    assert client.get("/api/auth/faculty-requests", headers=coord).json() == []
+    assert login(client, id_number="333333").status_code == 200
+    assert client.get("/api/auth/registration-requests", headers=coord).json() == []
     # Already approved, so no longer a request.
-    assert client.delete(f"/api/auth/faculty-requests/{uid}", headers=coord).status_code == 404
+    uid = pending[0]["id"]
+    assert client.delete(f"/api/auth/registration-requests/{uid}", headers=coord).status_code == 404
 
 
 def test_reject_frees_email(client, db):
     body = {"email": "f@b.com", "id_number": "222222", "full_name": "F", "password": "Password123", "role": "faculty"}
     uid = client.post("/api/auth/register", json=body).json()["id"]
     coord = auth(client, db, "coord@b.com", Role.coordinator)
-    assert client.delete(f"/api/auth/faculty-requests/{uid}", headers=coord).status_code == 204
+    assert client.delete(f"/api/auth/registration-requests/{uid}", headers=coord).status_code == 204
     assert client.post("/api/auth/register", json=body).status_code == 201
 
 
@@ -115,8 +122,8 @@ def test_ensure_admin_creates_and_resets(client, db, monkeypatch):
     assert me["role"] == "coordinator"
 
 
-def test_faculty_cannot_reregister_within_48_hours(client, db):
-    body = {"email": "f@b.com", "id_number": "222222", "full_name": "F", "password": "Password123", "role": "faculty"}
+def test_cannot_reregister_within_48_hours(client, db):
+    body = {"email": "s@b.com", "id_number": "222222", "full_name": "S", "password": "Password123", "role": "student"}
     old_id = client.post("/api/auth/register", json=body).json()["id"]
     r = client.post("/api/auth/register", json=body)
     assert r.status_code == 409

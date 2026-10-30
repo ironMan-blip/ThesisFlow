@@ -1,4 +1,4 @@
-"""Requests the coordinator decides: faculty sign-ups and account deletions."""
+"""Requests the coordinator decides: sign-ups (student and faculty) and account deletions."""
 
 from datetime import datetime, timezone
 
@@ -10,20 +10,18 @@ from app.models.user import REVIEW_WINDOW, Role, User
 from app.services import proposal_service
 
 
-def pending_faculty(db: Session) -> list[User]:
-    return list(
-        db.scalars(select(User).where(User.role == Role.faculty, User.approved.is_(False)).order_by(User.created_at))
-    )
+def pending_registrations(db: Session) -> list[User]:
+    return list(db.scalars(select(User).where(User.approved.is_(False)).order_by(User.created_at)))
 
 
 def _pending(db: Session, user_id: int) -> User:
     user = db.get(User, user_id)
-    if user is None or user.role != Role.faculty or user.approved:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending faculty request with that id")
+    if user is None or user.approved:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending registration request with that id")
     return user
 
 
-def approve_faculty(db: Session, user_id: int) -> User:
+def approve_registration(db: Session, user_id: int) -> User:
     user = _pending(db, user_id)
     user.approved = True
     db.commit()
@@ -31,7 +29,7 @@ def approve_faculty(db: Session, user_id: int) -> User:
     return user
 
 
-def reject_faculty(db: Session, user_id: int) -> None:
+def reject_registration(db: Session, user_id: int) -> None:
     # Deleting frees the email so the person can register again.
     db.delete(_pending(db, user_id))
     db.commit()

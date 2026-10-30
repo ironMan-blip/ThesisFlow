@@ -41,18 +41,16 @@ def create_user(
 
 
 def register(db: Session, data: UserCreate) -> User:
-    # Students can log in right away; faculty wait for the coordinator to approve.
+    # Every sign-up waits for the coordinator to approve before the user can log in.
     existing = get_by_id_number(db, data.id_number) or get_by_email(db, data.email)
-    if existing and existing.role == Role.faculty and not existing.approved:
+    if existing and not existing.approved:
         retry_at = existing.created_at + REVIEW_WINDOW
         if datetime.now(timezone.utc) < retry_at:
             raise HTTPException(status.HTTP_409_CONFLICT, "User already applied to register, waiting for approval")
         # The review window ran out: the new submission replaces the old request.
         db.delete(existing)
         db.flush()
-    return create_user(
-        db, data.email, data.id_number, data.full_name, data.password, data.role, approved=data.role == Role.student
-    )
+    return create_user(db, data.email, data.id_number, data.full_name, data.password, data.role, approved=False)
 
 
 def ensure_admin(db: Session) -> User:
@@ -75,6 +73,6 @@ def login(db: Session, id_number: str, password: str) -> str:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong ID number or password")
     if not user.approved:
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Your faculty account is waiting for coordinator approval (within 48 hours)"
+            status.HTTP_403_FORBIDDEN, "Your account is waiting for coordinator approval (within 48 hours)"
         )
     return create_access_token(user.id)

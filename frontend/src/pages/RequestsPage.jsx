@@ -4,7 +4,7 @@ import { Alerts, PageHeader } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
-// Coordinator inbox of requests to approve or reject; FacultyRequestsPage and DeletionRequestsPage configure it.
+// Coordinator inbox of requests to approve or reject; RegistrationRequestsPage and DeletionRequestsPage configure it.
 function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   const [requests, setRequests] = useState(null);
   const { busy, error, notice, setError, run } = useAction(); // busy key is the request id being decided
@@ -35,7 +35,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
           {requests.map((r) => (
             <li key={r.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
               <div>
-                <p className="font-medium">{r.full_name}</p>
+                <p className="font-medium">{r.full_name} <span className="text-sm font-normal capitalize text-zinc-500">· {r.role}</span></p>
                 <p className="text-sm text-zinc-600">ID {r.id_number} · {r.email} · requested {when(r[dateField])}</p>
               </div>
               <div className="flex gap-2">
@@ -52,11 +52,11 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   );
 }
 
-export const FacultyRequestsPage = () => (
+export const RegistrationRequestsPage = () => (
   <RequestsPage
-    path="/auth/faculty-requests"
-    title="Faculty requests"
-    intro="Faculty who registered wait here until you approve them. Please review each request within 48 hours."
+    path="/auth/registration-requests"
+    title="Registration requests"
+    intro="Students and faculty who registered wait here until you approve them. Please review each request within 48 hours."
     approved="was approved and can now log in"
     rejected="was rejected"
     dateField="created_at"

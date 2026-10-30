@@ -6,7 +6,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import ProposalPage from "./pages/ProposalPage";
-import { DeletionRequestsPage, FacultyRequestsPage } from "./pages/RequestsPage";
+import { DeletionRequestsPage, RegistrationRequestsPage } from "./pages/RequestsPage";
 
 export default function App() {
   return (
@@ -17,7 +17,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/proposal" element={<ProposalPage />} />
         <Route path="/deadlines" element={<DeadlinePage />} />
-        <Route path="/faculty-requests" element={<FacultyRequestsPage />} />
+        <Route path="/registration-requests" element={<RegistrationRequestsPage />} />
         <Route path="/deletion-requests" element={<DeletionRequestsPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<NotFoundPage />} />

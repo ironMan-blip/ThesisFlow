@@ -34,7 +34,7 @@ export default function LoginPage() {
         const user = await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role } });
         if (!user.approved) {
           setMode("login");
-          return "Request sent. The coordinator will review your faculty account within 48 hours. You can log in once it is approved.";
+          return "Request sent. The coordinator will review your account within 48 hours. You can log in once it is approved.";
         }
       }
       await login(idNumber, password);
@@ -65,9 +65,7 @@ export default function LoginPage() {
                     </label>
                   ))}
                 </div>
-                {role === "faculty" && (
-                  <p className="mt-2 text-xs text-zinc-500">Faculty accounts need coordinator approval (within 48 hours) before you can log in.</p>
-                )}
+                <p className="mt-2 text-xs text-zinc-500">New accounts need coordinator approval (within 48 hours) before you can log in.</p>
               </fieldset>
               <label className="label">
                 Full name

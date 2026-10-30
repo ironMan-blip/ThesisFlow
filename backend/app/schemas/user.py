@@ -45,7 +45,7 @@ class UserOut(BaseModel):
     deletion_pending: bool
 
 
-class FacultyRequestOut(UserOut):
+class RegistrationRequestOut(UserOut):
     created_at: datetime
 
 
