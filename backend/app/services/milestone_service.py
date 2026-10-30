@@ -44,8 +44,8 @@ def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetim
     return out
 
 
-def timeline(db: Session, user: User, now: datetime | None = None) -> TimelineOut:
-    now = now or datetime.now(timezone.utc)
+def timeline(db: Session, user: User) -> TimelineOut:
+    now = datetime.now(timezone.utc)
     milestones = {m.phase: m for m in db.scalars(select(Milestone))}
     submitted = {}
     if user.role == Role.student:

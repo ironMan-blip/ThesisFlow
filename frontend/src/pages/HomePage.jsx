@@ -1,5 +1,20 @@
 import { Link, useOutletContext } from "react-router-dom";
 
+function ToolCard({ to, icon, title, children }) {
+  return (
+    <Link to={to} className="card group p-5 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-teal-600/40">
+      <span className="grid size-10 place-items-center rounded-lg bg-teal-50 text-teal-700">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="size-5" aria-hidden="true">
+          {icon}
+        </svg>
+      </span>
+      <h2 className="mt-4 font-semibold">{title}</h2>
+      <p className="mt-1 text-sm text-zinc-600">{children}</p>
+      <p className="mt-4 text-sm font-medium text-teal-700">Open <span className="inline-block transition group-hover:translate-x-0.5">→</span></p>
+    </Link>
+  );
+}
+
 export default function HomePage() {
   const { user } = useOutletContext();
   return (
@@ -12,29 +27,14 @@ export default function HomePage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {user.role === "student" && (
-          <Link to="/proposal" className="card group p-5 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-teal-600/40">
-            <span className="grid size-10 place-items-center rounded-lg bg-teal-50 text-teal-700">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="size-5" aria-hidden="true">
-                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3" />
-              </svg>
-            </span>
-            <h2 className="mt-4 font-semibold">Proposal</h2>
-            <p className="mt-1 text-sm text-zinc-600">Upload a new version and see your past submissions.</p>
-            <p className="mt-4 text-sm font-medium text-teal-700">Open <span className="inline-block transition group-hover:translate-x-0.5">→</span></p>
-          </Link>
+          <ToolCard to="/proposal" title="Proposal"
+            icon={<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3" /></>}>
+            Upload a new version and see your past submissions.
+          </ToolCard>
         )}
-        <Link to="/deadlines" className="card group p-5 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-teal-600/40">
-          <span className="grid size-10 place-items-center rounded-lg bg-teal-50 text-teal-700">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="size-5" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-            </svg>
-          </span>
-          <h2 className="mt-4 font-semibold">Deadlines</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            {user.role === "coordinator" ? "Set P1, P2 and P3 due dates, grace time and penalties." : "See P1, P2 and P3 due dates and countdowns."}
-          </p>
-          <p className="mt-4 text-sm font-medium text-teal-700">Open <span className="inline-block transition group-hover:translate-x-0.5">→</span></p>
-        </Link>
+        <ToolCard to="/deadlines" title="Deadlines" icon={<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>}>
+          {user.role === "coordinator" ? "Set P1, P2 and P3 due dates, grace time and penalties." : "See P1, P2 and P3 due dates and countdowns."}
+        </ToolCard>
         <div className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
           More tools will show up here as they are added.
         </div>

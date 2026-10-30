@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.user import Role
 from app.services import milestone_service
-from tests.test_proposals import auth, upload, upload_dir  # noqa: F401
+from tests.helpers import auth, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
 

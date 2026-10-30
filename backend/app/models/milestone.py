@@ -20,5 +20,5 @@ class Milestone(Base):
 
     phase: Mapped[Phase] = mapped_column(Enum(Phase, name="phase"), primary_key=True)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    grace_minutes: Mapped[int] = mapped_column(Integer, default=0)
-    penalty_per_day: Mapped[int] = mapped_column(Integer, default=0)  # percent of the phase mark
+    grace_minutes: Mapped[int] = mapped_column(Integer)
+    penalty_per_day: Mapped[int] = mapped_column(Integer)  # percent of the phase mark

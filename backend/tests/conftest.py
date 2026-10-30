@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 
@@ -39,6 +40,12 @@ def db(tables):
         finally:
             session.close()
             outer.rollback()
+
+
+@pytest.fixture(autouse=True)
+def upload_dir(tmp_path, monkeypatch):
+    # Uploads go to a per-test temp dir, never the dev uploads folder.
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
 
 
 @pytest.fixture()
