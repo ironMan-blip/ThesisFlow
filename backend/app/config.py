@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     database_url: str
     jwt_secret: str
     # The one coordinator (admin) account. There is no coordinator sign-up.
+    admin_name: str
     admin_email: str
     admin_id_number: str
     admin_password: str

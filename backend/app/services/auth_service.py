@@ -60,13 +60,13 @@ def register(db: Session, data: UserCreate) -> User:
 
 
 def ensure_admin(db: Session) -> User:
-    """Make the single coordinator account match ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD. Runs at startup."""
+    """Make the single coordinator account match ADMIN_NAME / ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD. Runs at startup."""
     user = get_by_id_number(db, settings.admin_id_number)
     if user is None:
         return create_user(
-            db, settings.admin_email, settings.admin_id_number, "ironMan", settings.admin_password, Role.coordinator
+            db, settings.admin_email, settings.admin_id_number, settings.admin_name, settings.admin_password, Role.coordinator
         )
-    user.role, user.approved, user.email, user.full_name = Role.coordinator, True, settings.admin_email.lower(), "ironMan"
+    user.role, user.approved, user.email, user.full_name = Role.coordinator, True, settings.admin_email.lower(), settings.admin_name
     if not verify_password(settings.admin_password, user.password_hash):
         user.password_hash = hash_password(settings.admin_password)
     db.commit()

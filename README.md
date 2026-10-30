@@ -45,6 +45,7 @@ Sensitive values have no defaults. The backend and `docker compose` refuse to st
 | `POSTGRES_USER` | required | Database user. Used to build `DATABASE_URL` in Docker. |
 | `POSTGRES_PASSWORD` | required | Database password. Only applied when the db volume is first created. |
 | `JWT_SECRET` | required | Secret used to sign login tokens. |
+| `ADMIN_NAME` | required | Coordinator display name. Set again on every backend start. |
 | `ADMIN_EMAIL` | required | The one coordinator account. |
 | `ADMIN_ID_NUMBER` | required | Coordinator login ID. Set again on every backend start. |
 | `ADMIN_PASSWORD` | required | Coordinator password. Set again on every backend start. |
@@ -71,7 +72,7 @@ Supervisor and panel member are not account roles. They will be links between a 
 - Emails are case-insensitive (stored lowercase) and must be unique.
 - ID numbers are exactly 8 digits and must be unique across students and faculty. Log in with ID number and password.
 - Login returns a JWT (valid 24 hours by default). The frontend sends it with every request.
-- **Coordinator account:** there is exactly one. It is created from `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
+- **Coordinator account:** there is exactly one. It is created from `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
 
 ### 2. Registration approval
 

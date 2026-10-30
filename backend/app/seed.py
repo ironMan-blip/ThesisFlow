@@ -1,6 +1,6 @@
 """Create a dev student and faculty account. Run: docker compose exec backend python -m app.seed
 
-Dev only. Both use the password in SEED_PASSWORD. The coordinator comes from ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD.
+Dev only. Both use the password in SEED_PASSWORD. The coordinator comes from ADMIN_NAME / ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD.
 """
 
 from app.config import settings
