@@ -14,7 +14,7 @@ export default function AccountsPage() {
     api("/auth/accounts").then(setAccounts).catch((err) => setError(err.message));
   }, [setError]);
 
-  const shown = accounts?.filter((a) => String(a.id_number).includes(query)) ?? [];
+  const shown = accounts?.filter((a) => !query || String(a.id_number) === query) ?? [];
 
   const remove = (a) =>
     run(a.id, async () => {
