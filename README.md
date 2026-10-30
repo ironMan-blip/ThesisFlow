@@ -2,7 +2,7 @@
 
 A web platform for running undergraduate theses, built for CSE470 (Software Engineering) at BRAC University.
 
-ThesisFlow brings the thesis process into one place: students submit their proposals and track deadlines, faculty sign up and review work, and a single coordinator runs the course (approves faculty, sets phase deadlines, handles account deletions). The full requirements are in `470_srs_g7.pdf`.
+ThesisFlow brings the thesis process into one place: students submit their proposals and track deadlines, faculty sign up and review work, and a single coordinator runs the course (approves sign-ups, sets phase deadlines, handles account deletions). The full requirements are in `470_srs_g7.pdf`.
 
 **Stack:** FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + Tailwind, all run with Docker Compose.
 
@@ -30,11 +30,11 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 
 ### Dev logins
 
-| Role | Email | Password |
-|------|-------|----------|
-| Student (seed) | `student@thesisflow.test` | `password123` |
-| Faculty (seed) | `faculty@thesisflow.test` | `password123` |
-| Coordinator | `ADMIN_EMAIL` (default `coordinator@thesisflow.test`) | `ADMIN_PASSWORD` (default `password123`) |
+| Role | ID number | Password |
+|------|-----------|----------|
+| Student (seed) | `100001` | `password123` |
+| Faculty (seed) | `200001` | `password123` |
+| Coordinator | `ADMIN_ID_NUMBER` (default `000000`) | `ADMIN_PASSWORD` (default `password123`) |
 
 ### Configuration (`.env`)
 
@@ -42,6 +42,7 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 |----------|---------|---------|
 | `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Change it outside dev. |
 | `ADMIN_EMAIL` | `coordinator@thesisflow.test` | The one coordinator account. |
+| `ADMIN_ID_NUMBER` | `000000` | Coordinator login ID. Set again on every backend start. |
 | `ADMIN_PASSWORD` | `password123` | Coordinator password. Set again on every backend start. |
 | `MAX_UPLOAD_MB` | `20` | Largest proposal PDF allowed. |
 | `JWT_EXPIRE_MINUTES` | `1440` | How long a login lasts (24 hours). |
@@ -54,23 +55,23 @@ There are three roles. Each one sees only its own tools in the navigation and on
 |------|-------|
 | Student | Proposal, Deadlines, Account |
 | Faculty | Deadlines, Account |
-| Coordinator | Deadlines, Faculty requests, Deletion requests |
+| Coordinator | Deadlines, Registration requests, Deletion requests |
 
 Supervisor and panel member are not account roles. They will be links between a faculty user and a group or defense.
 
 ### 1. Accounts and login
 
-- Register with full name, email and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
+- Register with full name, email, a 6-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
+- ID numbers are exactly 6 digits and must be unique across students and faculty. Log in with ID number and password.
 - Login returns a JWT (valid 24 hours by default). The frontend sends it with every request.
-- Students can log in right after signing up.
-- **Coordinator account:** there is exactly one. It is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
+- **Coordinator account:** there is exactly one. It is created from `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
 
-### 2. Faculty approval
+### 2. Registration approval
 
-- A new faculty account starts **unapproved** and cannot log in. Login shows "waiting for coordinator approval".
-- The coordinator sees all waiting faculty under **Faculty requests** and approves or rejects each one.
+- Every new account (student or faculty) starts **unapproved** and cannot log in. Login shows "waiting for coordinator approval".
+- The coordinator sees all waiting sign-ups under **Registration requests** and approves or rejects each one.
 - Rejecting deletes the request, so that email can register again.
 - Registering again with the same email while the request is still waiting is refused. If the coordinator has not decided within **48 hours**, a new sign-up replaces the old request.
 
@@ -119,7 +120,7 @@ backend/app/
 backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
-  pages/        View: one file per page (RequestsPage = faculty + deletion requests)
+  pages/        View: one file per page (RequestsPage = registration + deletion requests)
   components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Alerts)
   api/client.js fetch wrapper (adds JWT)
   useAction.js  busy / error / success state for a page's API calls
@@ -137,7 +138,7 @@ frontend/src/
 | POST | `/api/auth/login` | anyone |
 | GET | `/api/auth/me` | logged in |
 | POST | `/api/auth/me/deletion-request` | student, faculty |
-| GET / POST / DELETE | `/api/auth/faculty-requests[/{id}[/approve]]` | coordinator |
+| GET / POST / DELETE | `/api/auth/registration-requests[/{id}[/approve]]` | coordinator |
 | GET / POST / DELETE | `/api/auth/deletion-requests[/{id}[/approve]]` | coordinator |
 | GET | `/api/milestones` | logged in |
 | PUT | `/api/milestones/{phase}` | coordinator |

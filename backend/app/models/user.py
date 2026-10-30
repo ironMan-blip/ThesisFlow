@@ -20,10 +20,10 @@ class Role(str, enum.Enum):
 ROLE_TOOLS = {
     Role.student: ["proposal", "deadlines", "account"],
     Role.faculty: ["deadlines", "account"],
-    Role.coordinator: ["deadlines", "faculty_requests", "deletion_requests"],
+    Role.coordinator: ["deadlines", "registration_requests", "deletion_requests"],
 }
 
-# The coordinator has this long to decide a faculty sign-up or an account deletion request.
+# The coordinator has this long to decide a sign-up or an account deletion request.
 REVIEW_WINDOW = timedelta(hours=48)
 
 
@@ -32,10 +32,12 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # 6-digit university ID; this is what users log in with.
+    id_number: Mapped[str] = mapped_column(String(6), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(255))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"))
-    # Faculty sign-ups start unapproved and cannot log in until the coordinator approves them.
+    # Sign-ups start unapproved and cannot log in until the coordinator approves them.
     approved: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # Set when the user asks to delete their account; the request lapses after REVIEW_WINDOW.

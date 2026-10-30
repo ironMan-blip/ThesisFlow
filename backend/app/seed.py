@@ -1,6 +1,6 @@
 """Create a dev student and faculty account. Run: docker compose exec backend python -m app.seed
 
-Dev only. Both use the password "password123". The coordinator comes from ADMIN_EMAIL / ADMIN_PASSWORD.
+Dev only. Both use the password "password123". The coordinator comes from ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD.
 """
 
 from app.database import SessionLocal
@@ -8,18 +8,18 @@ from app.models.user import Role
 from app.services import auth_service
 
 ACCOUNTS = [
-    ("student@thesisflow.test", "Demo Student", Role.student),
-    ("faculty@thesisflow.test", "Demo Faculty", Role.faculty),
+    ("student@thesisflow.test", "100001", "Demo Student", Role.student),
+    ("faculty@thesisflow.test", "200001", "Demo Faculty", Role.faculty),
 ]
 
 
 def main():
     with SessionLocal() as db:
-        for email, name, role in ACCOUNTS:
+        for email, id_number, name, role in ACCOUNTS:
             if auth_service.get_by_email(db, email):
                 continue
-            auth_service.create_user(db, email, name, "password123", role)
-            print(f"created {email}")
+            auth_service.create_user(db, email, id_number, name, "password123", role)
+            print(f"created {email} (ID {id_number})")
 
 
 if __name__ == "__main__":

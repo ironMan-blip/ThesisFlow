@@ -49,8 +49,8 @@ export async function download(path, filename) {
   URL.revokeObjectURL(url);
 }
 
-export async function login(email, password) {
-  const form = new URLSearchParams({ username: email, password });
+export async function login(idNumber, password) {
+  const form = new URLSearchParams({ username: idNumber, password });
   const { access_token } = await api("/auth/login", { method: "POST", body: form });
   setToken(access_token);
 }

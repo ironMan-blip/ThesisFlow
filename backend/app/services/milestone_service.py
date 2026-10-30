@@ -71,6 +71,7 @@ def timeline(db: Session, user: User) -> TimelineOut:
 def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
     # Phases run in order: a deadline can't be before an earlier phase's or after a later one's.
     order = list(Phase)
+    # Ordered so the error always names the earliest conflicting phase.
     for m in db.scalars(select(Milestone).where(Milestone.phase != phase).order_by(Milestone.phase)):
         if order.index(m.phase) < order.index(phase) and data.due_at < m.due_at:
             raise HTTPException(status.HTTP_409_CONFLICT, f"{phase.value} deadline can't be before {m.phase.value}")

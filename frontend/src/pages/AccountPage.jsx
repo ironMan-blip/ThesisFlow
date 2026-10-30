@@ -24,6 +24,7 @@ export default function AccountPage() {
       <PageHeader title="Account">
         <dl className="mt-4 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
           <dt className="text-zinc-500">Name</dt><dd>{user.full_name}</dd>
+          <dt className="text-zinc-500">ID number</dt><dd>{user.id_number}</dd>
           <dt className="text-zinc-500">Email</dt><dd>{user.email}</dd>
           <dt className="text-zinc-500">Role</dt><dd className="capitalize">{user.role}</dd>
         </dl>

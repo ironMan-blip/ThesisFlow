@@ -1,12 +1,18 @@
+from itertools import count
+
 from app.models.user import Role
 from app.services import auth_service
 
 PDF = b"%PDF-1.4\n% test\n"
 
 
+_id_numbers = count(500000)
+
+
 def auth(client, db, email, role=Role.student):
-    auth_service.create_user(db, email, "U", "Password123", role)
-    token = client.post("/api/auth/login", data={"username": email, "password": "Password123"}).json()["access_token"]
+    id_number = str(next(_id_numbers))
+    auth_service.create_user(db, email, id_number, "U", "Password123", role)
+    token = client.post("/api/auth/login", data={"username": id_number, "password": "Password123"}).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
