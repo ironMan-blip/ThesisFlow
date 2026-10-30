@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, login } from "../api/client";
-import { Alerts, Logo } from "../components/ui";
+import { Alerts, Icon, ICONS, Logo } from "../components/ui";
 import { useAction } from "../useAction";
 
 export default function LoginPage() {
@@ -45,13 +45,35 @@ export default function LoginPage() {
   const loading = busy === "submit";
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-[radial-gradient(ellipse_at_top,var(--color-teal-50),transparent_60%)] p-4">
+    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <aside className="relative hidden overflow-hidden bg-teal-900 p-12 text-teal-50 lg:flex lg:flex-col lg:justify-between">
+        <div className="pointer-events-none absolute -right-32 -top-32 size-[28rem] rounded-full bg-teal-700/40 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-40 -left-24 size-[24rem] rounded-full bg-teal-950/60 blur-3xl" aria-hidden="true" />
+        <div className="relative"><Logo light /></div>
+        <div className="relative max-w-md">
+          <h2 className="text-3xl font-semibold leading-tight text-white xl:text-4xl">Your thesis, from proposal to final phase.</h2>
+          <ul className="mt-8 space-y-4 text-sm text-teal-100/90">
+            {[
+              "Upload proposal versions and keep every past draft.",
+              "See P1, P2 and P3 deadlines with live countdowns.",
+              "Coordinators approve accounts and manage deadlines in one place.",
+            ].map((t) => (
+              <li key={t} className="flex gap-3">
+                <Icon className="size-5 text-teal-300">{ICONS.check}</Icon>{t}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="relative text-xs text-teal-200/70">Thesis supervision and submission portal</p>
+      </aside>
+
+      <div className="flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_top,var(--color-teal-50),transparent_60%)] p-4 py-10 lg:bg-none lg:bg-white">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex justify-center"><Logo /></div>
-        <form onSubmit={submit} className="card space-y-5 p-7">
+        <div className="mb-8 flex justify-center lg:hidden"><Logo /></div>
+        <form onSubmit={submit} className="card space-y-5 p-7 lg:p-0 lg:shadow-none lg:ring-0">
           <div>
-            <h1 className="text-xl font-semibold">{registering ? "Create an account" : "Log in"}</h1>
-            <p className="mt-1 text-sm text-zinc-600">Use your 8-digit university ID to continue.</p>
+            <h1 className="text-xl font-semibold lg:text-2xl">{registering ? "Create an account" : "Welcome back"}</h1>
+            <p className="mt-1 text-sm text-zinc-600">{registering ? "Register with your 8-digit university ID." : "Log in with your 8-digit university ID."}</p>
           </div>
           {registering && (
             <>
@@ -114,6 +136,7 @@ export default function LoginPage() {
             </button>
           </p>
         </form>
+      </div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, PageHeader, Person } from "../components/ui";
+import { Alerts, EmptyState, ICONS, PageHeader, Person } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
@@ -29,25 +29,34 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
 
       <Alerts error={error} notice={notice} />
 
-      {!requests ? (
-        <div className="h-24 animate-pulse rounded-xl bg-zinc-100" aria-hidden="true" />
-      ) : requests.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">No pending requests.</p>
-      ) : (
-        <ul className="space-y-3">
-          {requests.map((r) => (
-            <li key={r.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
-              <Person user={r}> · requested {when(r[dateField])}</Person>
-              <div className="flex gap-2">
-                <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary">Reject</button>
-                <button onClick={() => decide(r, true)} disabled={busy === r.id} className="btn-primary">
-                  {busy === r.id ? "Saving..." : "Approve"}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className="card overflow-hidden">
+        {!requests ? (
+          <div className="space-y-3 p-6" aria-hidden="true">
+            {[0, 1].map((i) => <div key={i} className="h-14 animate-pulse rounded-lg bg-zinc-100" />)}
+          </div>
+        ) : requests.length === 0 ? (
+          <EmptyState icon={ICONS.check} title="You're all caught up">No pending requests right now. New ones appear here automatically.</EmptyState>
+        ) : (
+          <>
+            <p className="border-b border-zinc-200 px-4 py-3 text-sm font-medium tabular-nums text-zinc-700 sm:px-6">
+              {requests.length} pending {requests.length === 1 ? "request" : "requests"}
+            </p>
+            <ul className="divide-y divide-zinc-100">
+              {requests.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+                  <Person user={r}> · requested {when(r[dateField])}</Person>
+                  <div className="flex gap-2">
+                    <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary px-3 py-1.5">Reject</button>
+                    <button onClick={() => decide(r, true)} disabled={busy === r.id} className="btn-primary px-3 py-1.5">
+                      {busy === r.id ? "Saving..." : "Approve"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
     </div>
   );
 }
