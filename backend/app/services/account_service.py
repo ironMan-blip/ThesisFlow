@@ -67,7 +67,10 @@ def approve_deletion(db: Session, user_id: int) -> None:
 
 def list_accounts(db: Session) -> list[User]:
     # Unapproved sign-ups are not accounts yet; they live in pending_registrations.
-    return list(db.scalars(select(User).where(User.approved.is_(True)).order_by(User.role, User.full_name)))
+    # The coordinator is the admin login, not a member account.
+    return list(db.scalars(
+        select(User).where(User.approved.is_(True), User.role != Role.coordinator).order_by(User.role, User.full_name)
+    ))
 
 
 def delete_account(db: Session, user_id: int) -> None:

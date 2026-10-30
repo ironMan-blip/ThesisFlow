@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from sqlalchemy import select
+
 from app.config import settings
 from app.models.user import Role, User
 from app.services import auth_service
@@ -229,10 +231,11 @@ def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path):
     assert client.get("/api/auth/accounts", headers=student).status_code == 403
     accounts = client.get("/api/auth/accounts", headers=coord).json()
     by_email = {a["email"]: a["id"] for a in accounts}
-    assert set(by_email) == {"s@b.com", "coord@b.com"}
+    assert set(by_email) == {"s@b.com"}  # coordinator is the admin login, not listed
 
+    coord_id = db.scalar(select(User.id).where(User.email == "coord@b.com"))
     assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=student).status_code == 403
-    assert client.delete(f"/api/auth/accounts/{by_email['coord@b.com']}", headers=coord).status_code == 403
+    assert client.delete(f"/api/auth/accounts/{coord_id}", headers=coord).status_code == 403
     assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 204
     assert db.get(User, by_email["s@b.com"]) is None
     assert not list(tmp_path.rglob("*.pdf"))
