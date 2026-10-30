@@ -1,7 +1,6 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -60,13 +59,6 @@ def timeline(db: Session, user: User) -> TimelineOut:
 
 
 def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
-    # Phases run in order: a deadline can't be before an earlier phase's or after a later one's.
-    order = list(Phase)
-    # Ordered so the error always names the earliest conflicting phase.
-    for m in db.scalars(select(Milestone).where(Milestone.phase != phase).order_by(Milestone.phase)):
-        if order.index(m.phase) < order.index(phase) and data.due_at < m.due_at:
-            raise HTTPException(status.HTTP_409_CONFLICT, f"{phase.value} deadline can't be before {m.phase.value}")
-        if order.index(m.phase) > order.index(phase) and data.due_at > m.due_at:
-            raise HTTPException(status.HTTP_409_CONFLICT, f"{phase.value} deadline can't be after {m.phase.value}")
+    # No cross-phase order check: deadlines may differ per semester/group once those land.
     db.merge(Milestone(phase=phase, **data.model_dump()))
     db.commit()

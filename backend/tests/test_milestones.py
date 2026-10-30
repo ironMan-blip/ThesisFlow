@@ -54,16 +54,11 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     assert by_phase(client.get("/api/milestones", headers=student))["P1"]["due_at"].startswith("2026-11-02T23:59")
 
 
-def test_phase_deadlines_must_be_in_order(client, db):
+def test_phase_deadlines_need_not_be_in_order(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     assert put(client, coord, "P2", T).status_code == 200
-    res = put(client, coord, "P1", T + timedelta(minutes=1))
-    assert (res.status_code, res.json()["detail"]) == (409, "P1 deadline can't be after P2")
-    assert put(client, coord, "P3", T - timedelta(days=1)).json()["detail"] == "P3 deadline can't be before P2"
-    assert put(client, coord, "P3", T).status_code == 200  # same time is fine
-    assert put(client, coord, "P2", T + timedelta(days=1)).json()["detail"] == "P2 deadline can't be after P3"
-    assert put(client, coord, "P1", T - timedelta(days=1)).status_code == 200
-    assert put(client, coord, "P3", T - timedelta(days=2)).json()["detail"] == "P3 deadline can't be before P1"
+    assert put(client, coord, "P1", T + timedelta(days=1)).status_code == 200
+    assert put(client, coord, "P3", T - timedelta(days=1)).status_code == 200
 
 
 def test_student_late_days_and_penalty(client, db):
