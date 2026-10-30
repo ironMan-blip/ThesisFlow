@@ -8,9 +8,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.milestone import Phase
+from app.models.milestone import Milestone, Phase
 from app.models.proposal import Proposal, ProposalVersion
 from app.models.user import Role, User
+from app.schemas.proposal import ProposalOut
 
 CHUNK = 1024 * 1024
 
@@ -26,9 +27,20 @@ def _can_view(user: User, proposal: Proposal) -> bool:
     return user.role in (Role.faculty, Role.coordinator) or proposal.owner_id == user.id
 
 
-def get_mine(db: Session, user: User) -> Proposal:
-    # Before the first upload, return an unsaved empty proposal so the page always gets one shape.
-    return db.scalar(select(Proposal).where(Proposal.owner_id == user.id)) or Proposal(owner_id=user.id)
+def _open_phases(db: Session) -> list[Phase]:
+    # Students submit only for phases whose timeline the coordinator has set.
+    set_phases = set(db.scalars(select(Milestone.phase)))
+    return [p for p in Phase if p in set_phases]
+
+
+def _out(db: Session, proposal: Proposal) -> ProposalOut:
+    return ProposalOut(versions=proposal.versions, phases=_open_phases(db))
+
+
+def get_mine(db: Session, user: User) -> ProposalOut:
+    # Before the first upload, use an unsaved empty proposal so the page always gets one shape.
+    proposal = db.scalar(select(Proposal).where(Proposal.owner_id == user.id)) or Proposal(owner_id=user.id)
+    return _out(db, proposal)
 
 
 def _lock_mine(db: Session, user: User) -> Proposal | None:
@@ -75,7 +87,9 @@ def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
     )
 
 
-def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> Proposal:
+def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> ProposalOut:
+    if db.get(Milestone, phase) is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"The {phase.value} timeline is not set yet")
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title must be 1 to 255 characters")
@@ -141,10 +155,10 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
         if not keep_new_file:
             (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(proposal)
-    return proposal
+    return _out(db, proposal)
 
 
-def delete_version(db: Session, user: User, version_id: int) -> Proposal:
+def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     proposal = _lock_mine(db, user)
     # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
     version = proposal and db.scalar(
@@ -160,7 +174,7 @@ def delete_version(db: Session, user: User, version_id: int) -> Proposal:
     # File goes only after the row is gone, so a failed commit never loses a PDF.
     (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(proposal)
-    return proposal
+    return _out(db, proposal)
 
 
 def delete_owned(db: Session, user: User) -> list[Path]:

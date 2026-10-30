@@ -1,6 +1,11 @@
+import pytest
+
 from app.config import settings
+from app.models.milestone import Milestone, Phase
 from app.models.user import Role
 from tests.helpers import PDF, auth, upload
+
+pytestmark = pytest.mark.usefixtures("timelines")
 
 
 def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
@@ -112,3 +117,14 @@ def test_same_pdf_with_new_title_or_abstract_is_a_new_version(client, db):
         ("a renamed", "About it", 2),
         ("a", "About it", 1),
     ]
+
+
+def test_upload_needs_the_phase_timeline(client, db):
+    h = auth(client, db, "s@x.com")
+    db.delete(db.get(Milestone, Phase.P2))
+    db.delete(db.get(Milestone, Phase.P3))
+    db.flush()
+    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1"]
+    res = upload(client, h, phase="P2")
+    assert (res.status_code, res.json()["detail"]) == (409, "The P2 timeline is not set yet")
+    assert upload(client, h, phase="P1").status_code == 201

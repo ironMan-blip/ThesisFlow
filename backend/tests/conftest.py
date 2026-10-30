@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +10,7 @@ import app.models  # noqa: F401
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+from app.models.milestone import Milestone, Phase
 
 # Tests use a separate database so they never touch dev data.
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
@@ -49,3 +51,11 @@ def client(db):
     app.dependency_overrides[get_db] = lambda: db
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def timelines(db):
+    # Uploads need the phase's timeline set; tests that aren't about timelines get all of them.
+    due = datetime.now(timezone.utc) + timedelta(days=30)
+    db.add_all(Milestone(phase=p, due_at=due, grace_minutes=0, penalty_per_day=0) for p in Phase)
+    db.flush()

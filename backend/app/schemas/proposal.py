@@ -35,8 +35,8 @@ class ProposalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     versions: list[ProposalVersionOut]  # newest first
-    # Upload form options, so the page never hardcodes them.
-    phases: list[Phase] = list(Phase)
+    # Upload form options, so the page never hardcodes them: only phases whose timeline is set.
+    phases: list[Phase]
     max_upload_mb: int = settings.max_upload_mb
 
     @model_validator(mode="after")

@@ -54,6 +54,9 @@ export default function ProposalPage() {
             <select name="phase" required className="input">
               {proposal?.phases.map((p) => <option key={p}>{p}</option>)}
             </select>
+            {proposal?.phases.length === 0 && (
+              <span className="mt-1 block text-xs font-normal text-zinc-500">No phase timeline is set yet, so uploads are closed.</span>
+            )}
           </label>
           <label className="label">
             Title
@@ -71,7 +74,7 @@ export default function ProposalPage() {
             <span className="mt-1 block text-xs font-normal text-zinc-500">PDF only{proposal && `, up to ${proposal.max_upload_mb} MB`}.</span>
           </label>
           <Alerts error={error} notice={notice} />
-          <button disabled={saving} className="btn-primary w-full">
+          <button disabled={saving || !proposal?.phases.length} className="btn-primary w-full">
             {saving ? "Uploading..." : "Upload version"}
           </button>
         </form>
