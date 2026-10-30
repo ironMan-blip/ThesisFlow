@@ -6,12 +6,15 @@ import { useAction } from "../useAction";
 // Coordinator's list of every approved account; any account but the coordinator's can be deleted.
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState(null);
+  const [query, setQuery] = useState("");
   const [confirming, setConfirming] = useState(null); // id of the account awaiting "Yes, delete"
   const { busy, error, notice, setError, run } = useAction(); // busy key is the account id being deleted
 
   useEffect(() => {
     api("/auth/accounts").then(setAccounts).catch((err) => setError(err.message));
   }, [setError]);
+
+  const shown = accounts?.filter((a) => String(a.id_number).includes(query)) ?? [];
 
   const remove = (a) =>
     run(a.id, async () => {
@@ -30,8 +33,12 @@ export default function AccountsPage() {
       {!accounts ? (
         <div className="h-24 animate-pulse rounded-xl bg-zinc-100" aria-hidden="true" />
       ) : (
+        <div className="space-y-4">
+        <input type="search" inputMode="numeric" aria-label="Search by ID" placeholder="Search by ID"
+          value={query} onChange={(e) => setQuery(e.target.value.trim())} className="input max-w-xs" />
+        {shown.length === 0 && <p className="text-sm text-zinc-600">No account matches ID "{query}".</p>}
         <ul className="space-y-3">
-          {accounts.map((a) => (
+          {shown.map((a) => (
             <li key={a.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
               <div>
                 <p className="font-medium">{a.full_name}{a.initials && ` (${a.initials})`} <span className="text-sm font-normal capitalize text-zinc-500">· {a.role}</span></p>
@@ -51,6 +58,7 @@ export default function AccountsPage() {
             </li>
           ))}
         </ul>
+        </div>
       )}
     </div>
   );
