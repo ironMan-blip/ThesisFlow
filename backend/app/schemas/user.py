@@ -23,6 +23,7 @@ class UserOut(BaseModel):
     full_name: str
     role: Role
     approved: bool
+    tools: list[str]
 
 
 class FacultyRequestOut(UserOut):

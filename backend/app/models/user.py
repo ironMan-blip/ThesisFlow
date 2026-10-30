@@ -15,6 +15,14 @@ class Role(str, enum.Enum):
     coordinator = "coordinator"
 
 
+# Pages each role can open; the frontend shows exactly these in nav and dashboard.
+ROLE_TOOLS = {
+    Role.student: ["proposal", "deadlines"],
+    Role.faculty: ["deadlines"],
+    Role.coordinator: ["deadlines", "faculty_requests"],
+}
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -26,3 +34,7 @@ class User(Base):
     # Faculty sign-ups start unapproved and cannot log in until the coordinator approves them.
     approved: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def tools(self) -> list[str]:
+        return ROLE_TOOLS[self.role]

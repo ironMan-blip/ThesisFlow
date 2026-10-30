@@ -71,9 +71,9 @@ export default function Layout() {
             <Link to="/"><Logo /></Link>
             <nav className="hidden items-center gap-1 sm:flex">
               <NavLink to="/" end className={navClass}>Dashboard</NavLink>
-              {user.role === "student" && <NavLink to="/proposal" className={navClass}>Proposal</NavLink>}
-              <NavLink to="/deadlines" className={navClass}>Deadlines</NavLink>
-              {user.role === "coordinator" && <NavLink to="/faculty-requests" className={navClass}>Faculty requests</NavLink>}
+              {user.tools.includes("proposal") && <NavLink to="/proposal" className={navClass}>Proposal</NavLink>}
+              {user.tools.includes("deadlines") && <NavLink to="/deadlines" className={navClass}>Deadlines</NavLink>}
+              {user.tools.includes("faculty_requests") && <NavLink to="/faculty-requests" className={navClass}>Faculty requests</NavLink>}
             </nav>
           </div>
           <div className="flex items-center gap-3">

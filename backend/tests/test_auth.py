@@ -12,6 +12,7 @@ def test_register_login_me(client):
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
     assert me.json()["role"] == "student"
+    assert me.json()["tools"] == ["proposal", "deadlines"]
 
 
 def test_duplicate_email_rejected(client):
