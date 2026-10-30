@@ -50,7 +50,7 @@ export default function AccountPage() {
             </p>
             <span className="text-sm font-medium">Send the deletion request?</span>
             <button onClick={() => setConfirming(false)} disabled={sending} className="btn-secondary">Cancel</button>
-            <button onClick={requestDeletion} disabled={sending} className="btn bg-red-600 text-white shadow-sm hover:bg-red-700">
+            <button onClick={requestDeletion} disabled={sending} className="btn-danger">
               {sending ? "Sending..." : "Yes, request deletion"}
             </button>
           </div>

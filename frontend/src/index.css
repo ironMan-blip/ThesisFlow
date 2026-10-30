@@ -44,6 +44,10 @@
   @apply btn bg-white text-zinc-700 ring-1 ring-zinc-300 hover:bg-zinc-50 hover:text-zinc-900;
 }
 
+@utility btn-danger {
+  @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700;
+}
+
 @utility alert-error {
   @apply rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700;
 }

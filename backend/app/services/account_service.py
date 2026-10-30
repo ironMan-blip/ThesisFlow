@@ -3,15 +3,23 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models.user import REVIEW_WINDOW, Role, User
 from app.services import proposal_service
 
 
+def _registrations() -> Select:
+    return select(User).where(User.approved.is_(False))
+
+
+def _deletions() -> Select:
+    return select(User).where(User.deletion_requested_at > datetime.now(timezone.utc) - REVIEW_WINDOW)
+
+
 def pending_registrations(db: Session) -> list[User]:
-    return list(db.scalars(select(User).where(User.approved.is_(False)).order_by(User.created_at)))
+    return list(db.scalars(_registrations().order_by(User.created_at)))
 
 
 def _pending(db: Session, user_id: int) -> User:
@@ -48,10 +56,7 @@ def request_deletion(db: Session, user: User) -> User:
 
 
 def pending_deletions(db: Session) -> list[User]:
-    since = datetime.now(timezone.utc) - REVIEW_WINDOW
-    return list(
-        db.scalars(select(User).where(User.deletion_requested_at > since).order_by(User.deletion_requested_at))
-    )
+    return list(db.scalars(_deletions().order_by(User.deletion_requested_at)))
 
 
 def _deletion_pending(db: Session, user_id: int) -> User:
@@ -69,7 +74,9 @@ def pending_counts(db: Session, user: User) -> dict[str, int]:
     # Badge counts keyed by tool; only the coordinator decides requests.
     if user.role != Role.coordinator:
         return {}
-    return {"registration_requests": len(pending_registrations(db)), "deletion_requests": len(pending_deletions(db))}
+    # Polled every 10s by the UI, so count in SQL instead of loading the rows.
+    count = lambda q: db.scalar(q.with_only_columns(func.count()))
+    return {"registration_requests": count(_registrations()), "deletion_requests": count(_deletions())}
 
 
 def list_accounts(db: Session, role: Role | None = None, id_prefix: str = "") -> list[User]:

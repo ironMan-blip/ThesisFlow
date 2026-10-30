@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Alerts, PageHeader } from "../components/ui";
+import { Alerts, PageHeader, Person } from "../components/ui";
 import { useAction } from "../useAction";
 
 const TABS = { student: "students", faculty: "faculties" }; // role -> tab label
@@ -54,15 +54,12 @@ export default function AccountsPage() {
         <ul className="space-y-3">
           {accounts.map((a) => (
             <li key={a.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
-              <div>
-                <p className="font-medium">{a.full_name}{a.initials && ` (${a.initials})`} <span className="text-sm font-normal capitalize text-zinc-500">· {a.role}</span></p>
-                <p className="text-sm text-zinc-600">ID {a.id_number} · {a.email}{a.deletion_pending && " · deletion requested"}</p>
-              </div>
+              <Person user={a}>{a.deletion_pending && " · deletion requested"}</Person>
               {confirming === a.id ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium text-red-700">Delete permanently? This can't be undone.</span>
                   <button onClick={() => setConfirming(null)} disabled={busy === a.id} className="btn-secondary">Cancel</button>
-                  <button onClick={() => remove(a)} disabled={busy === a.id} className="btn bg-red-600 text-white shadow-sm hover:bg-red-700">
+                  <button onClick={() => remove(a)} disabled={busy === a.id} className="btn-danger">
                     {busy === a.id ? "Deleting..." : "Yes, delete"}
                   </button>
                 </div>

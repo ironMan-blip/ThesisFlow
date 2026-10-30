@@ -28,6 +28,16 @@ export function Alerts({ error, notice }) {
   );
 }
 
+// A user's name, initials, role, ID and email; children add to the end of the second line.
+export function Person({ user, children }) {
+  return (
+    <div>
+      <p className="font-medium">{user.full_name}{user.initials && ` (${user.initials})`} <span className="text-sm font-normal capitalize text-zinc-500">· {user.role}</span></p>
+      <p className="text-sm text-zinc-600">ID {user.id_number} · {user.email}{children}</p>
+    </div>
+  );
+}
+
 // Live pending-request count, shown as a "3 pending" pill with a pulsing dot.
 export function CountBadge({ count, className = "" }) {
   if (!count) return null;
