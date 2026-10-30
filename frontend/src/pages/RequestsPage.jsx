@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, EmptyState, ICONS, PageHeader, Person } from "../components/ui";
+import { Alerts, EmptyState, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
@@ -31,9 +31,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
 
       <section className="card overflow-hidden">
         {!requests ? (
-          <div className="space-y-3 p-6" aria-hidden="true">
-            {[0, 1].map((i) => <div key={i} className="h-14 animate-pulse rounded-lg bg-zinc-100" />)}
-          </div>
+          <Skeleton />
         ) : requests.length === 0 ? (
           <EmptyState icon={ICONS.check} title="You're all caught up">No pending requests right now. New ones appear here automatically.</EmptyState>
         ) : (

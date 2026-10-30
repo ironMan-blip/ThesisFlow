@@ -28,23 +28,34 @@ def _can_view(user: User, proposal: Proposal) -> bool:
     return user.role in (Role.faculty, Role.coordinator) or proposal.owner_id == user.id
 
 
-def _closed_phases(db: Session) -> set[Phase]:
-    # Phases whose due date and grace period have both passed.
+def _phases(db: Session) -> tuple[set[Phase], set[Phase]]:
+    """Phases whose timeline is set, and those whose due date and grace period have both passed."""
     now = datetime.now(timezone.utc)
-    return {m.phase for m in db.scalars(select(Milestone)) if now > m.closes_at}
+    milestones = list(db.scalars(select(Milestone)))
+    return {m.phase for m in milestones}, {m.phase for m in milestones if now > m.closes_at}
+
+
+def last_upload_by_phase(db: Session, owner_id: int) -> dict[Phase, datetime]:
+    # The latest upload per phase is the one that counts, so a late re-upload is late.
+    return dict(
+        db.execute(
+            select(ProposalVersion.phase, func.max(ProposalVersion.created_at))
+            .join(Proposal)
+            .where(Proposal.owner_id == owner_id)
+            .group_by(ProposalVersion.phase)
+        ).all()
+    )
 
 
 def _missed_notice(phase: Phase) -> str:
     return f"You missed {phase.value}, so uploads are closed until the next semester"
 
 
-def _upload_blocks(db: Session, owner_id: int) -> tuple[dict[Phase, str], Phase | None]:
+def _upload_blocks(
+    db: Session, owner_id: int, set_phases: set[Phase], closed: set[Phase]
+) -> tuple[dict[Phase, str], Phase | None]:
     """Why each phase is closed to this student (phases not in the result are open), and the first phase they missed."""
-    set_phases = set(db.scalars(select(Milestone.phase)))
-    closed = _closed_phases(db)
-    submitted = set(
-        db.scalars(select(ProposalVersion.phase).join(Proposal).where(Proposal.owner_id == owner_id).distinct())
-    )
+    submitted = last_upload_by_phase(db, owner_id)
     blocks, missed = {}, None
     for p in Phase:
         if missed:
@@ -60,13 +71,13 @@ def _upload_blocks(db: Session, owner_id: int) -> tuple[dict[Phase, str], Phase 
 
 
 def _out(db: Session, proposal: Proposal) -> ProposalOut:
-    blocks, missed = _upload_blocks(db, proposal.owner_id)
+    set_phases, closed = _phases(db)
+    blocks, missed = _upload_blocks(db, proposal.owner_id, set_phases, closed)
     out = ProposalOut(
         versions=proposal.versions,
         phases=[p for p in Phase if p not in blocks],
         missed_notice=missed and _missed_notice(missed),
     )
-    closed = _closed_phases(db)
     for v in out.versions:
         v.can_delete = v.phase not in closed
     return out
@@ -123,7 +134,7 @@ def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
 
 
 def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> ProposalOut:
-    if block := _upload_blocks(db, user.id)[0].get(phase):
+    if block := _upload_blocks(db, user.id, *_phases(db))[0].get(phase):
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
@@ -201,7 +212,7 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     )
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
-    if version.phase in _closed_phases(db):
+    if version.phase in _phases(db)[1]:
         # Submissions are final once the phase closes; removing one would also turn it into a missed phase.
         raise HTTPException(
             status.HTTP_409_CONFLICT, f"The {version.phase.value} deadline and grace period have passed, so it can't be removed"

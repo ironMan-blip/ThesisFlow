@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Alerts, EmptyState, Icon, ICONS, PageHeader, Person } from "../components/ui";
+import { Alerts, EmptyState, Icon, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
 import { useAction } from "../useAction";
 
 const TABS = { student: "students", faculty: "faculties" }; // role -> tab label
@@ -56,9 +56,7 @@ export default function AccountsPage() {
         </div>
 
         {!accounts ? (
-          <div className="space-y-3 p-6" aria-hidden="true">
-            {[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded-lg bg-zinc-100" />)}
-          </div>
+          <Skeleton rows={3} />
         ) : accounts.length === 0 ? (
           <EmptyState icon={query ? ICONS.search : undefined} title={query ? "No matches" : `No ${tab} yet`}>
             {query ? `No account in ${tab} matches ID "${query}".` : `Approved ${tab} will show up here.`}

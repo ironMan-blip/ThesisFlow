@@ -32,12 +32,20 @@ export function Logo({ light = false }) {
   );
 }
 
-export function PageHeader({ title, intro, children }) {
+export function PageHeader({ title, intro }) {
   return (
     <div>
       <h1 className="text-2xl font-semibold sm:text-3xl">{title}</h1>
       {intro && <p className="mt-2 max-w-prose text-zinc-600">{intro}</p>}
-      {children}
+    </div>
+  );
+}
+
+// Grey placeholder rows while a list loads.
+export function Skeleton({ rows = 2, row = "h-14 rounded-lg", className = "space-y-3 p-6" }) {
+  return (
+    <div className={className} aria-hidden="true">
+      {Array.from({ length: rows }, (_, i) => <div key={i} className={`animate-pulse bg-zinc-100 ${row}`} />)}
     </div>
   );
 }

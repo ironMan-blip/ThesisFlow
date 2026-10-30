@@ -2,13 +2,13 @@ import math
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.milestone import Milestone, Phase
-from app.models.proposal import Proposal, ProposalVersion
 from app.models.user import Role, User
 from app.schemas.milestone import MilestoneIn, MilestoneOut, TimelineOut
+from app.services import proposal_service
 
 DAY = timedelta(days=1)
 
@@ -49,17 +49,7 @@ def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetim
 def timeline(db: Session, user: User) -> TimelineOut:
     now = datetime.now(timezone.utc)
     milestones = {m.phase: m for m in db.scalars(select(Milestone))}
-    submitted = {}
-    if user.role == Role.student:
-        # The latest upload per phase is the one that counts, so a late re-upload is late.
-        submitted = dict(
-            db.execute(
-                select(ProposalVersion.phase, func.max(ProposalVersion.created_at))
-                .join(Proposal)
-                .where(Proposal.owner_id == user.id)
-                .group_by(ProposalVersion.phase)
-            ).all()
-        )
+    submitted = proposal_service.last_upload_by_phase(db, user.id) if user.role == Role.student else {}
     return TimelineOut(
         now=now,
         milestones=[

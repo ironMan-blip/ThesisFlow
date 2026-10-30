@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Alerts, PageHeader } from "../components/ui";
+import { Alerts, PageHeader, Skeleton } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
@@ -89,9 +89,7 @@ export default function DeadlinePage() {
       <Alerts error={error} notice={notice} />
 
       {!data ? (
-        <div className="space-y-4" aria-hidden="true">
-          {[0, 1, 2].map((i) => <div key={i} className="h-36 animate-pulse rounded-xl bg-zinc-100" />)}
-        </div>
+        <Skeleton rows={3} row="h-36 rounded-xl" className="space-y-4" />
       ) : (
         <ol className="relative space-y-4 border-l border-zinc-200 pl-6">
           {data.milestones.map((m) => {

@@ -202,7 +202,7 @@ backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
   pages/        View: one file per page (RequestsPage = registration + deletion requests, AccountsPage = coordinator account list)
-  components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Alerts, Person, CountBadge)
+  components/   View: Layout (auth guard + nav), ui.jsx (Logo, PageHeader, Skeleton, Alerts, Person, CountBadge)
   api/client.js fetch wrapper (adds JWT)
   useAction.js  busy / error / success state for a page's API calls
   tools.jsx     nav + dashboard entry for each tool key the API returns in user.tools

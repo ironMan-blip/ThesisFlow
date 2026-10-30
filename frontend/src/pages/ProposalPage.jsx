@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, download } from "../api/client";
-import { Alerts, EmptyState, Icon, ICONS, PageHeader } from "../components/ui";
+import { Alerts, EmptyState, Icon, ICONS, PageHeader, Skeleton } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
@@ -101,9 +101,7 @@ export default function ProposalPage() {
             )}
           </div>
           {!proposal ? (
-            <div className="space-y-3 p-6" aria-hidden="true">
-              {[0, 1].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-zinc-100" />)}
-            </div>
+            <Skeleton row="h-16 rounded-lg" />
           ) : !proposal.versions.length ? (
             <EmptyState icon={ICONS.file} title="No uploads yet">Your first version will appear here after you upload it.</EmptyState>
           ) : (
