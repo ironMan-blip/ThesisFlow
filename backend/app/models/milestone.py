@@ -20,10 +20,10 @@ class Milestone(Base):
 
     phase: Mapped[Phase] = mapped_column(Enum(Phase, name="phase"), primary_key=True)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    grace_minutes: Mapped[int] = mapped_column(Integer)
+    grace_days: Mapped[int] = mapped_column(Integer)
     penalty_per_day: Mapped[int] = mapped_column(Integer)  # percent of the phase mark
 
     @property
     def closes_at(self) -> datetime:
         # Uploads stop once the grace period after the due date ends.
-        return self.due_at + timedelta(minutes=self.grace_minutes)
+        return self.due_at + timedelta(days=self.grace_days)

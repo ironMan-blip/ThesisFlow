@@ -5,20 +5,20 @@ from pydantic import AwareDatetime, BaseModel, Field
 
 from app.models.milestone import Phase
 
-MAX_GRACE_MINUTES = 7 * 24 * 60
+MAX_GRACE_DAYS = 7
 MAX_PENALTY_PER_DAY = 100
 
 
 class MilestoneIn(BaseModel):
     due_at: AwareDatetime
-    grace_minutes: int = Field(ge=0, le=MAX_GRACE_MINUTES)
+    grace_days: int = Field(ge=0, le=MAX_GRACE_DAYS)
     penalty_per_day: int = Field(ge=0, le=MAX_PENALTY_PER_DAY)
 
 
 class MilestoneOut(BaseModel):
     phase: Phase
     due_at: datetime | None  # None until the coordinator sets it
-    grace_minutes: int
+    grace_days: int
     penalty_per_day: int
     closes_at: datetime | None  # due_at + grace; late after this
     status: Literal["not_set", "open", "grace", "closed"]
@@ -37,5 +37,5 @@ class TimelineOut(BaseModel):
     milestones: list[MilestoneOut]
     can_edit: bool  # coordinator only
     # Input limits for the coordinator form, same values MilestoneIn enforces.
-    max_grace_minutes: int = MAX_GRACE_MINUTES
+    max_grace_days: int = MAX_GRACE_DAYS
     max_penalty_per_day: int = MAX_PENALTY_PER_DAY

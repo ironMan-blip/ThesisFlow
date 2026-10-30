@@ -30,7 +30,7 @@ function Countdown({ ms }) {
   );
 }
 
-// ISO string -> value for <input type="datetime-local"> in the browser's time zone.
+// ISO string -> "YYYY-MM-DDTHH:mm" in the browser's time zone, split for the date and time inputs.
 const toLocalInput = (iso) => {
   const d = new Date(iso);
   return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -67,8 +67,8 @@ export default function DeadlinePage() {
         await api(`/milestones/${phase}`, {
           method: "PUT",
           body: {
-            due_at: new Date(f.get("due_at")).toISOString(),
-            grace_minutes: Number(f.get("grace_minutes")),
+            due_at: new Date(`${f.get("due_date")}T${f.get("due_time")}`).toISOString(),
+            grace_days: Number(f.get("grace_days")),
             penalty_per_day: Number(f.get("penalty_per_day")),
           },
         }),
@@ -113,7 +113,7 @@ export default function DeadlinePage() {
                 {m.due_at ? (
                   <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                     <div><dt className="text-zinc-500">Due</dt><dd className="font-medium">{when(m.due_at)}</dd></div>
-                    <div><dt className="text-zinc-500">Grace time</dt><dd className="font-medium tabular-nums">{m.grace_minutes} min</dd></div>
+                    <div><dt className="text-zinc-500">Grace time</dt><dd className="font-medium tabular-nums">{m.grace_days} {m.grace_days === 1 ? "day" : "days"}</dd></div>
                     <div><dt className="text-zinc-500">Late penalty</dt><dd className="font-medium tabular-nums">{m.penalty_per_day}% per day</dd></div>
                   </dl>
                 ) : (
@@ -133,20 +133,24 @@ export default function DeadlinePage() {
                 )}
 
                 {data.can_edit && (
-                  <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-4">
-                    <label className="label sm:col-span-2">
+                  <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
+                    <label className="label">
                       Due date
-                      <input name="due_at" type="datetime-local" required defaultValue={m.due_at ? toLocalInput(m.due_at) : ""} className="input" />
+                      <input name="due_date" type="date" required defaultValue={m.due_at ? toLocalInput(m.due_at).slice(0, 10) : ""} className="input" />
                     </label>
                     <label className="label">
-                      Grace (min)
-                      <input name="grace_minutes" type="number" min={0} max={data.max_grace_minutes} required defaultValue={m.grace_minutes} className="input" />
+                      Due time
+                      <input name="due_time" type="time" required defaultValue={m.due_at ? toLocalInput(m.due_at).slice(11) : "23:59"} className="input" />
+                    </label>
+                    <label className="label">
+                      Grace (days)
+                      <input name="grace_days" type="number" min={0} max={data.max_grace_days} required defaultValue={m.grace_days} className="input" />
                     </label>
                     <label className="label">
                       Penalty (%/day)
                       <input name="penalty_per_day" type="number" min={0} max={data.max_penalty_per_day} required defaultValue={m.penalty_per_day} className="input" />
                     </label>
-                    <button disabled={saving === m.phase} className="btn-primary sm:col-span-4 sm:justify-self-end">
+                    <button disabled={saving === m.phase} className="btn-primary sm:col-span-5 sm:justify-self-end">
                       {saving === m.phase ? "Saving..." : `Save ${m.phase}`}
                     </button>
                   </form>

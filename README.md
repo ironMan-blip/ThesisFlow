@@ -165,8 +165,8 @@ Supervisor and panel member are not account roles. They will be links between a 
 ### 5. Deadlines (phases P1, P2, P3)
 
 - The thesis has three phases: **P1, P2, P3**. The coordinator sets, for each phase:
-  - a **due date and time**,
-  - a **grace period** in minutes (0 to 7 days),
+  - a **due date and time** (time defaults to 11:59 PM),
+  - a **grace period** in days (0 to 7),
   - a **late penalty** in percent per day (0 to 100).
 - Deadlines must stay in order: a phase cannot be due before an earlier phase or after a later one.
 - Everyone sees each phase's status: **not set**, **open**, **in grace**, or **closed**, with a live countdown ("Due in" while open, "Grace ends in" during grace).

@@ -20,13 +20,13 @@ def late_days(due_at: datetime, at: datetime) -> int:
 
 def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_student: bool):
     if m is None:
-        return MilestoneOut(phase=phase, due_at=None, grace_minutes=0, penalty_per_day=0, closes_at=None, status="not_set")
+        return MilestoneOut(phase=phase, due_at=None, grace_days=0, penalty_per_day=0, closes_at=None, status="not_set")
     closes_at = m.closes_at
     status = "open" if now <= m.due_at else "grace" if now <= closes_at else "closed"
     out = MilestoneOut(
         phase=phase,
         due_at=m.due_at,
-        grace_minutes=m.grace_minutes,
+        grace_days=m.grace_days,
         penalty_per_day=m.penalty_per_day,
         closes_at=closes_at,
         status=status,
