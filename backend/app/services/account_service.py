@@ -1,4 +1,4 @@
-"""Requests the coordinator decides: sign-ups (student and faculty) and account deletions."""
+"""Requests the coordinator decides (sign-ups and account deletions), plus the coordinator's account list."""
 
 from datetime import datetime, timezone
 
@@ -62,7 +62,24 @@ def _deletion_pending(db: Session, user_id: int) -> User:
 
 
 def approve_deletion(db: Session, user_id: int) -> None:
-    user = _deletion_pending(db, user_id)
+    _delete(db, _deletion_pending(db, user_id))
+
+
+def list_accounts(db: Session) -> list[User]:
+    # Unapproved sign-ups are not accounts yet; they live in pending_registrations.
+    return list(db.scalars(select(User).where(User.approved.is_(True)).order_by(User.role, User.full_name)))
+
+
+def delete_account(db: Session, user_id: int) -> None:
+    user = db.get(User, user_id)
+    if user is None or not user.approved:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No account with that id")
+    if user.role == Role.coordinator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The coordinator account cannot be deleted")
+    _delete(db, user)
+
+
+def _delete(db: Session, user: User) -> None:
     files = proposal_service.delete_owned(db, user)
     db.delete(user)
     db.commit()

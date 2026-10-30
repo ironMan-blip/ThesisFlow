@@ -20,7 +20,7 @@ class Role(str, enum.Enum):
 ROLE_TOOLS = {
     Role.student: ["proposal", "deadlines", "account"],
     Role.faculty: ["deadlines", "account"],
-    Role.coordinator: ["deadlines", "registration_requests", "deletion_requests"],
+    Role.coordinator: ["deadlines", "accounts", "registration_requests", "deletion_requests"],
 }
 
 # The coordinator has this long to decide a sign-up or an account deletion request.

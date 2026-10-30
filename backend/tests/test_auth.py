@@ -218,3 +218,22 @@ def test_deletion_request_lapses_after_48_hours(client, db):
     assert me["deletion_pending"] is False
     # The user may ask again.
     assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+
+
+def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path):
+    student = auth(client, db, "s@b.com")
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    assert upload(client, student).status_code == 201
+    assert register(client).status_code == 201  # unapproved sign-up: not an account yet
+
+    assert client.get("/api/auth/accounts", headers=student).status_code == 403
+    accounts = client.get("/api/auth/accounts", headers=coord).json()
+    by_email = {a["email"]: a["id"] for a in accounts}
+    assert set(by_email) == {"s@b.com", "coord@b.com"}
+
+    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=student).status_code == 403
+    assert client.delete(f"/api/auth/accounts/{by_email['coord@b.com']}", headers=coord).status_code == 403
+    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 204
+    assert db.get(User, by_email["s@b.com"]) is None
+    assert not list(tmp_path.rglob("*.pdf"))
+    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 404

@@ -49,3 +49,13 @@ def approve_deletion(user_id: int, db: Session = Depends(get_db)):
 @router.delete("/deletion-requests/{user_id}", response_model=UserOut, dependencies=[Depends(coordinator)])
 def reject_deletion(user_id: int, db: Session = Depends(get_db)):
     return account_service.reject_deletion(db, user_id)
+
+
+@router.get("/accounts", response_model=list[UserOut], dependencies=[Depends(coordinator)])
+def accounts(db: Session = Depends(get_db)):
+    return account_service.list_accounts(db)
+
+
+@router.delete("/accounts/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)])
+def delete_account(user_id: int, db: Session = Depends(get_db)):
+    account_service.delete_account(db, user_id)
