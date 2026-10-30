@@ -6,7 +6,72 @@ ThesisFlow brings the thesis process into one place: students submit their propo
 
 **Stack:** FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + Tailwind, all run with Docker Compose.
 
-![System architecture](architecture.png)
+## Architecture
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff", "primaryColor": "#ffffff", "primaryTextColor": "#111111", "lineColor": "#666666", "fontFamily": "Helvetica, Arial, sans-serif"}}}%%
+flowchart LR
+  subgraph canvas[" "]
+    direction LR
+    subgraph users["Users"]
+      direction TB
+      student["🎓 <b>Student</b><br/>Sees deadlines + late days,<br/>uploads / deletes proposal PDFs"]
+      faculty["🧑‍🏫 <b>Faculty</b><br/>Signs up with initials,<br/>waits for coordinator approval"]
+      coord["🛠️ <b>Coordinator</b><br/>Sets deadlines, approves sign-ups<br/>+ deletions, manages accounts"]
+      everyone["<b>Everyone</b><br/>Sign up (needs approval), log in<br/>with 8-digit ID, ask to delete account"]
+      student ~~~ faculty ~~~ coord ~~~ everyone
+    end
+
+    subgraph fe["FRONTEND · port 5173 — React + Vite + Tailwind (frontend/src/)"]
+      direction TB
+      pages["<b>pages/</b> one file per screen: Login, Home,<br/>Deadlines, Proposal, Account, Accounts, Requests"]
+      client["<b>api/client.js</b> sends requests,<br/>attaches the login token (JWT)"]
+      tools["<b>tools.jsx</b> shows the menu items the server<br/>says this user may use (+ pending badges)"]
+      ferule["<b>Rule:</b> only <i>shows</i> data. No business logic here."]
+      pages ~~~ client ~~~ tools ~~~ ferule
+    end
+
+    subgraph be["BACKEND · port 8000 — FastAPI (backend/app/, API docs at /docs)"]
+      direction TB
+      controllers["<b>controllers/</b><br/>URLs: /api/auth, /api/proposals, /api/milestones.<br/>Check who is logged in + their role, then call a service."]
+      services["<b>services/</b><br/>All the rules: ID format, sign-up approval, password strength,<br/>deadline order, late days, PDF size/type, duplicate files."]
+      models["<b>models/ + schemas/</b><br/>Database tables (SQLAlchemy) and<br/>request/response shapes (Pydantic)."]
+      controllers --> services --> models
+    end
+
+    subgraph store["Storage"]
+      direction TB
+      db["<b>DATABASE — PostgreSQL 16</b><br/>Tables: users (ID, role, initials, approved),<br/>proposals, proposal versions, milestones.<br/>Schema changes = Alembic migrations"]
+      files["<b>FILE STORAGE — uploads/ folder</b><br/>The proposal PDFs themselves. The DB only<br/>keeps name, size and sha256."]
+      db ~~~ files
+    end
+
+    users -- "uses a browser" --> fe
+    fe <-- "HTTP + JSON /api/...<br/>JWT in header" --> be
+    be <-- "SQL" --> db
+    be --> files
+  end
+
+  style canvas fill:#ffffff,stroke:#ffffff
+  style users fill:#ffffff,stroke:#d0d7de
+  style fe fill:#ffffff,stroke:#3b9cf0,stroke-width:2px
+  style be fill:#ffffff,stroke:#3fb950,stroke-width:2px
+  style store fill:#ffffff,stroke:#b57bee,stroke-width:2px
+  classDef box fill:#ffffff,stroke:#d0d7de,color:#111111
+  classDef layer fill:#f3fbf4,stroke:#3fb950,stroke-dasharray:4 3,color:#111111
+  class student,faculty,coord,everyone,pages,client,tools,ferule,db,files box
+  class controllers,services,models layer
+```
+
+**Example — a student uploads a proposal PDF:**
+
+1. Student picks a file on the **Proposal page**.
+2. **client.js** sends `POST /api/proposals/mine/versions` + token.
+3. **Controller** checks: logged in? a student?
+4. **Service** checks PDF + size, saves the file, adds a version row.
+5. Server replies with JSON; the page shows the new version list.
+
+Run everything with `docker compose up` — it starts 3 containers: **frontend**, **backend**, **db**. Secrets + coordinator account come from `.env` (no defaults). Tests: `pytest` in `backend/tests/`.
 
 ## Getting started
 
