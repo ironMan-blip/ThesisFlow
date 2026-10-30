@@ -17,13 +17,13 @@ def test_late_days_with_fixed_clock():
 
 def test_grace_countdown_targets_closes_at(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
-    put(client, coord, "P1", datetime.now(timezone.utc) - timedelta(minutes=5), grace=60)
+    put(client, coord, "P1", datetime.now(timezone.utc) - timedelta(minutes=5), grace=1)
     p1 = by_phase(client.get("/api/milestones", headers=coord))["P1"]
     assert (p1["status"], p1["countdown_to"], p1["countdown_label"]) == ("grace", p1["closes_at"], "Grace ends in")
 
 
 def put(client, h, phase, due_at, grace=0, penalty=10):
-    body = {"due_at": due_at.isoformat(), "grace_minutes": grace, "penalty_per_day": penalty}
+    body = {"due_at": due_at.isoformat(), "grace_days": grace, "penalty_per_day": penalty}
     return client.put(f"/api/milestones/{phase}", headers=h, json=body)
 
 
@@ -38,13 +38,13 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     assert put(client, coord, "P4", T).status_code == 422
     assert put(client, coord, "P1", T, penalty=101).status_code == 422
     assert put(client, coord, "P1", T, grace=-1).status_code == 422
-    naive = {"due_at": "2026-11-01T23:59:00", "grace_minutes": 0, "penalty_per_day": 0}
+    naive = {"due_at": "2026-11-01T23:59:00", "grace_days": 0, "penalty_per_day": 0}
     assert client.put("/api/milestones/P1", headers=coord, json=naive).status_code == 422
 
-    res = put(client, coord, "P1", T, grace=30)
+    res = put(client, coord, "P1", T, grace=2)
     assert res.status_code == 200
     p1 = by_phase(res)["P1"]
-    assert p1["closes_at"].startswith("2026-11-02T00:29")
+    assert p1["closes_at"].startswith("2026-11-03T23:59")
     assert p1["late_days"] is None and p1["submission_status"] is None  # staff get no personal late count
     assert by_phase(res)["P2"]["status"] == "not_set"
     assert res.json()["can_edit"] is True
@@ -54,23 +54,18 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     assert by_phase(client.get("/api/milestones", headers=student))["P1"]["due_at"].startswith("2026-11-02T23:59")
 
 
-def test_phase_deadlines_must_be_in_order(client, db):
+def test_phase_deadlines_need_not_be_in_order(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     assert put(client, coord, "P2", T).status_code == 200
-    res = put(client, coord, "P1", T + timedelta(minutes=1))
-    assert (res.status_code, res.json()["detail"]) == (409, "P1 deadline can't be after P2")
-    assert put(client, coord, "P3", T - timedelta(days=1)).json()["detail"] == "P3 deadline can't be before P2"
-    assert put(client, coord, "P3", T).status_code == 200  # same time is fine
-    assert put(client, coord, "P2", T + timedelta(days=1)).json()["detail"] == "P2 deadline can't be after P3"
-    assert put(client, coord, "P1", T - timedelta(days=1)).status_code == 200
-    assert put(client, coord, "P3", T - timedelta(days=2)).json()["detail"] == "P3 deadline can't be before P1"
+    assert put(client, coord, "P1", T + timedelta(days=1)).status_code == 200
+    assert put(client, coord, "P3", T - timedelta(days=1)).status_code == 200
 
 
 def test_student_late_days_and_penalty(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     student = auth(client, db, "s@x.com")
     now = datetime.now(timezone.utc)
-    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4 * 24 * 60, penalty=15)  # ~3 days into grace
+    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=15)  # ~3 days into grace
     put(client, coord, "P2", now + timedelta(days=5), penalty=10)
 
     rows = by_phase(client.get("/api/milestones", headers=student))
@@ -89,11 +84,11 @@ def test_student_late_days_and_penalty(client, db):
     assert (rows["P2"]["late_days"], rows["P2"]["penalty_percent"]) == (0, 0)
     assert rows["P2"]["submission_status"] == "on_time"
 
-    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4 * 24 * 60, penalty=40)
+    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=40)
     assert by_phase(client.get("/api/milestones", headers=student))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
-    # Grace over and never submitted: late days stop at grace end (1h grace = 1 day).
-    put(client, coord, "P1", now - timedelta(days=3), grace=60, penalty=15)
+    # Grace over and never submitted: late days stop at grace end (1 day grace).
+    put(client, coord, "P1", now - timedelta(days=3), grace=1, penalty=15)
     other = auth(client, db, "o@x.com")
     rows = by_phase(client.get("/api/milestones", headers=other))
     assert (rows["P1"]["status"], rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == ("closed", 1, 15)

@@ -57,5 +57,5 @@ def client(db):
 def timelines(db):
     # Uploads need the phase's timeline set; tests that aren't about timelines get all of them.
     due = datetime.now(timezone.utc) + timedelta(days=30)
-    db.add_all(Milestone(phase=p, due_at=due, grace_minutes=0, penalty_per_day=0) for p in Phase)
+    db.add_all(Milestone(phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
     db.flush()
