@@ -3,6 +3,14 @@ A Thesis platform project for CSE470-bracu
 
 Stack: FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + Tailwind. See `470_srs_g7.pdf`.
 
+## Features so far
+
+- Accounts: register / log in (JWT), password strength check, role-based tools on the dashboard.
+- Faculty approval: new faculty wait for coordinator approval.
+- Account deletion: request + coordinator approval, 48-hour lapse.
+- Deadlines: coordinator sets a deadline per phase; students see a countdown, on-time / late status and late days.
+- Proposals: students upload PDF versions (max `MAX_UPLOAD_MB`, default 20 MB) and delete them. Re-uploading an identical file (same sha256) moves it to the latest version instead of storing a copy.
+
 ## Run
 
 Needs Docker only.
