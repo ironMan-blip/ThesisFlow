@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, login } from "../api/client";
 import { Logo } from "../components/Layout";
@@ -13,8 +13,13 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const registering = mode === "register";
+
+  useEffect(() => {
+    document.title = `${registering ? "Register" : "Log in"} · ThesisFlow`;
+  }, [registering]);
 
   const switchMode = () => {
     setMode(registering ? "login" : "register");
@@ -81,14 +86,21 @@ export default function LoginPage() {
             <input type="email" required autoComplete="email" placeholder="you@university.edu" value={email}
               onChange={(e) => setEmail(e.target.value)} className="input" />
           </label>
-          <label className="label">
-            Password
-            <input type="password" required minLength={registering ? 8 : undefined}
+          <div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="password" className="label">Password</label>
+              <button type="button" onClick={() => setShowPassword((s) => !s)} aria-controls="password"
+                className="text-xs font-medium text-teal-700 hover:underline">
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+            <input id="password" type={showPassword ? "text" : "password"} required minLength={registering ? 8 : undefined}
               autoComplete={registering ? "new-password" : "current-password"} value={password}
-              onChange={(e) => setPassword(e.target.value)} className="input" />
-          </label>
+              onChange={(e) => setPassword(e.target.value)} aria-describedby={registering ? "password-hint" : undefined} className="input" />
+            {registering && <p id="password-hint" className="mt-1 text-xs text-zinc-500">At least 8 characters.</p>}
+          </div>
           {error && <p role="alert" className="alert-error">{error}</p>}
-          {notice && <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800">{notice}</p>}
+          {notice && <p role="status" className="alert-success">{notice}</p>}
           <button disabled={loading} className="btn-primary w-full py-2.5">
             {loading ? "Please wait..." : registering ? "Register" : "Log in"}
           </button>

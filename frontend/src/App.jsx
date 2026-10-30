@@ -4,6 +4,7 @@ import DeadlinePage from "./pages/DeadlinePage";
 import FacultyRequestsPage from "./pages/FacultyRequestsPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import NotFoundPage from "./pages/NotFoundPage";
 import ProposalPage from "./pages/ProposalPage";
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/proposal" element={<ProposalPage />} />
         <Route path="/deadlines" element={<DeadlinePage />} />
         <Route path="/faculty-requests" element={<FacultyRequestsPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );

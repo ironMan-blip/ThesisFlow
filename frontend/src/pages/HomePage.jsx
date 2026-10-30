@@ -3,7 +3,7 @@ import { TOOLS } from "../tools";
 
 function ToolCard({ to, icon, title, children }) {
   return (
-    <Link to={to} className="card group p-5 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-teal-600/40">
+    <Link to={to} className="card group p-5 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-teal-600/40 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none">
       <span className="grid size-10 place-items-center rounded-lg bg-teal-50 text-teal-700">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="size-5" aria-hidden="true">
           {icon}
@@ -26,15 +26,18 @@ export default function HomePage() {
         <p className="mt-2 max-w-prose text-zinc-600">Here is where your thesis work lives.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {user.tools.map((key) => {
-          const t = TOOLS[key];
-          return <ToolCard key={key} to={t.to} title={t.title} icon={t.icon}>{t.text}</ToolCard>;
-        })}
-        <div className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
-          More tools will show up here as they are added.
+      {user.tools.length ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {user.tools.map((key) => {
+            const t = TOOLS[key];
+            return <ToolCard key={key} to={t.to} title={t.title} icon={t.icon}>{t.text}</ToolCard>;
+          })}
         </div>
-      </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
+          No tools are available for your account yet.
+        </p>
+      )}
     </div>
   );
 }

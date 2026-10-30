@@ -5,18 +5,25 @@ import { when } from "../format";
 export default function FacultyRequestsPage() {
   const [requests, setRequests] = useState(null);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [busy, setBusy] = useState(null); // id of the request being decided
 
   useEffect(() => {
     api("/auth/faculty-requests").then(setRequests).catch((err) => setError(err.message));
   }, []);
 
-  const decide = async (id, approve) => {
+  const decide = async (r, approve) => {
     setError(null);
+    setNotice(null);
+    setBusy(r.id);
     try {
-      await api(`/auth/faculty-requests/${id}${approve ? "/approve" : ""}`, { method: approve ? "POST" : "DELETE" });
-      setRequests((rs) => rs.filter((r) => r.id !== id));
+      await api(`/auth/faculty-requests/${r.id}${approve ? "/approve" : ""}`, { method: approve ? "POST" : "DELETE" });
+      setRequests((rs) => rs.filter((x) => x.id !== r.id));
+      setNotice(`${r.full_name} was ${approve ? "approved and can now log in" : "rejected"}.`);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -30,6 +37,7 @@ export default function FacultyRequestsPage() {
       </div>
 
       {error && <p role="alert" className="alert-error">{error}</p>}
+      {notice && <p role="status" className="alert-success">{notice}</p>}
 
       {!requests ? (
         <div className="h-24 animate-pulse rounded-xl bg-zinc-100" aria-hidden="true" />
@@ -44,8 +52,10 @@ export default function FacultyRequestsPage() {
                 <p className="text-sm text-zinc-600">{r.email} · requested {when(r.created_at)}</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => decide(r.id, false)} className="btn-secondary">Reject</button>
-                <button onClick={() => decide(r.id, true)} className="btn-primary">Approve</button>
+                <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary">Reject</button>
+                <button onClick={() => decide(r, true)} disabled={busy === r.id} className="btn-primary">
+                  {busy === r.id ? "Saving..." : "Approve"}
+                </button>
               </div>
             </li>
           ))}

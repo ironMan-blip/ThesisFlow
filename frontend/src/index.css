@@ -5,6 +5,9 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-zinc-50 text-zinc-900 antialiased;
   }
@@ -43,4 +46,8 @@
 
 @utility alert-error {
   @apply rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700;
+}
+
+@utility alert-success {
+  @apply rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800;
 }

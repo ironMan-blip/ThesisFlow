@@ -27,6 +27,8 @@ export default function DeadlinePage() {
   const [offset, setOffset] = useState(0); // server clock minus browser clock
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [saving, setSaving] = useState(null); // phase being saved
 
   const show = (res) => {
     setData(res);
@@ -49,6 +51,8 @@ export default function DeadlinePage() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     setError(null);
+    setNotice(null);
+    setSaving(phase);
     try {
       show(
         await api(`/milestones/${phase}`, {
@@ -60,8 +64,11 @@ export default function DeadlinePage() {
           },
         }),
       );
+      setNotice(`${phase} deadline saved.`);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(null);
     }
   };
 
@@ -77,6 +84,7 @@ export default function DeadlinePage() {
       </div>
 
       {error && <p role="alert" className="alert-error">{error}</p>}
+      {notice && <p role="status" className="alert-success">{notice}</p>}
 
       {!data ? (
         <div className="space-y-4" aria-hidden="true">
@@ -138,7 +146,9 @@ export default function DeadlinePage() {
                       Penalty (%/day)
                       <input name="penalty_per_day" type="number" min={0} max={data.max_penalty_per_day} required defaultValue={m.penalty_per_day} className="input" />
                     </label>
-                    <button className="btn-primary sm:col-span-4 sm:justify-self-end">Save {m.phase}</button>
+                    <button disabled={saving === m.phase} className="btn-primary sm:col-span-4 sm:justify-self-end">
+                      {saving === m.phase ? "Saving..." : `Save ${m.phase}`}
+                    </button>
                   </form>
                 )}
               </li>

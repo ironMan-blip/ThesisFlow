@@ -6,6 +6,7 @@ export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [pending, setPending] = useState(null);
   const dialog = useRef(null);
 
@@ -17,10 +18,12 @@ export default function ProposalPage() {
     e.preventDefault();
     const form = e.currentTarget;
     setError(null);
+    setNotice(null);
     setSaving(true);
     try {
       setProposal(await api("/proposals/mine/versions", { method: "POST", body: new FormData(form) }));
       form.reset();
+      setNotice("Upload complete. Your new version is at the top of the list.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -34,8 +37,10 @@ export default function ProposalPage() {
     const v = pending;
     setPending(null);
     setError(null);
+    setNotice(null);
     try {
       setProposal(await api(`/proposals/versions/${v.id}`, { method: "DELETE" }));
+      setNotice(`v${v.version_no} was removed.`);
     } catch (err) {
       setError(err.message);
     }
@@ -78,6 +83,7 @@ export default function ProposalPage() {
             <span className="mt-1 block text-xs font-normal text-zinc-500">PDF only{proposal && `, up to ${proposal.max_upload_mb} MB`}.</span>
           </label>
           {error && <p role="alert" className="alert-error">{error}</p>}
+          {notice && <p role="status" className="alert-success">{notice}</p>}
           <button disabled={saving} className="btn-primary w-full">
             {saving ? "Uploading..." : "Upload version"}
           </button>
@@ -102,9 +108,9 @@ export default function ProposalPage() {
           ) : (
             <ul className="divide-y divide-zinc-100">
               {proposal.versions.map((v) => (
-                <li key={v.id} className="flex items-start justify-between gap-4 px-6 py-4">
+                <li key={v.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-zinc-700">v{v.version_no}</span>
                       <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-700">{v.phase}</span>
                       {v.is_latest &&<span className="rounded-md bg-teal-50 px-1.5 py-0.5 text-xs font-medium text-teal-800">Latest</span>}
