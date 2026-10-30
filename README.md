@@ -32,9 +32,9 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 
 | Role | ID number | Password |
 |------|-----------|----------|
-| Student (seed) | `100001` | `password123` |
-| Faculty (seed) | `200001` | `password123` |
-| Coordinator | `ADMIN_ID_NUMBER` (default `000000`) | `ADMIN_PASSWORD` (default `password123`) |
+| Student (seed) | `10000001` | `password123` |
+| Faculty (seed) | `20000001` | `password123` |
+| Coordinator | `ADMIN_ID_NUMBER` (default `00000000`) | `ADMIN_PASSWORD` (default `password123`) |
 
 ### Configuration (`.env`)
 
@@ -42,7 +42,7 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 |----------|---------|---------|
 | `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Change it outside dev. |
 | `ADMIN_EMAIL` | `coordinator@thesisflow.test` | The one coordinator account. |
-| `ADMIN_ID_NUMBER` | `000000` | Coordinator login ID. Set again on every backend start. |
+| `ADMIN_ID_NUMBER` | `00000000` | Coordinator login ID. Set again on every backend start. |
 | `ADMIN_PASSWORD` | `password123` | Coordinator password. Set again on every backend start. |
 | `MAX_UPLOAD_MB` | `20` | Largest proposal PDF allowed. |
 | `JWT_EXPIRE_MINUTES` | `1440` | How long a login lasts (24 hours). |
@@ -61,10 +61,10 @@ Supervisor and panel member are not account roles. They will be links between a 
 
 ### 1. Accounts and login
 
-- Register with full name, email, a 6-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
+- Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
-- ID numbers are exactly 6 digits and must be unique across students and faculty. Log in with ID number and password.
+- ID numbers are exactly 8 digits and must be unique across students and faculty. Log in with ID number and password.
 - Login returns a JWT (valid 24 hours by default). The frontend sends it with every request.
 - **Coordinator account:** there is exactly one. It is created from `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
 

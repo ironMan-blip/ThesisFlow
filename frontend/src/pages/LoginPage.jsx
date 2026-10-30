@@ -50,7 +50,7 @@ export default function LoginPage() {
         <form onSubmit={submit} className="card space-y-5 p-7">
           <div>
             <h1 className="text-xl font-semibold">{registering ? "Create an account" : "Log in"}</h1>
-            <p className="mt-1 text-sm text-zinc-600">Use your 6-digit university ID to continue.</p>
+            <p className="mt-1 text-sm text-zinc-600">Use your 8-digit university ID to continue.</p>
           </div>
           {registering && (
             <>
@@ -79,8 +79,8 @@ export default function LoginPage() {
           )}
           <label className="label">
             ID number
-            <input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} title="Exactly 6 digits" autoComplete="username"
-              placeholder="123456" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} className="input" />
+            <input required inputMode="numeric" pattern="[0-9]{8}" maxLength={8} title="Exactly 8 digits" autoComplete="username"
+              placeholder="12345678" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} className="input" />
           </label>
           <div>
             <div className="flex items-center justify-between">

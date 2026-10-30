@@ -8,8 +8,8 @@ from app.models.user import Role
 from app.services import auth_service
 
 ACCOUNTS = [
-    ("student@thesisflow.test", "100001", "Demo Student", Role.student),
-    ("faculty@thesisflow.test", "200001", "Demo Faculty", Role.faculty),
+    ("student@thesisflow.test", "10000001", "Demo Student", Role.student),
+    ("faculty@thesisflow.test", "20000001", "Demo Faculty", Role.faculty),
 ]
 
 

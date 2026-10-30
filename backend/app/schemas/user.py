@@ -16,9 +16,9 @@ class UserCreate(BaseModel):
 
     @field_validator("id_number")
     @classmethod
-    def six_digits(cls, v: str) -> str:
-        if not (len(v) == 6 and v.isascii() and v.isdigit()):
-            raise ValueError("ID number must be exactly 6 digits")
+    def eight_digits(cls, v: str) -> str:
+        if not (len(v) == 8 and v.isascii() and v.isdigit()):
+            raise ValueError("ID number must be exactly 8 digits")
         return v
 
     @field_validator("password")
