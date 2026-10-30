@@ -64,9 +64,9 @@ def ensure_admin(db: Session) -> User:
     user = get_by_email(db, settings.admin_email)
     if user is None:
         return create_user(
-            db, settings.admin_email, settings.admin_id_number, "Coordinator", settings.admin_password, Role.coordinator
+            db, settings.admin_email, settings.admin_id_number, "ironMan", settings.admin_password, Role.coordinator
         )
-    user.role, user.approved, user.id_number = Role.coordinator, True, settings.admin_id_number
+    user.role, user.approved, user.id_number, user.full_name = Role.coordinator, True, settings.admin_id_number, "ironMan"
     if not verify_password(settings.admin_password, user.password_hash):
         user.password_hash = hash_password(settings.admin_password)
     db.commit()
