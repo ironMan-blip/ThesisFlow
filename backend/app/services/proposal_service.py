@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.models.milestone import Phase
 from app.models.proposal import Proposal, ProposalVersion
 from app.models.user import Role, User
 
@@ -59,7 +60,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int]:
     return stored, size
 
 
-def upload_version(db: Session, user: User, title: str, abstract: str, file: UploadFile) -> Proposal:
+def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> Proposal:
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title must be 1 to 255 characters")
@@ -78,6 +79,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             ProposalVersion(
                 proposal_id=proposal.id,
                 version_no=(last or 0) + 1,
+                phase=phase,
                 title=title,
                 abstract=abstract,
                 original_filename=Path(file.filename or "proposal.pdf").name[:255],

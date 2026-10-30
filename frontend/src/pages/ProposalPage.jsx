@@ -56,6 +56,14 @@ export default function ProposalPage() {
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
           <h2 className="font-semibold">Upload a new version</h2>
           <label className="label">
+            Phase
+            <select name="phase" required defaultValue="P1" className="input">
+              <option>P1</option>
+              <option>P2</option>
+              <option>P3</option>
+            </select>
+          </label>
+          <label className="label">
             Title
             <input name="title" required maxLength={255} placeholder="Working title of your thesis" className="input" />
           </label>
@@ -99,6 +107,7 @@ export default function ProposalPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-zinc-700">v{v.version_no}</span>
+                      <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-700">{v.phase}</span>
                       {v.is_latest &&<span className="rounded-md bg-teal-50 px-1.5 py-0.5 text-xs font-medium text-teal-800">Latest</span>}
                       <p className="truncate font-medium">{v.title}</p>
                     </div>

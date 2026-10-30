@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.controllers import auth_controller, proposal_controller
+from app.controllers import auth_controller, milestone_controller, proposal_controller
 
 app = FastAPI(title="ThesisFlow API")
 
@@ -17,6 +17,7 @@ app.add_middleware(
 # Register each feature's router here.
 app.include_router(auth_controller.router)
 app.include_router(proposal_controller.router)
+app.include_router(milestone_controller.router)
 
 
 @app.get("/api/health", tags=["health"])

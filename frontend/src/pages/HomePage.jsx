@@ -23,6 +23,18 @@ export default function HomePage() {
             <p className="mt-4 text-sm font-medium text-teal-700">Open <span className="inline-block transition group-hover:translate-x-0.5">→</span></p>
           </Link>
         )}
+        <Link to="/deadlines" className="card group p-5 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-teal-600/40">
+          <span className="grid size-10 place-items-center rounded-lg bg-teal-50 text-teal-700">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="size-5" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+            </svg>
+          </span>
+          <h2 className="mt-4 font-semibold">Deadlines</h2>
+          <p className="mt-1 text-sm text-zinc-600">
+            {user.role === "coordinator" ? "Set P1, P2 and P3 due dates, grace time and penalties." : "See P1, P2 and P3 due dates and countdowns."}
+          </p>
+          <p className="mt-4 text-sm font-medium text-teal-700">Open <span className="inline-block transition group-hover:translate-x-0.5">→</span></p>
+        </Link>
         <div className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
           More tools will show up here as they are added.
         </div>

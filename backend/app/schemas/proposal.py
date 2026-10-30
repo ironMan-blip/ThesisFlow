@@ -2,12 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
+from app.models.milestone import Phase
+
 
 class ProposalVersionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     version_no: int
+    phase: Phase
     title: str
     abstract: str
     original_filename: str

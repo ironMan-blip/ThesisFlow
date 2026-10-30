@@ -18,11 +18,11 @@ def auth(client, db, email, role=Role.student):
     return {"Authorization": f"Bearer {token}"}
 
 
-def upload(client, headers, content=PDF, title="My thesis", name="p.pdf"):
+def upload(client, headers, content=PDF, title="My thesis", name="p.pdf", phase="P1"):
     return client.post(
         "/api/proposals/mine/versions",
         headers=headers,
-        data={"title": title, "abstract": "About it"},
+        data={"phase": phase, "title": title, "abstract": "About it"},
         files={"file": (name, content, "application/pdf")},
     )
 
@@ -38,6 +38,7 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     assert [v["version_no"] for v in versions] == [2, 1]
     assert [v["title"] for v in versions] == ["v2", "v1"]
     assert [v["is_latest"] for v in versions] == [True, False]
+    assert versions[0]["phase"] == "P1"
     assert versions[0]["size_label"].endswith(" KB")
     assert versions[0]["download_path"] == f"/proposals/versions/{versions[0]['id']}/file"
 
@@ -51,6 +52,7 @@ def test_rejects_non_pdf_and_oversize(client, db, monkeypatch):
     h = auth(client, db, "s@x.com")
     assert upload(client, h, content=b"hello").status_code == 422
     assert upload(client, h, title="  ").status_code == 422
+    assert upload(client, h, phase="P9").status_code == 422
     monkeypatch.setattr(settings, "max_upload_mb", 1)
     assert upload(client, h, content=PDF + b"x" * 1024 * 1024).status_code == 413
     assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
