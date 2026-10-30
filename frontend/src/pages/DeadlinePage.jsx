@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { when } from "../format";
 
 const STATUS = {
   not_set: ["Not set", "bg-zinc-100 text-zinc-600"],
@@ -20,8 +21,6 @@ const toLocalInput = (iso) => {
   const d = new Date(iso);
   return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
-
-const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export default function DeadlinePage() {
   const [data, setData] = useState(null);

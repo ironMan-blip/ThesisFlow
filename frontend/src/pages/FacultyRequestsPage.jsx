@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-
-const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+import { when } from "../format";
 
 export default function FacultyRequestsPage() {
   const [requests, setRequests] = useState(null);

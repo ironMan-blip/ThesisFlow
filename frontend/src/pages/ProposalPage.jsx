@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, download } from "../api/client";
+import { when } from "../format";
 
 export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
@@ -111,7 +112,7 @@ export default function ProposalPage() {
                     </div>
                     <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>
                     <p className="mt-1.5 break-words text-xs text-zinc-500">
-                      {v.original_filename} · {v.size_label} · {new Date(v.created_at).toLocaleString()}
+                      {v.original_filename} · {v.size_label} · {when(v.created_at)}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">

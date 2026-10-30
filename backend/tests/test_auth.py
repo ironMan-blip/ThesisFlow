@@ -1,3 +1,11 @@
+from datetime import timedelta
+
+from app.config import settings
+from app.models.user import Role, User
+from app.services import auth_service
+from tests.helpers import auth
+
+
 def register(client, email="a@b.com", password="password123"):
     return client.post("/api/auth/register", json={"email": email, "full_name": "A", "password": password})
 
@@ -30,9 +38,6 @@ def test_me_requires_token(client):
 
 
 def test_me_works_for_seeded_reserved_domain(client, db):
-    from app.models.user import Role
-    from app.services import auth_service
-
     auth_service.create_user(db, "student@thesisflow.test", "S", "password123", Role.student)
     token = login(client, email="student@thesisflow.test").json()["access_token"]
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
@@ -49,9 +54,6 @@ def test_coordinator_signup_rejected(client):
 
 
 def test_faculty_waits_for_approval(client, db):
-    from app.models.user import Role
-    from tests.helpers import auth
-
     r = client.post(
         "/api/auth/register", json={"email": "f@b.com", "full_name": "F", "password": "password123", "role": "faculty"}
     )
@@ -73,9 +75,6 @@ def test_faculty_waits_for_approval(client, db):
 
 
 def test_reject_frees_email(client, db):
-    from app.models.user import Role
-    from tests.helpers import auth
-
     body = {"email": "f@b.com", "full_name": "F", "password": "password123", "role": "faculty"}
     uid = client.post("/api/auth/register", json=body).json()["id"]
     coord = auth(client, db, "coord@b.com", Role.coordinator)
@@ -84,9 +83,6 @@ def test_reject_frees_email(client, db):
 
 
 def test_ensure_admin_creates_and_resets(client, db, monkeypatch):
-    from app.config import settings
-    from app.services import auth_service
-
     monkeypatch.setattr(settings, "admin_email", "Admin@B.com")
     monkeypatch.setattr(settings, "admin_password", "first-pass1")
     auth_service.ensure_admin(db)
@@ -101,10 +97,6 @@ def test_ensure_admin_creates_and_resets(client, db, monkeypatch):
 
 
 def test_faculty_cannot_reregister_within_48_hours(client, db):
-    from datetime import timedelta
-
-    from app.models.user import User
-
     body = {"email": "f@b.com", "full_name": "F", "password": "password123", "role": "faculty"}
     old_id = client.post("/api/auth/register", json=body).json()["id"]
     r = client.post("/api/auth/register", json=body)
