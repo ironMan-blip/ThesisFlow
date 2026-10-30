@@ -234,6 +234,12 @@ def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path):
     accounts = client.get("/api/auth/accounts", headers=coord).json()
     by_email = {a["email"]: a["id"] for a in accounts}
     assert set(by_email) == {"s@b.com"}  # coordinator is the admin login, not listed
+    student_id = db.scalar(select(User.id_number).where(User.email == "s@b.com"))
+    emails = lambda q: [a["email"] for a in client.get(f"/api/auth/accounts?{q}", headers=coord).json()]
+    assert emails(f"role=student&id_prefix={student_id[:3]}") == ["s@b.com"]
+    assert emails("role=faculty") == []
+    assert emails("id_prefix=%25") == []  # LIKE wildcards are matched literally
+    assert client.get("/api/auth/accounts?role=coordinator", headers=coord).status_code == 422
 
     coord_id = db.scalar(select(User.id).where(User.email == "coord@b.com"))
     assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=student).status_code == 403
@@ -242,3 +248,16 @@ def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path):
     assert db.get(User, by_email["s@b.com"]) is None
     assert not list(tmp_path.rglob("*.pdf"))
     assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 404
+
+
+def test_pending_counts_and_name_fields(client, db):
+    student = auth(client, db, "s@b.com")
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    assert register(client).status_code == 201
+    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+
+    assert client.get("/api/auth/me/counts", headers=student).json() == {}
+    assert client.get("/api/auth/me/counts", headers=coord).json() == {"registration_requests": 1, "deletion_requests": 1}
+
+    user = User(full_name="ada byron king")
+    assert (user.first_name, user.monogram) == ("ada", "AB")

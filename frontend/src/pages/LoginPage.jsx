@@ -33,7 +33,7 @@ export default function LoginPage() {
     run("submit", async () => {
       // Every sign-up waits for coordinator approval, so registering never logs in.
       if (registering) {
-        await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role, initials: role === "faculty" ? initials : null } });
+        await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role, initials } });
         setMode("login");
         return "Request sent. The coordinator will review your account within 48 hours. You can log in once it is approved.";
       }

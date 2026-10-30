@@ -3,7 +3,6 @@ import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
 import { Alerts, PageHeader } from "../components/ui";
 import { when } from "../format";
-import { TOOLS } from "../tools";
 import { useAction } from "../useAction";
 
 // Coordinator inbox of requests to approve or reject; RegistrationRequestsPage and DeletionRequestsPage configure it.
@@ -58,7 +57,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
 
 export const RegistrationRequestsPage = () => (
   <RequestsPage
-    path={TOOLS.registration_requests.requests}
+    path="/auth/registration-requests"
     title="Registration requests"
     intro="Students and faculty who registered wait here until you approve them. Please review each request within 48 hours."
     approved="was approved and can now log in"
@@ -69,7 +68,7 @@ export const RegistrationRequestsPage = () => (
 
 export const DeletionRequestsPage = () => (
   <RequestsPage
-    path={TOOLS.deletion_requests.requests}
+    path="/auth/deletion-requests"
     title="Deletion requests"
     intro="Users who asked to delete their account. Approving deletes the account and its proposal for good. A request you do not approve within 48 hours lapses and the account is kept."
     approved="was deleted"

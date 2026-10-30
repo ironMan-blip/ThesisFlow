@@ -14,11 +14,11 @@ export const TOOLS = {
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M17 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3" /></>,
   },
   registration_requests: {
-    to: "/registration-requests", requests: "/auth/registration-requests", title: "Registration requests", text: "Approve or reject students and faculty who registered.",
+    to: "/registration-requests", title: "Registration requests", text: "Approve or reject students and faculty who registered.",
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 11l2 2 4-4" /></>,
   },
   deletion_requests: {
-    to: "/deletion-requests", requests: "/auth/deletion-requests", title: "Deletion requests", text: "Approve or reject users who asked to delete their account.",
+    to: "/deletion-requests", title: "Deletion requests", text: "Approve or reject users who asked to delete their account.",
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 10l5 5M21 10l-5 5" /></>,
   },
   account: {

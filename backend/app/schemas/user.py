@@ -54,6 +54,8 @@ class UserOut(BaseModel):
     email: str
     id_number: str
     full_name: str
+    first_name: str
+    monogram: str
     initials: str | None
     role: Role
     approved: bool

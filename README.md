@@ -144,6 +144,8 @@ frontend/src/
 | POST | `/api/auth/login` | anyone |
 | GET | `/api/auth/me` | logged in |
 | POST | `/api/auth/me/deletion-request` | student, faculty |
+| GET | `/api/auth/me/counts` (pending-request badges per tool) | logged in |
+| GET / DELETE | `/api/auth/accounts[/{id}]` (`?role=&id_prefix=` filters) | coordinator |
 | GET / POST / DELETE | `/api/auth/registration-requests[/{id}[/approve]]` | coordinator |
 | GET / POST / DELETE | `/api/auth/deletion-requests[/{id}[/approve]]` | coordinator |
 | GET | `/api/milestones` | logged in |

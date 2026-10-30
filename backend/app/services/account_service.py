@@ -65,12 +65,22 @@ def approve_deletion(db: Session, user_id: int) -> None:
     _delete(db, _deletion_pending(db, user_id))
 
 
-def list_accounts(db: Session) -> list[User]:
+def pending_counts(db: Session, user: User) -> dict[str, int]:
+    # Badge counts keyed by tool; only the coordinator decides requests.
+    if user.role != Role.coordinator:
+        return {}
+    return {"registration_requests": len(pending_registrations(db)), "deletion_requests": len(pending_deletions(db))}
+
+
+def list_accounts(db: Session, role: Role | None = None, id_prefix: str = "") -> list[User]:
     # Unapproved sign-ups are not accounts yet; they live in pending_registrations.
     # The coordinator is the admin login, not a member account.
-    return list(db.scalars(
-        select(User).where(User.approved.is_(True), User.role != Role.coordinator).order_by(User.role, User.full_name)
-    ))
+    query = select(User).where(
+        User.approved.is_(True), User.role != Role.coordinator, User.id_number.startswith(id_prefix, autoescape=True)
+    )
+    if role:
+        query = query.where(User.role == role)
+    return list(db.scalars(query.order_by(User.role, User.full_name)))
 
 
 def delete_account(db: Session, user_id: int) -> None:

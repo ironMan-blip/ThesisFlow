@@ -50,6 +50,15 @@ class User(Base):
         return ROLE_TOOLS[self.role]
 
     @property
+    def first_name(self) -> str:
+        return (self.full_name.split() or [""])[0]
+
+    @property
+    def monogram(self) -> str:
+        # Avatar letters, e.g. "Ada Byron King" -> "AB".
+        return "".join(p[0] for p in self.full_name.split()[:2]).upper()
+
+    @property
     def deletion_pending(self) -> bool:
         at = self.deletion_requested_at
         return at is not None and datetime.now(timezone.utc) < at + REVIEW_WINDOW

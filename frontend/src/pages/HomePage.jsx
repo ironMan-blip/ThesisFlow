@@ -24,7 +24,7 @@ export default function HomePage() {
     <div className="space-y-8">
       <div>
         <p className="text-sm font-medium text-teal-700 capitalize">{user.role} dashboard</p>
-        <h1 className="mt-1 text-3xl font-semibold">Welcome back, {user.full_name.split(" ")[0]}</h1>
+        <h1 className="mt-1 text-3xl font-semibold">Welcome back, {user.first_name}</h1>
         <p className="mt-2 max-w-prose text-zinc-600">Here is where your thesis work lives.</p>
       </div>
 

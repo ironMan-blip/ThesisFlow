@@ -3,6 +3,8 @@ import { api } from "../api/client";
 import { Alerts, PageHeader } from "../components/ui";
 import { useAction } from "../useAction";
 
+const TABS = { student: "students", faculty: "faculties" }; // role -> tab label
+
 // Coordinator's list of every approved student and faculty account, each deletable.
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState(null);
@@ -10,13 +12,17 @@ export default function AccountsPage() {
   const [confirming, setConfirming] = useState(null); // id of the account awaiting "Yes, delete"
   const { busy, error, notice, setError, run } = useAction(); // busy key is the account id being deleted
 
-  useEffect(() => {
-    api("/auth/accounts").then(setAccounts).catch((err) => setError(err.message));
-  }, [setError]);
+  const [role, setRole] = useState("student");
+  const tab = TABS[role];
 
-  const [tab, setTab] = useState("students");
-  const shown = accounts?.filter((a) =>
-    a.role === (tab === "students" ? "student" : "faculty") && String(a.id_number).startsWith(query)) ?? [];
+  // The API filters by role and ID prefix; ignore stale replies when the filter changes mid-request.
+  useEffect(() => {
+    let current = true;
+    api(`/auth/accounts?${new URLSearchParams({ role, id_prefix: query })}`)
+      .then((as) => current && setAccounts(as))
+      .catch((err) => current && setError(err.message));
+    return () => { current = false; };
+  }, [role, query, setError]);
 
   const remove = (a) =>
     run(a.id, async () => {
@@ -37,16 +43,16 @@ export default function AccountsPage() {
       ) : (
         <div className="space-y-4">
         <div role="tablist" aria-label="Account type" className="flex gap-2">
-          {["students", "faculties"].map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} onClick={() => { setTab(t); setConfirming(null); }}
-              className={`${tab === t ? "btn bg-zinc-900 text-white" : "btn-secondary"} capitalize`}>{t}</button>
+          {Object.entries(TABS).map(([r, t]) => (
+            <button key={r} role="tab" aria-selected={role === r} onClick={() => { setRole(r); setConfirming(null); }}
+              className={`${role === r ? "btn bg-zinc-900 text-white" : "btn-secondary"} capitalize`}>{t}</button>
           ))}
         </div>
         <input type="search" inputMode="numeric" aria-label="Search by ID" placeholder="Search by ID"
           value={query} onChange={(e) => setQuery(e.target.value.trim())} className="input max-w-xs" />
-        {shown.length === 0 && <p className="text-sm text-zinc-600">{query ? `No account in ${tab} matches ID "${query}".` : `No ${tab} accounts yet.`}</p>}
+        {accounts.length === 0 && <p className="text-sm text-zinc-600">{query ? `No account in ${tab} matches ID "${query}".` : `No ${tab} accounts yet.`}</p>}
         <ul className="space-y-3">
-          {shown.map((a) => (
+          {accounts.map((a) => (
             <li key={a.id} className="card flex flex-wrap items-center justify-between gap-4 p-5">
               <div>
                 <p className="font-medium">{a.full_name}{a.initials && ` (${a.initials})`} <span className="text-sm font-normal capitalize text-zinc-500">· {a.role}</span></p>
