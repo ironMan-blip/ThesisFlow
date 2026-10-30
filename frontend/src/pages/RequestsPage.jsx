@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
 import { Alerts, PageHeader } from "../components/ui";
 import { when } from "../format";
+import { TOOLS } from "../tools";
 import { useAction } from "../useAction";
 
 // Coordinator inbox of requests to approve or reject; RegistrationRequestsPage and DeletionRequestsPage configure it.
 function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   const [requests, setRequests] = useState(null);
+  const { refreshCounts } = useOutletContext();
   const { busy, error, notice, setError, run } = useAction(); // busy key is the request id being decided
 
   useEffect(() => {
@@ -17,6 +20,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
     run(r.id, async () => {
       await api(`${path}/${r.id}${approve ? "/approve" : ""}`, { method: approve ? "POST" : "DELETE" });
       setRequests((rs) => rs.filter((x) => x.id !== r.id));
+      refreshCounts();
       return `${r.full_name} ${approve ? approved : rejected}.`;
     });
 
@@ -54,7 +58,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
 
 export const RegistrationRequestsPage = () => (
   <RequestsPage
-    path="/auth/registration-requests"
+    path={TOOLS.registration_requests.requests}
     title="Registration requests"
     intro="Students and faculty who registered wait here until you approve them. Please review each request within 48 hours."
     approved="was approved and can now log in"
@@ -65,7 +69,7 @@ export const RegistrationRequestsPage = () => (
 
 export const DeletionRequestsPage = () => (
   <RequestsPage
-    path="/auth/deletion-requests"
+    path={TOOLS.deletion_requests.requests}
     title="Deletion requests"
     intro="Users who asked to delete their account. Approving deletes the account and its proposal for good. A request you do not approve within 48 hours lapses and the account is kept."
     approved="was deleted"

@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken } from "../api/client";
 import { TOOLS } from "../tools";
-import { Logo } from "./ui";
+import { CountBadge, Logo } from "./ui";
 
 const navClass = ({ isActive }) =>
-  `shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none ${
+  `relative shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none ${
     isActive ? "bg-zinc-100 text-zinc-900" : "text-zinc-600 hover:text-zinc-900"
   }`;
 
@@ -35,6 +35,26 @@ export default function Layout() {
         }
       });
   }, [navigate]);
+
+  // Pending counts for the coordinator's request tools; refetched on page change, every 10s, and on tab focus.
+  const [counts, setCounts] = useState({});
+  const refreshCounts = useCallback(() => {
+    for (const key of user?.tools ?? []) {
+      const path = TOOLS[key].requests;
+      if (path) api(path).then((rs) => setCounts((c) => ({ ...c, [key]: rs.length }))).catch(() => {});
+    }
+  }, [user]);
+  useEffect(refreshCounts, [refreshCounts, pathname]);
+  useEffect(() => {
+    if (!user?.tools.some((key) => TOOLS[key].requests)) return;
+    // shortcut: polling, not push; switch to SSE/WebSocket if many coordinators are online at once.
+    const id = setInterval(() => document.visibilityState === "visible" && refreshCounts(), 10000);
+    window.addEventListener("focus", refreshCounts);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", refreshCounts);
+    };
+  }, [user, refreshCounts]);
 
   if (!getToken()) return <Navigate to="/login" replace />;
   if (error)
@@ -66,7 +86,10 @@ export default function Layout() {
     <>
       <NavLink to="/" end className={navClass}>Dashboard</NavLink>
       {user.tools.map((key) => (
-        <NavLink key={key} to={TOOLS[key].to} className={navClass}>{TOOLS[key].title}</NavLink>
+        <NavLink key={key} to={TOOLS[key].to} className={navClass}>
+          {TOOLS[key].title}
+          <CountBadge count={counts[key]} />
+        </NavLink>
       ))}
     </>
   );
@@ -97,7 +120,7 @@ export default function Layout() {
         <nav aria-label="Main" className="flex gap-1 overflow-x-auto border-t border-zinc-100 px-4 py-2 sm:hidden">{links}</nav>
       </header>
       <main id="main" className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        <Outlet context={{ user }} />
+        <Outlet context={{ user, counts, refreshCounts }} />
       </main>
     </div>
   );

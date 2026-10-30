@@ -27,3 +27,14 @@ export function Alerts({ error, notice }) {
     </>
   );
 }
+
+// Pending-request count in the corner of a link or card; parent must be `relative`.
+export function CountBadge({ count, className = "-right-1 -top-1.5" }) {
+  if (!count) return null;
+  return (
+    <span className={`absolute grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white ${className}`}>
+      {count}
+      <span className="sr-only"> pending</span>
+    </span>
+  );
+}
