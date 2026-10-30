@@ -14,7 +14,7 @@ You only need [Docker](https://www.docker.com/) (with Docker Compose).
 
 ```bash
 git clone https://github.com/ironMan-blip/ThesisFlow.git && cd ThesisFlow
-cp .env.example .env                              # optional, the defaults work for local dev
+cp .env.example .env                              # required: fill in every value
 docker compose up --build                         # starts db, backend and frontend
 docker compose exec backend python -m app.seed    # optional: adds a dev student and faculty
 ```
@@ -32,18 +32,23 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 
 | Role | ID number | Password |
 |------|-----------|----------|
-| Student (seed) | `10000001` | `password123` |
-| Faculty (seed) | `20000001` | `password123` |
-| Coordinator | `ADMIN_ID_NUMBER` (default `00000000`) | `ADMIN_PASSWORD` (default `password123`) |
+| Student (seed) | `10000001` | `SEED_PASSWORD` |
+| Faculty (seed) | `20000001` | `SEED_PASSWORD` |
+| Coordinator | `ADMIN_ID_NUMBER` | `ADMIN_PASSWORD` |
 
 ### Configuration (`.env`)
 
+Sensitive values have no defaults. The backend and `docker compose` refuse to start if one is missing.
+
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Change it outside dev. |
-| `ADMIN_EMAIL` | `coordinator@thesisflow.test` | The one coordinator account. |
-| `ADMIN_ID_NUMBER` | `00000000` | Coordinator login ID. Set again on every backend start. |
-| `ADMIN_PASSWORD` | `password123` | Coordinator password. Set again on every backend start. |
+| `POSTGRES_USER` | required | Database user. Used to build `DATABASE_URL` in Docker. |
+| `POSTGRES_PASSWORD` | required | Database password. Only applied when the db volume is first created. |
+| `JWT_SECRET` | required | Secret used to sign login tokens. |
+| `ADMIN_EMAIL` | required | The one coordinator account. |
+| `ADMIN_ID_NUMBER` | required | Coordinator login ID. Set again on every backend start. |
+| `ADMIN_PASSWORD` | required | Coordinator password. Set again on every backend start. |
+| `SEED_PASSWORD` | none | Password for the seed accounts. Only `app.seed` needs it. |
 | `MAX_UPLOAD_MB` | `20` | Largest proposal PDF allowed. |
 | `JWT_EXPIRE_MINUTES` | `1440` | How long a login lasts (24 hours). |
 

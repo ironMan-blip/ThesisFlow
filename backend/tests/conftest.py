@@ -11,9 +11,7 @@ from app.database import Base, get_db
 from app.main import app
 
 # Tests use a separate database so they never touch dev data.
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql+psycopg://thesisflow:thesisflow@localhost:5432/thesisflow_test"
-)
+TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
 engine = create_engine(TEST_DATABASE_URL)
 
 

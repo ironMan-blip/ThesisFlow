@@ -1,8 +1,9 @@
 """Create a dev student and faculty account. Run: docker compose exec backend python -m app.seed
 
-Dev only. Both use the password "password123". The coordinator comes from ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD.
+Dev only. Both use the password in SEED_PASSWORD. The coordinator comes from ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD.
 """
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.user import Role
 from app.services import auth_service
@@ -14,11 +15,13 @@ ACCOUNTS = [
 
 
 def main():
+    if not settings.seed_password:
+        raise SystemExit("Set SEED_PASSWORD in .env")
     with SessionLocal() as db:
         for email, id_number, name, role, initials in ACCOUNTS:
             if auth_service.get_by_email(db, email):
                 continue
-            auth_service.create_user(db, email, id_number, name, "password123", role, initials=initials)
+            auth_service.create_user(db, email, id_number, name, settings.seed_password, role, initials=initials)
             print(f"created {email} (ID {id_number})")
 
 
