@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -39,20 +40,30 @@ def create_user(
         approved=approved,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A parallel sign-up took the same email, ID number or initials after the checks above.
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Email, ID number or initials already registered, try again")
     db.refresh(user)
     return user
 
 
 def register(db: Session, data: UserCreate) -> User:
     # Every sign-up waits for the coordinator to approve before the user can log in.
+    now = datetime.now(timezone.utc)
     existing = get_by_id_number(db, data.id_number) or get_by_email(db, data.email)
     if existing and not existing.approved:
-        retry_at = existing.created_at + REVIEW_WINDOW
-        if datetime.now(timezone.utc) < retry_at:
+        if now < existing.created_at + REVIEW_WINDOW:
             raise HTTPException(status.HTTP_409_CONFLICT, "User already applied to register, waiting for approval")
         # The review window ran out: the new submission replaces the old request.
         db.delete(existing)
+        db.flush()
+    # A request nobody reviewed within the window stops reserving its initials.
+    holder = data.initials and db.scalar(select(User).where(User.initials == data.initials))
+    if holder and not holder.approved and now >= holder.created_at + REVIEW_WINDOW:
+        db.delete(holder)
         db.flush()
     return create_user(
         db, data.email, data.id_number, data.full_name, data.password, data.role, approved=False, initials=data.initials
