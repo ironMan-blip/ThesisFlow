@@ -22,6 +22,10 @@ def get_by_id_number(db: Session, id_number: str) -> User | None:
     return db.scalar(select(User).where(User.id_number == id_number))
 
 
+def get_by_initials(db: Session, initials: str) -> User | None:
+    return db.scalar(select(User).where(User.initials == initials))
+
+
 def create_user(
     db: Session, email: str, id_number: str, full_name: str, password: str, role: Role, approved: bool = True,
     initials: str | None = None,
@@ -30,7 +34,7 @@ def create_user(
         raise HTTPException(status.HTTP_409_CONFLICT, "User already exists")
     if get_by_id_number(db, id_number):
         raise HTTPException(status.HTTP_409_CONFLICT, "ID number already registered")
-    if initials and db.scalar(select(User).where(User.initials == initials)):
+    if initials and get_by_initials(db, initials):
         raise HTTPException(status.HTTP_409_CONFLICT, "Initials already registered")
     user = User(
         email=email.lower(),
@@ -63,7 +67,7 @@ def register(db: Session, data: UserCreate) -> User:
         db.delete(existing)
         db.flush()
     # A request nobody reviewed within the window stops reserving its initials.
-    holder = data.initials and db.scalar(select(User).where(User.initials == data.initials))
+    holder = data.initials and get_by_initials(db, data.initials)
     if holder and not holder.approved and now >= holder.created_at + REVIEW_WINDOW:
         db.delete(holder)
         db.flush()
