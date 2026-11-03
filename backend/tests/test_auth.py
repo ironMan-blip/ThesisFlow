@@ -161,6 +161,24 @@ def test_ensure_admin_creates_and_resets(client, db, monkeypatch):
     assert me["full_name"] == "New Name"
 
 
+def test_ensure_admin_changing_id_and_email_keeps_one_admin(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "admin_email", "a@b.com")
+    monkeypatch.setattr(settings, "admin_id_number", "00000000")
+    monkeypatch.setattr(settings, "admin_password", "first-pass1")
+    first = auth_service.ensure_admin(db)
+
+    monkeypatch.setattr(settings, "admin_id_number", "11111111")
+    assert auth_service.ensure_admin(db).id == first.id
+    monkeypatch.setattr(settings, "admin_email", "c@d.com")
+    monkeypatch.setattr(settings, "admin_id_number", "22222222")
+    assert auth_service.ensure_admin(db).id == first.id
+
+    coordinators = db.scalars(select(User).where(User.role == Role.coordinator)).all()
+    assert [(u.id_number, u.email) for u in coordinators] == [("22222222", "c@d.com")]
+    assert login(client, id_number="00000000", password="first-pass1").status_code == 401
+    assert login(client, id_number="22222222", password="first-pass1").status_code == 200
+
+
 def test_cannot_reregister_within_48_hours(client, db):
     body = {"email": "s@b.com", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
     old_id = client.post("/api/auth/register", json=body).json()["id"]
