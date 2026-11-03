@@ -109,7 +109,7 @@ Sensitive values have no defaults. The backend and `docker compose` refuse to st
 |----------|---------|---------|
 | `POSTGRES_USER` | required | Database user. Used to build `DATABASE_URL` in Docker. |
 | `POSTGRES_PASSWORD` | required | Database password. Only applied when the db volume is first created. |
-| `JWT_SECRET` | required | Secret used to sign login tokens. |
+| `JWT_SECRET` | required | Secret used to sign login tokens, at least 32 characters (`openssl rand -hex 32`). |
 | `ADMIN_NAME` | required | Coordinator display name. Set again on every backend start. |
 | `ADMIN_EMAIL` | required | The one coordinator account. |
 | `ADMIN_ID_NUMBER` | required | Coordinator login ID. Set again on every backend start. |
@@ -188,6 +188,12 @@ Supervisor and panel member are not account roles. They will be links between a 
 - Students see only their own proposal. Faculty and the coordinator can download any version (for review).
 - Uploads and deletes by the same student are locked against each other, so version numbers never clash.
 
+### 7. Security
+
+- **Rate limiting** per client IP, over a 60-second window: 10 requests to `/api/auth/login` and `/api/auth/register`, 300 to any other `/api/` path. Over the limit returns `429`. The counter is in memory, per backend process.
+- Login takes the same time whether the ID exists or not (constant-time password check), so IDs cannot be guessed from response time.
+- `JWT_SECRET` shorter than 32 characters stops the backend from starting.
+
 ## Project layout (MVC)
 
 ```
@@ -197,6 +203,7 @@ backend/app/
   controllers/  Controller: FastAPI routers (check user, call a service, nothing else)
   schemas/      Pydantic request/response shapes
   deps.py       get_current_user, require_roles(...)
+  rate_limit.py per-IP request limits (middleware)
   seed.py       dev student + faculty
 backend/alembic/versions/   DB migrations
 backend/tests/              pytest

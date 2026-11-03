@@ -21,7 +21,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://thesisflow:thesisflow@localhost:5432/thesisflow_test
       TEST_DATABASE_URL: postgresql+psycopg://thesisflow:thesisflow@localhost:5432/thesisflow_test
-      JWT_SECRET: ci-only-secret
+      JWT_SECRET: ci-only-secret-not-for-real-use-000000
       ADMIN_NAME: CI Coordinator
       ADMIN_EMAIL: coordinator@thesisflow.test
       ADMIN_ID_NUMBER: "00000000"

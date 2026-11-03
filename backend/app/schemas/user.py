@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 
-from app.models.user import Role
+from app.models.user import REVIEW_HOURS, Role
 
 
 class UserCreate(BaseModel):
@@ -61,6 +61,7 @@ class UserOut(BaseModel):
     approved: bool
     tools: list[str]
     deletion_pending: bool
+    review_hours: int = REVIEW_HOURS  # coordinator's decision window, for page text
 
 
 class RegistrationRequestOut(UserOut):

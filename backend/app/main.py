@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller
 from app.database import SessionLocal
+from app.rate_limit import rate_limit
 from app.services import auth_service
 
 
@@ -17,6 +18,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="ThesisFlow API", lifespan=lifespan)
+app.middleware("http")(rate_limit)
 
 # No CORS: the browser only talks to the Vite dev server, which proxies /api here.
 # Register each feature's router here.

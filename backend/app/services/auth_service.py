@@ -6,9 +6,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import REVIEW_WINDOW, Role, User
+from app.models.user import REVIEW_HOURS, REVIEW_WINDOW, Role, User
 from app.schemas.user import UserCreate
 from app.security import create_access_token, hash_password, verify_password
+
+_DUMMY_HASH = hash_password("timing-equaliser")
 
 
 def get_by_email(db: Session, email: str) -> User | None:
@@ -20,6 +22,10 @@ def get_by_id_number(db: Session, id_number: str) -> User | None:
     return db.scalar(select(User).where(User.id_number == id_number))
 
 
+def get_by_initials(db: Session, initials: str) -> User | None:
+    return db.scalar(select(User).where(User.initials == initials))
+
+
 def create_user(
     db: Session, email: str, id_number: str, full_name: str, password: str, role: Role, approved: bool = True,
     initials: str | None = None,
@@ -28,7 +34,7 @@ def create_user(
         raise HTTPException(status.HTTP_409_CONFLICT, "User already exists")
     if get_by_id_number(db, id_number):
         raise HTTPException(status.HTTP_409_CONFLICT, "ID number already registered")
-    if initials and db.scalar(select(User).where(User.initials == initials)):
+    if initials and get_by_initials(db, initials):
         raise HTTPException(status.HTTP_409_CONFLICT, "Initials already registered")
     user = User(
         email=email.lower(),
@@ -61,7 +67,7 @@ def register(db: Session, data: UserCreate) -> User:
         db.delete(existing)
         db.flush()
     # A request nobody reviewed within the window stops reserving its initials.
-    holder = data.initials and db.scalar(select(User).where(User.initials == data.initials))
+    holder = data.initials and get_by_initials(db, data.initials)
     if holder and not holder.approved and now >= holder.created_at + REVIEW_WINDOW:
         db.delete(holder)
         db.flush()
@@ -86,10 +92,11 @@ def ensure_admin(db: Session) -> User:
 
 def login(db: Session, id_number: str, password: str) -> str:
     user = get_by_id_number(db, id_number)
-    if user is None or not verify_password(password, user.password_hash):
+    # Hash even for unknown IDs so response time doesn't reveal which IDs exist.
+    if not verify_password(password, user.password_hash if user else _DUMMY_HASH) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong ID number or password")
     if not user.approved:
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Your account is waiting for coordinator approval (within 48 hours)"
+            status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
         )
     return create_access_token(user.id)
