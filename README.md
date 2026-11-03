@@ -140,7 +140,7 @@ Supervisor and panel member are not account roles. They will be links between a 
 - Emails are case-insensitive (stored lowercase) and must be unique.
 - ID numbers are exactly 8 digits and must be unique across students and faculty. Log in with ID number and password.
 - Login returns a JWT (valid 24 hours by default). The frontend sends it with every request.
-- **Coordinator account:** there is exactly one. It is created from `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed.
+- **Coordinator account:** there is exactly one. It is created from `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_ID_NUMBER` / `ADMIN_PASSWORD` when the backend starts, and its password is reset to `ADMIN_PASSWORD` if it changed. Changing `ADMIN_ID_NUMBER` or `ADMIN_EMAIL` updates that same account; it never adds a second one.
 
 ### 2. Registration approval
 

@@ -78,12 +78,17 @@ def register(db: Session, data: UserCreate) -> User:
 
 def ensure_admin(db: Session) -> User:
     """Make the single coordinator account match ADMIN_NAME / ADMIN_EMAIL / ADMIN_ID_NUMBER / ADMIN_PASSWORD. Runs at startup."""
-    user = get_by_id_number(db, settings.admin_id_number)
+    # Found by role, not ID or email, so changing either renames the one account instead of adding a second.
+    user = db.scalars(select(User).where(User.role == Role.coordinator).order_by(User.id)).first()
     if user is None:
         return create_user(
             db, settings.admin_email, settings.admin_id_number, settings.admin_name, settings.admin_password, Role.coordinator
         )
-    user.role, user.approved, user.email, user.full_name = Role.coordinator, True, settings.admin_email.lower(), settings.admin_name
+    email = settings.admin_email.lower()
+    for other in (get_by_id_number(db, settings.admin_id_number), get_by_email(db, email)):
+        if other is not None and other.id != user.id:
+            raise RuntimeError(f"ADMIN_ID_NUMBER / ADMIN_EMAIL already belong to another account (id {other.id})")
+    user.approved, user.email, user.id_number, user.full_name = True, email, settings.admin_id_number, settings.admin_name
     if not verify_password(settings.admin_password, user.password_hash):
         user.password_hash = hash_password(settings.admin_password)
     db.commit()
