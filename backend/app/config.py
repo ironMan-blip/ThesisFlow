@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,7 +7,8 @@ class Settings(BaseSettings):
 
     # Secrets have no defaults: they must come from the environment / .env.
     database_url: str
-    jwt_secret: str
+    # A short secret can be brute-forced offline from any token, letting someone forge a coordinator login.
+    jwt_secret: str = Field(min_length=32)
     # The one coordinator (admin) account. There is no coordinator sign-up.
     admin_name: str
     admin_email: str

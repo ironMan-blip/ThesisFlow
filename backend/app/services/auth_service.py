@@ -10,6 +10,8 @@ from app.models.user import REVIEW_WINDOW, Role, User
 from app.schemas.user import UserCreate
 from app.security import create_access_token, hash_password, verify_password
 
+_DUMMY_HASH = hash_password("timing-equaliser")
+
 
 def get_by_email(db: Session, email: str) -> User | None:
     # Emails are stored lowercase, so every lookup goes through here.
@@ -86,7 +88,8 @@ def ensure_admin(db: Session) -> User:
 
 def login(db: Session, id_number: str, password: str) -> str:
     user = get_by_id_number(db, id_number)
-    if user is None or not verify_password(password, user.password_hash):
+    # Hash even for unknown IDs so response time doesn't reveal which IDs exist.
+    if not verify_password(password, user.password_hash if user else _DUMMY_HASH) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong ID number or password")
     if not user.approved:
         raise HTTPException(

@@ -109,7 +109,7 @@ Sensitive values have no defaults. The backend and `docker compose` refuse to st
 |----------|---------|---------|
 | `POSTGRES_USER` | required | Database user. Used to build `DATABASE_URL` in Docker. |
 | `POSTGRES_PASSWORD` | required | Database password. Only applied when the db volume is first created. |
-| `JWT_SECRET` | required | Secret used to sign login tokens. |
+| `JWT_SECRET` | required | Secret used to sign login tokens, at least 32 characters (`openssl rand -hex 32`). |
 | `ADMIN_NAME` | required | Coordinator display name. Set again on every backend start. |
 | `ADMIN_EMAIL` | required | The one coordinator account. |
 | `ADMIN_ID_NUMBER` | required | Coordinator login ID. Set again on every backend start. |
