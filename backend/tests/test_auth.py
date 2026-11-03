@@ -278,3 +278,10 @@ def test_pending_counts_and_name_fields(client, db):
 
     user = User(full_name="ada byron king")
     assert (user.first_name, user.monogram) == ("ada", "AB")
+
+
+def test_login_is_rate_limited(client):
+    body = {"email": "nobody@example.com", "password": "wrong"}
+    codes = [client.post("/api/auth/login", json=body).status_code for _ in range(11)]
+    assert 429 not in codes[:10]
+    assert codes[10] == 429

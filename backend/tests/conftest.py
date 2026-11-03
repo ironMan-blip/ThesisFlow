@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401
 from app.config import settings
 from app.database import Base, get_db
+from app import rate_limit
 from app.main import app
 from app.models.milestone import Milestone, Phase
 
@@ -44,6 +45,12 @@ def db(tables):
 def upload_dir(tmp_path, monkeypatch):
     # Uploads go to a per-test temp dir, never the dev uploads folder.
     monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_limit():
+    # Every test shares the "testclient" IP; start each with empty buckets.
+    rate_limit.reset()
 
 
 @pytest.fixture()
