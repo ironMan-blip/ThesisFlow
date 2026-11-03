@@ -25,6 +25,7 @@ ROLE_TOOLS = {
 
 # The coordinator has this long to decide a sign-up or an account deletion request.
 REVIEW_WINDOW = timedelta(hours=48)
+REVIEW_HOURS = REVIEW_WINDOW // timedelta(hours=1)
 
 
 class User(Base):

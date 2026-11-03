@@ -35,6 +35,7 @@ def test_register_login_me(client, db):
     assert me.status_code == 200
     assert me.json()["role"] == "student"
     assert me.json()["tools"] == ["proposal", "deadlines", "account"]
+    assert me.json()["review_hours"] == 48
 
 
 def test_duplicate_email_rejected(client, db):

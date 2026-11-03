@@ -45,7 +45,7 @@ export default function AccountPage() {
       <section className="card max-w-2xl space-y-3 p-6 ring-red-200" aria-labelledby="delete-heading">
         <h2 id="delete-heading" className="font-semibold text-red-800">Delete account</h2>
         <p className="text-sm text-zinc-600">
-          Your request goes to the coordinator. If they approve it within 48 hours, your account and your proposal
+          Your request goes to the coordinator. If they approve it within {user.review_hours} hours, your account and your proposal
           are deleted for good. If they don't, your account is kept and you can ask again.
         </p>
 

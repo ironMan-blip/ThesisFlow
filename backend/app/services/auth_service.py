@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import REVIEW_WINDOW, Role, User
+from app.models.user import REVIEW_HOURS, REVIEW_WINDOW, Role, User
 from app.schemas.user import UserCreate
 from app.security import create_access_token, hash_password, verify_password
 
@@ -93,6 +93,6 @@ def login(db: Session, id_number: str, password: str) -> str:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong ID number or password")
     if not user.approved:
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Your account is waiting for coordinator approval (within 48 hours)"
+            status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
         )
     return create_access_token(user.id)

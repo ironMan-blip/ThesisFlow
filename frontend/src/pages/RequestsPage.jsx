@@ -8,7 +8,7 @@ import { useAction } from "../useAction";
 // Coordinator inbox of requests to approve or reject; RegistrationRequestsPage and DeletionRequestsPage configure it.
 function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   const [requests, setRequests] = useState(null);
-  const { refreshCounts } = useOutletContext();
+  const { user, refreshCounts } = useOutletContext();
   const { busy, error, notice, setError, run } = useAction(); // busy key is the request id being decided
 
   useEffect(() => {
@@ -25,7 +25,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
 
   return (
     <div className="space-y-8">
-      <PageHeader title={title} intro={intro} />
+      <PageHeader title={title} intro={intro(user.review_hours)} />
 
       <Alerts error={error} notice={notice} />
 
@@ -63,7 +63,7 @@ export const RegistrationRequestsPage = () => (
   <RequestsPage
     path="/auth/registration-requests"
     title="Registration requests"
-    intro="Students and faculty who registered wait here until you approve them. Please review each request within 48 hours."
+    intro={(h) => `Students and faculty who registered wait here until you approve them. Please review each request within ${h} hours.`}
     approved="was approved and can now log in"
     rejected="was rejected"
     dateField="created_at"
@@ -74,7 +74,7 @@ export const DeletionRequestsPage = () => (
   <RequestsPage
     path="/auth/deletion-requests"
     title="Deletion requests"
-    intro="Users who asked to delete their account. Approving deletes the account and its proposal for good. A request you do not approve within 48 hours lapses and the account is kept."
+    intro={(h) => `Users who asked to delete their account. Approving deletes the account and its proposal for good. A request you do not approve within ${h} hours lapses and the account is kept.`}
     approved="was deleted"
     rejected="keeps their account"
     dateField="deletion_requested_at"

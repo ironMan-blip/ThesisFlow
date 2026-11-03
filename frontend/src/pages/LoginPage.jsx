@@ -33,9 +33,9 @@ export default function LoginPage() {
     run("submit", async () => {
       // Every sign-up waits for coordinator approval, so registering never logs in.
       if (registering) {
-        await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role, initials } });
+        const me = await api("/auth/register", { method: "POST", body: { email, id_number: idNumber, password, full_name: fullName, role, initials } });
         setMode("login");
-        return "Request sent. The coordinator will review your account within 48 hours. You can log in once it is approved.";
+        return `Request sent. The coordinator will review your account within ${me.review_hours} hours. You can log in once it is approved.`;
       }
       await login(idNumber, password);
       navigate("/");
@@ -87,7 +87,7 @@ export default function LoginPage() {
                     </label>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-zinc-500">New accounts need coordinator approval (within 48 hours) before you can log in.</p>
+                <p className="mt-2 text-xs text-zinc-500">New accounts need coordinator approval before you can log in.</p>
               </fieldset>
               <label className="label">
                 Full name
