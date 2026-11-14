@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func, true
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -59,6 +59,8 @@ class User(Base):
     frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # A frozen student asked the coordinator to restart at P1.
     restart_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The coordinator approved the restart; the next semester rollover puts them back at P1, fresh.
+    restart_approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     # post_update: users and theses point at each other, so this link is written in a second UPDATE.
     thesis = relationship("Thesis", foreign_keys=[thesis_id], post_update=True)

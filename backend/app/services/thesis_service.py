@@ -38,6 +38,7 @@ def mine(db: Session, user: User) -> MyThesisOut:
         phase=user.phase,
         frozen_reason=s.frozen_reason,
         restart_pending=user.restart_pending,
+        restart_approved=user.restart_approved,
         can_form_group=user.thesis_id is None and user.phase is not None and not s.frozen,
     )
 

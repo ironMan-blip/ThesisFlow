@@ -1,7 +1,8 @@
 """Student phase rules: one phase per semester, P1 -> P2 -> P3.
 
 - Uploading for the current phase before its grace period ends counts as submitted (late or not).
-- Grace ends with no upload: the student is frozen and can ask the coordinator to restart at P1.
+- Grace ends with no upload: the student is frozen and can ask the coordinator to restart at P1 at any time.
+  An approved restart starts fresh at P1 at the next semester rollover.
 - After P3 the coordinator may defer the thesis: once means P3 again next semester, twice freezes the student.
 - The semester rollover moves everyone on and clears the deadlines for the next semester.
 """
@@ -71,6 +72,9 @@ def standing(db: Session, user: User, now: datetime | None = None) -> Standing:
     elif user.phase and _missed(user, m, submitted, now):
         # Shown as soon as grace ends; saved at the rollover. A deadline extension lifts it before then.
         reason = f"You missed the {user.phase.value} deadline"
+    elif user.restart_pending or user.restart_approved:
+        # Asking for a fresh start is final: a later deadline extension doesn't reopen this thesis.
+        reason = "You asked to restart at P1"
     return Standing(m, submitted, reason)
 
 
@@ -89,8 +93,12 @@ def next_semester(db: Session) -> dict[str, int]:
         raise HTTPException(
             status.HTTP_409_CONFLICT, f"{', '.join(still_open)} is still open, wait until its grace period ends"
         )
-    result = {"advanced": 0, "completed": 0, "deferred": 0, "frozen": 0}
+    result = {"advanced": 0, "completed": 0, "deferred": 0, "frozen": 0, "restarted": 0}
     for user in _students(db):
+        if user.restart_approved:
+            _restart(db, user, now)
+            result["restarted"] += 1
+            continue
         if user.phase is None or user.frozen_at is not None:
             continue
         s = standing(db, user, now)
@@ -145,8 +153,11 @@ def set_defer(db: Session, thesis_id: int, defer: bool) -> Thesis:
 
 
 def request_restart(db: Session, user: User) -> User:
+    # Any time while frozen; an approved restart starts at the next semester rollover.
     if user.role != Role.student or not standing(db, user).frozen:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a frozen student account can ask to restart at P1")
+    if user.restart_approved:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Restart already approved, you start at P1 next semester")
     if user.restart_pending:
         raise HTTPException(status.HTTP_409_CONFLICT, "Restart already requested, waiting for the coordinator")
     user.restart_requested_at = _now()
@@ -175,18 +186,23 @@ def _restart_pending(db: Session, user_id: int) -> User:
 
 
 def approve_restart(db: Session, user_id: int) -> User:
-    """Back to P1 with no thesis. The old thesis is archived with all its versions; the next group gets a new thesis ID."""
+    """Takes effect at the next semester rollover, see _restart."""
     user = _restart_pending(db, user_id)
+    user.restart_requested_at, user.restart_approved = None, True
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _restart(db: Session, user: User, now: datetime) -> None:
+    """Fresh start at P1 with no thesis. The old thesis is archived with all its versions; the next group gets a new thesis ID."""
     thesis, user.thesis = user.thesis, None
     if thesis is not None and thesis.status == ThesisStatus.pending:
         db.delete(thesis)  # never accepted, so it has no thesis ID and no versions
     elif thesis is not None:
         thesis.status, thesis.defer_pending = ThesisStatus.dropped, False
-    user.phase, user.phase_started_at = Phase.P1, _now()
-    user.frozen_at = user.restart_requested_at = None
-    db.commit()
-    db.refresh(user)
-    return user
+    user.phase, user.phase_started_at = Phase.P1, now
+    user.frozen_at, user.restart_approved = None, False
 
 
 def reject_restart(db: Session, user_id: int) -> User:

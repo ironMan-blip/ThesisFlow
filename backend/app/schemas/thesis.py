@@ -50,6 +50,7 @@ class MyThesisOut(BaseModel):
     phase: Phase | None  # None once the thesis is completed
     frozen_reason: str | None
     restart_pending: bool
+    restart_approved: bool  # they start fresh at P1 at the next semester rollover
     can_form_group: bool
 
 

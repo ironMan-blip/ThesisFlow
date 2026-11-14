@@ -31,6 +31,8 @@ def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service
     if user.phase is None:
         return "Your thesis is complete", s
     if s.frozen:
+        if user.restart_pending or user.restart_approved:
+            return f"{s.frozen_reason}, so your account is frozen until you start fresh at P1", s
         return f"{s.frozen_reason}, so your account is frozen. Ask to restart at P1 on the Thesis page", s
     if thesis is None:
         return "Form a thesis group first: choose a supervisor on the Thesis page", s

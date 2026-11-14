@@ -91,7 +91,7 @@ export default function DeadlinePage() {
     run("semester", async () => {
       const r = await api("/milestones/next-semester", { method: "POST" });
       show(await api("/milestones"));
-      return `New semester started: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.frozen} frozen. Set the new deadlines below.`;
+      return `New semester started: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.frozen} frozen, ${r.restarted} restarted at P1. Set the new deadlines below.`;
     });
   };
 
@@ -108,7 +108,7 @@ export default function DeadlinePage() {
             <h2 className="font-semibold">End this semester</h2>
             <p className="mt-1 text-sm text-zinc-600">
               Once every grace time has ended: students who submitted move to their next phase, P3 theses are completed
-              or deferred, students who missed are frozen, and all deadlines are cleared for next semester.
+              or deferred, students who missed are frozen, approved restarts start fresh at P1, and all deadlines are cleared for next semester.
             </p>
           </div>
           <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">

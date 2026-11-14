@@ -83,9 +83,11 @@ export default function ThesisPage() {
               </p>
               <p className="text-sm text-red-900/80">
                 You can still log in and see your work, but you can't upload. Ask the coordinator to let you start again at P1.
-                Your current thesis will be archived and your new group gets a new thesis ID.
+                If approved, you start fresh at P1 next semester: your current thesis will be archived and your new group gets a new thesis ID.
               </p>
-              {state.restart_pending ? (
+              {state.restart_approved ? (
+                <p className="text-sm font-medium text-red-900">Restart approved. You start fresh at P1 next semester.</p>
+              ) : state.restart_pending ? (
                 <p className="text-sm font-medium text-red-900">Restart requested. Waiting for the coordinator.</p>
               ) : (
                 <button onClick={restart} disabled={busy === "restart"} className="btn-danger">

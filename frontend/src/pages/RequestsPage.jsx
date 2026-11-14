@@ -85,8 +85,8 @@ export const RestartRequestsPage = () => (
   <RequestsPage
     path="/auth/restart-requests"
     title="Restart requests"
-    intro={() => "Students whose account froze after a missed deadline or a second deferral. Approving moves them back to P1: their old thesis is archived with all its versions, and their next group gets a new thesis ID."}
-    approved="restarts at P1"
+    intro={() => "Students whose account froze after a missed deadline or a second deferral. Approving moves them back to P1 at the next semester rollover, fully fresh: their old thesis is archived with all its versions, and their next group gets a new thesis ID."}
+    approved="restarts at P1 next semester"
     rejected="stays frozen"
     dateField="restart_requested_at"
   />

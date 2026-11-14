@@ -116,15 +116,32 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     assert mine(client, s)["frozen_reason"] is None
     close(db, Phase.P1)
 
+    # Missed the extended deadline too: they can ask right away, mid-semester.
     assert client.post("/api/auth/me/restart-request", headers=coord).status_code == 409
     r = client.post("/api/auth/me/restart-request", headers=s)
     assert r.status_code == 200 and r.json()["restart_pending"] is True
     assert client.post("/api/auth/me/restart-request", headers=s).status_code == 409
+    # No going back once asked: extending the deadline again doesn't reopen this thesis.
+    db.get(Milestone, Phase.P1).grace_days = 2
+    db.flush()
+    assert mine(client, s)["frozen_reason"] == "You asked to restart at P1"
+    assert upload(client, s).status_code == 409
+    close(db, Phase.P1)
     assert client.get("/api/auth/me/counts", headers=coord).json()["restart_requests"] == 1
     uid = client.get("/api/auth/restart-requests", headers=coord).json()[0]["id"]
     assert client.post(f"/api/auth/restart-requests/{uid}/approve", headers=coord).status_code == 200
+    assert client.get("/api/auth/restart-requests", headers=coord).json() == []
+
+    # Approved, but the fresh start waits for the next semester.
+    state = mine(client, s)
+    assert (state["restart_approved"], state["thesis"]["id"], state["frozen_reason"]) == (
+        True, old_thesis["id"], "You missed the P1 deadline"
+    )
+    assert client.post("/api/auth/me/restart-request", headers=s).status_code == 409
+    assert close_all_and_roll(client, db, coord)["restarted"] == 1
 
     state = mine(client, s)
+    assert state["restart_approved"] is False
     assert (state["phase"], state["thesis"], state["frozen_reason"], state["can_form_group"]) == ("P1", None, None, True)
     form_group(client, db, s)
     new_thesis = mine(client, s)["thesis"]
@@ -132,6 +149,19 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     archived = {t["id"]: t for t in client.get("/api/theses", headers=coord).json()}
     assert archived[old_thesis["id"]]["status"] == "dropped"
     assert len(archived[old_thesis["id"]]["versions"]) == 1  # nothing is lost
+
+
+def test_extension_without_restart_request_lets_a_frozen_student_continue(client, db):
+    s = student(client, db, "s@x.com")
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    started_yesterday(client, db, s)
+    close(db, Phase.P1)
+    assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
+    db.get(Milestone, Phase.P1).grace_days = 2  # extended, and they never asked to restart
+    db.flush()
+    assert upload(client, s).status_code == 201
+    assert close_all_and_roll(client, db, coord)["advanced"] == 1
+    assert me(client, s)["phase"] == "P2"
 
 
 def test_restart_can_be_rejected(client, db):
@@ -164,7 +194,7 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
     res = client.post("/api/milestones/next-semester", headers=coord)
     assert (res.status_code, res.json()["detail"]) == (409, "P1, P2, P3 is still open, wait until its grace period ends")
 
-    assert close_all_and_roll(client, db, coord) == {"advanced": 1, "completed": 0, "deferred": 0, "frozen": 1}
+    assert close_all_and_roll(client, db, coord) == {"advanced": 1, "completed": 0, "deferred": 0, "frozen": 1, "restarted": 0}
     assert me(client, done)["phase"] == "P2"
     assert [m["status"] for m in client.get("/api/milestones", headers=coord).json()["milestones"]] == ["not_set"] * 3
     # The freeze is saved, so it outlives the cleared deadlines.
@@ -222,4 +252,7 @@ def test_deferred_twice_freezes(client, db):
     uid = me(client, s)["id"]
     client.post("/api/auth/me/restart-request", headers=s)
     client.post(f"/api/auth/restart-requests/{uid}/approve", headers=coord)
-    assert (me(client, s)["phase"], mine(client, s)["thesis"]) == ("P1", None)
+    reopen(db)
+    assert close_all_and_roll(client, db, coord)["restarted"] == 1
+    state = mine(client, s)
+    assert (state["phase"], state["thesis"], state["frozen_reason"]) == ("P1", None, None)
