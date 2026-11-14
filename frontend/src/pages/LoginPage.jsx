@@ -127,7 +127,7 @@ export default function LoginPage() {
           </div>
           <Alerts error={error} notice={notice} />
           <button disabled={loading} className="btn-primary w-full py-2.5">
-            {loading ? "Please wait..." : registering ? "Register" : "Log in"}
+            {loading ? "Please wait…" : registering ? "Register" : "Log in"}
           </button>
           <p className="text-center text-sm text-zinc-600">
             {registering ? "Already have an account?" : "New here?"}{" "}

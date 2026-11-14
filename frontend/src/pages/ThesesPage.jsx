@@ -27,7 +27,7 @@ function Requests({ requests, decide, busy }) {
             <div className="flex gap-2">
               <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary px-3 py-1.5">Decline</button>
               <button onClick={() => decide(r, true)} disabled={busy === r.id} className="btn-primary px-3 py-1.5">
-                {busy === r.id ? "Saving..." : "Accept"}
+                {busy === r.id ? "Saving…" : "Accept"}
               </button>
             </div>
           </li>

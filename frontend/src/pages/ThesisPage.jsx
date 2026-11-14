@@ -15,6 +15,7 @@ const name = (f) => `${f.full_name}${f.initials ? ` (${f.initials})` : ""}`;
 export default function ThesisPage() {
   const [state, setState] = useState(null);
   const [faculty, setFaculty] = useState([]);
+  const [supervisor, setSupervisor] = useState("");
   const { busy, error, notice, setError, run } = useAction();
 
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function ThesisPage() {
           </section>
 
           {state.frozen_reason && (
-            <section role="alert" className="card space-y-3 border-red-200 bg-red-50/60 p-6">
+            <section role="alert" className="card space-y-3 bg-red-50/60 p-6 ring-red-200">
               <p className="flex items-start gap-2 font-medium text-red-800">
                 <Icon className="mt-0.5 size-5">{ICONS.alert}</Icon>
                 {state.frozen_reason}, so your account is frozen.
@@ -88,7 +89,7 @@ export default function ThesisPage() {
                 <p className="text-sm font-medium text-red-900">Restart requested. Waiting for the coordinator.</p>
               ) : (
                 <button onClick={restart} disabled={busy === "restart"} className="btn-danger">
-                  {busy === "restart" ? "Sending..." : "Request restart at P1"}
+                  {busy === "restart" ? "Sending…" : "Request restart at P1"}
                 </button>
               )}
             </section>
@@ -122,7 +123,7 @@ export default function ThesisPage() {
               </div>
               {t.status === "pending" && (
                 <button onClick={cancel} disabled={busy === "cancel"} className="btn-secondary">
-                  {busy === "cancel" ? "Cancelling..." : "Cancel request"}
+                  {busy === "cancel" ? "Cancelling…" : "Cancel request"}
                 </button>
               )}
             </section>
@@ -133,7 +134,7 @@ export default function ThesisPage() {
               <h2 className="font-semibold">Form your thesis group</h2>
               <label className="label">
                 Supervisor
-                <select name="supervisor_id" required defaultValue="" className="input">
+                <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
                   <option value="" disabled>Choose a faculty member</option>
                   {faculty.map((f) => <option key={f.id} value={f.id}>{name(f)}</option>)}
                 </select>
@@ -142,11 +143,11 @@ export default function ThesisPage() {
                 Co-supervisor (optional)
                 <select name="co_supervisor_id" defaultValue="" className="input">
                   <option value="">None</option>
-                  {faculty.map((f) => <option key={f.id} value={f.id}>{name(f)}</option>)}
+                  {faculty.filter((f) => String(f.id) !== supervisor).map((f) => <option key={f.id} value={f.id}>{name(f)}</option>)}
                 </select>
               </label>
               <button disabled={busy === "ask" || !faculty.length} className="btn-primary w-full">
-                {busy === "ask" ? "Sending..." : "Send request"}
+                {busy === "ask" ? "Sending…" : "Send request"}
               </button>
             </form>
           )}

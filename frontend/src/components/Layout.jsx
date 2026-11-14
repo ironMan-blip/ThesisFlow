@@ -138,13 +138,13 @@ export default function Layout() {
       </header>
       {menuOpen && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
-          <div className="absolute inset-0 bg-zinc-900/40 backdrop-blur-[2px]" onClick={() => setMenuOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-white shadow-xl">{sidebar}</aside>
+          <div className="absolute inset-0 bg-zinc-900/40 backdrop-blur-[2px] motion-safe:animate-fade-in" onClick={() => setMenuOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-white shadow-xl motion-safe:animate-slide-in">{sidebar}</aside>
         </div>
       )}
 
       <main id="main" className="lg:pl-64">
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
+        <div key={pathname} className="mx-auto max-w-5xl px-4 py-8 motion-safe:animate-rise-in sm:px-8 sm:py-10">
           <Outlet context={{ user, counts, refreshCounts }} />
         </div>
       </main>

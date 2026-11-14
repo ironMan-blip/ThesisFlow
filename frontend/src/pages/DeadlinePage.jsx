@@ -112,7 +112,7 @@ export default function DeadlinePage() {
             </p>
           </div>
           <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">
-            {saving === "semester" ? "Starting..." : "Start next semester"}
+            {saving === "semester" ? "Starting…" : "Start next semester"}
           </button>
         </section>
       )}
@@ -183,7 +183,7 @@ export default function DeadlinePage() {
                       <input name="penalty_per_day" type="number" min={0} max={data.max_penalty_per_day} required defaultValue={m.penalty_per_day} className="input" />
                     </label>
                     <button disabled={saving === m.phase} className="btn-primary sm:col-span-5 sm:justify-self-end">
-                      {saving === m.phase ? "Saving..." : `Save ${m.phase}`}
+                      {saving === m.phase ? "Saving…" : `Save ${m.phase}`}
                     </button>
                   </form>
                 )}

@@ -95,7 +95,7 @@ export default function ProposalPage() {
           </div>
           <Alerts error={error} notice={notice} />
           <button disabled={saving || !proposal || !!proposal.upload_block} className="btn-primary w-full">
-            {saving ? "Uploading..." : "Upload version"}
+            {saving ? "Uploading…" : "Upload version"}
           </button>
         </form>
 
