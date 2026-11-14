@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.milestone import Phase
 from app.models.proposal import Proposal
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
@@ -36,6 +37,8 @@ def can_view(user: User, thesis: Thesis) -> bool:
 
 def mine(db: Session, user: User) -> MyThesisOut:
     s = progress_service.standing(db, user)
+    t = user.thesis
+    live = t is not None and t.status == ThesisStatus.active and not s.frozen
     return MyThesisOut(
         thesis=user.thesis and ThesisOut.model_validate(user.thesis),
         phase=user.phase,
@@ -46,6 +49,9 @@ def mine(db: Session, user: User) -> MyThesisOut:
         registration_open=progress_service.registration_open(db),
         can_register=progress_service.can_register(db, user),
         can_form_group=user.thesis_id is None and user.phase is not None and not s.frozen,
+        can_cancel=t is not None and t.status == ThesisStatus.pending,
+        show_deferral_warning=live and t.deferrals > 0,
+        show_p1_registration=live and user.phase == Phase.P1,
     )
 
 
@@ -150,7 +156,7 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
         row = ThesisDetailOut.model_validate(t)
         for v in row.versions:
             v.can_delete = False  # only the student removes versions, from their proposal page
-        row.can_defer = user.role == Role.coordinator and progress_service.can_defer(db, t)
+        row.can_defer = user.role == Role.coordinator and (t.defer_pending or progress_service.can_defer(db, t))
         out.append(row)
     return out
 

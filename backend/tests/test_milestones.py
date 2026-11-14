@@ -57,7 +57,7 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
 
     res = put(client, coord, "P1", F, grace=2)
     assert res.status_code == 200
-    assert res.json()["registration_closes_at"] is not None
+    assert (res.json()["registration_closes_at"] is not None, res.json()["registration_open"]) == (True, True)
     p1 = by_phase(res)["P1"]
     assert p1["closes_at"].startswith("2099-11-03T23:59")
     assert p1["late_days"] is None and p1["submission_status"] is None  # staff get no personal late count

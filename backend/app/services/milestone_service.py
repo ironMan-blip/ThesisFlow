@@ -66,6 +66,7 @@ def timeline(db: Session, user: User) -> TimelineOut:
         milestones=[_row(templates.get(p), p, now, mine if p == user.phase else None, user) for p in Phase],
         can_edit=user.role == Role.coordinator,
         registration_closes_at=progress_service.registration_closes_at(db),
+        registration_open=progress_service.registration_open(db),
     )
 
 

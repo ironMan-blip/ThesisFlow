@@ -63,14 +63,18 @@ def test_group_needs_supervisor_acceptance_and_gets_a_thesis_id(client, db):
     assert res.status_code == 201
     t = res.json()["thesis"]
     assert (t["status"], t["code"], t["co_supervisor_accepted"]) == ("pending", None, False)
+    flags = mine(client, s)
+    assert (flags["can_cancel"], flags["show_p1_registration"]) == (True, False)
     assert ask(client, s, sup).status_code == 409  # one group at a time
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 1}
     assert [r["slot"] for r in client.get("/api/theses/requests", headers=co).json()] == ["co_supervisor"]
     assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=other_student).status_code == 403
 
     assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=sup).status_code == 204
-    t = mine(client, s)["thesis"]
+    flags = mine(client, s)
+    t = flags["thesis"]
     assert (t["status"], t["code"]) == ("active", f"TH-{t['id']:04d}")
+    assert (flags["can_cancel"], flags["show_p1_registration"], flags["show_deferral_warning"]) == (False, True, False)
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
     assert client.get("/api/theses", headers=co).json() == []  # not accepted yet: not their thesis
     assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=co).status_code == 204

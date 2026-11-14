@@ -109,7 +109,7 @@ export default function ThesisPage() {
                 <h2 className="font-semibold">Your group</h2>
                 <span className={`badge ${STATUS[t.status][1]}`}>{STATUS[t.status][0]}</span>
               </div>
-              {t.deferrals > 0 && t.status === "active" && !state.frozen_reason && (
+              {state.show_deferral_warning && (
                 <p className="alert-error">
                   <Icon className="mt-px size-4">{ICONS.alert}</Icon>
                   <span>Your thesis was deferred. Submit P3 again this semester. Another deferral freezes your account.</span>
@@ -129,7 +129,7 @@ export default function ThesisPage() {
                   </div>
                 )}
               </div>
-              {t.status === "pending" && (
+              {state.can_cancel && (
                 <button onClick={cancel} disabled={busy === "cancel"} className="btn-secondary">
                   {busy === "cancel" ? "Cancelling…" : "Cancel request"}
                 </button>
@@ -137,7 +137,7 @@ export default function ThesisPage() {
             </section>
           )}
 
-          {state.phase === "P1" && t?.status === "active" && !state.frozen_reason && (
+          {state.show_p1_registration && (
             <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
               <div className="max-w-prose">
                 <h2 className="font-semibold">P1 registration</h2>

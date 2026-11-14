@@ -116,7 +116,7 @@ export default function DeadlinePage() {
 
       {data?.registration_closes_at && (
         <p className="text-sm text-zinc-600">
-          {new Date(data.registration_closes_at) > new Date(data.now) ? "P1 registration is open until " : "P1 registration closed on "}
+          {data.registration_open ? "P1 registration is open until " : "P1 registration closed on "}
           <span className="font-medium tabular-nums">{when(data.registration_closes_at)}</span>.
           {data.can_edit && " P1 can only be due after it closes."}
         </p>

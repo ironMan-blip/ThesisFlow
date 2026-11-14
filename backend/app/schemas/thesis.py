@@ -39,7 +39,7 @@ class ThesisOut(BaseModel):
 
 class ThesisDetailOut(ThesisOut):
     versions: list[ProposalVersionOut]  # newest first
-    can_defer: bool = False  # coordinator only: P3 is submitted this semester
+    can_defer: bool = False  # coordinator only: can set (P3 submitted this semester) or undo a pending deferral
 
 
 class SupervisionRequestOut(ThesisOut):
@@ -56,6 +56,9 @@ class MyThesisOut(BaseModel):
     registration_open: bool
     can_register: bool  # an accepted group in P1 that can register now
     can_form_group: bool
+    can_cancel: bool  # the group request still waits for the supervisor
+    show_deferral_warning: bool  # an active, unfrozen thesis deferred before: resubmit P3 or be frozen
+    show_p1_registration: bool  # an active, unfrozen group in P1 sees its registration status
 
 
 class ThesisRequestIn(BaseModel):

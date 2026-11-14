@@ -98,7 +98,7 @@ export default function ThesesPage() {
                   {t.deferrals > 0 && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">Deferred {t.deferrals}x</span>}
                   {t.defer_pending && <span className="badge bg-red-50 text-red-800 ring-red-600/20">Deferral at semester end</span>}
                 </div>
-                {!isFaculty && (t.can_defer || t.defer_pending) && (
+                {t.can_defer && (
                   <button onClick={() => defer(t, !t.defer_pending)} disabled={busy === `defer-${t.id}`}
                     className={t.defer_pending ? "btn-secondary px-3 py-1.5" : "btn-ghost-danger px-3 py-1.5"}>
                     {t.defer_pending ? "Undo defer" : "Defer thesis"}
