@@ -164,3 +164,24 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     other_row = by_phase(client.get("/api/milestones", headers=other))["P1"]
     assert (mine_row["status"], mine_row["late_days"], mine_row["submission_status"]) == ("open", 0, "on_time")
     assert (other_row["status"], other_row["submission_status"]) == ("grace", "late")
+
+
+def test_extension_keeps_upload_open_and_blocks_rollover_after_template_grace(client, db):
+    from app.services import progress_service
+
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    s, other = student(client, db, "s@x.com"), student(client, db, "o@x.com")
+    close_registration(db)
+    now = datetime.now(timezone.utc)
+    put(client, coord, "P1", F, grace=1)
+    db.get(MilestoneTemplate, Phase.P1).due_at = now - timedelta(days=3)  # template grace ended yesterday
+    user = db.get(User, me(client, s)["id"])
+    # Extension granted before any submission: the group milestone is made for it.
+    progress_service.group_milestone(db, user, create=True).extended_due_at = now + timedelta(days=1)
+    db.flush()
+
+    assert upload(client, s).status_code == 201  # extension reopens upload for this group only
+    assert upload(client, other).status_code == 409
+    res = client.post("/api/milestones/next-semester", headers=coord)
+    assert (res.status_code, res.json()["detail"]) == (409, "P1 is still open, wait until its grace period ends")
+    assert by_phase(client.get("/api/milestones", headers=s))["P1"]["submission_status"] == "on_time"

@@ -71,7 +71,9 @@ def upgrade():
     )
     # Each group's latest upload that counts this semester (current phase, after it started) is its deliverable.
     join = "FROM proposal_versions v JOIN proposals p ON p.id = v.proposal_id JOIN users u ON u.thesis_id = p.thesis_id"
-    counted = "v.phase = u.phase AND v.created_at >= u.phase_started_at"
+    # frozen_at is only saved at a rollover and frozen students can't upload, so their counted uploads are from an
+    # earlier semester (a twice-deferred P3) and don't belong to this one.
+    counted = "v.phase = u.phase AND v.created_at >= u.phase_started_at AND u.frozen_at IS NULL"
     op.execute(
         "INSERT INTO group_milestones (thesis_id, semester_id, phase, submitted_at) "
         f"SELECT p.thesis_id, (SELECT max(id) FROM semesters), v.phase, max(v.created_at) {join} WHERE {counted} "

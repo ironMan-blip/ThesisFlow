@@ -8,8 +8,9 @@ stored under that thesis, so it is never lost when accounts change.
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.models.proposal import Proposal
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
 from app.schemas.thesis import MyThesisOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
@@ -131,7 +132,12 @@ def decide(db: Session, member: User, thesis_id: int, accept: bool) -> None:
 
 def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
     """Faculty: theses they supervise. Coordinator: every thesis, archived ones included. Pending requests are not theses yet."""
-    query = select(Thesis).where(Thesis.status != ThesisStatus.pending).order_by(Thesis.id.desc())
+    query = (
+        select(Thesis)
+        .where(Thesis.status != ThesisStatus.pending)
+        .order_by(Thesis.id.desc())
+        .options(selectinload(Thesis.proposal).selectinload(Proposal.versions))  # one query, not one per thesis
+    )
     if user.role == Role.faculty:
         query = query.where(
             or_(

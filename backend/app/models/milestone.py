@@ -30,7 +30,8 @@ class MilestoneTemplate(Base):
 
 
 class GroupMilestone(Base):
-    """One thesis group's milestone for its phase in one semester. Made on the group's first submission."""
+    """One thesis group's milestone for its phase in one semester. Made on the group's first submission, or by
+    progress_service.group_milestone(create=True) when an extension (F15) is granted before any submission."""
 
     __tablename__ = "group_milestones"
     __table_args__ = (UniqueConstraint("thesis_id", "semester_id", "phase"),)
