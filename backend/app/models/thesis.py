@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, false, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -20,6 +20,8 @@ class Thesis(Base):
     __tablename__ = "theses"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # The thesis ID people see, e.g. T12345678; issued when the supervisor accepts (thesis_service.new_code).
+    code: Mapped[str | None] = mapped_column(String(9), unique=True)
     # SET NULL everywhere: deleting an account never deletes a thesis or its versions.
     student_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     # Null only on archived rows made from proposals that existed before thesis groups.
@@ -46,8 +48,3 @@ class Thesis(Base):
     def versions(self) -> list:
         # Newest first; empty until the group's first upload makes its proposal.
         return self.proposal.versions if self.proposal else []
-
-    @property
-    def code(self) -> str | None:
-        # The thesis ID people see; issued when the supervisor accepts.
-        return None if self.status == ThesisStatus.pending else f"TH-{self.id:04d}"

@@ -25,7 +25,7 @@ class ThesisOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    code: str | None  # the thesis ID, e.g. TH-0007; None until the supervisor accepts
+    code: str | None  # the thesis ID, e.g. T12345678; None until the supervisor accepts
     status: ThesisStatus
     student: PersonOut | None  # None once the student's account is deleted
     supervisor: PersonOut | None
