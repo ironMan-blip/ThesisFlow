@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller
+from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller, thesis_controller
 from app.database import SessionLocal
 from app.rate_limit import rate_limit
 from app.services import auth_service
@@ -26,6 +26,7 @@ app.include_router(auth_controller.router)
 app.include_router(account_controller.router)
 app.include_router(proposal_controller.router)
 app.include_router(milestone_controller.router)
+app.include_router(thesis_controller.router)
 
 
 @app.exception_handler(RequestValidationError)

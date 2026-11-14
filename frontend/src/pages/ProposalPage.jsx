@@ -46,22 +46,28 @@ export default function ProposalPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Proposal" intro="Each upload is saved as a new version. Older versions stay available until you remove them." />
+      <PageHeader title="Proposal" intro="Each upload is saved as a new version of your current phase, under your thesis ID. You can remove a version until the phase closes; after that it is your final submission." />
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
-          <h2 className="font-semibold">Upload a new version</h2>
-          <label className="label">
-            Phase
-            <select name="phase" required className="input">
-              {proposal?.phases.map((p) => <option key={p}>{p}</option>)}
-            </select>
-            {proposal?.missed_notice ? (
-              <span className="mt-1 block text-xs font-normal text-red-700">{proposal.missed_notice}.</span>
-            ) : proposal?.phases.length === 0 && (
-              <span className="mt-1 block text-xs font-normal text-zinc-500">No phase is open for uploads right now.</span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Upload a new version</h2>
+            {proposal && (
+              <div className="flex gap-2">
+                {proposal.thesis_code && <span className="badge bg-zinc-50 font-semibold tabular-nums text-zinc-700 ring-zinc-200">{proposal.thesis_code}</span>}
+                {proposal.phase && <span className="badge bg-teal-50 text-teal-800 ring-teal-600/20">{proposal.phase}</span>}
+              </div>
             )}
-          </label>
+          </div>
+          {proposal?.upload_block && (
+            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200/70 ring-inset">{proposal.upload_block}.</p>
+          )}
+          {proposal?.freeze_at && (
+            <p role="alert" className="alert-error">
+              <Icon className="mt-px size-4">{ICONS.alert}</Icon>
+              <span>You haven't submitted {proposal.phase} yet. Upload before {when(proposal.freeze_at)} or your account will be frozen.</span>
+            </p>
+          )}
           <label className="label">
             Title
             <input name="title" required maxLength={255} placeholder="Working title of your thesis" className="input" />
@@ -88,7 +94,7 @@ export default function ProposalPage() {
             </div>
           </div>
           <Alerts error={error} notice={notice} />
-          <button disabled={saving || !proposal?.phases.length} className="btn-primary w-full">
+          <button disabled={saving || !proposal || !!proposal.upload_block} className="btn-primary w-full">
             {saving ? "Uploading..." : "Upload version"}
           </button>
         </form>

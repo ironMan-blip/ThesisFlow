@@ -5,7 +5,7 @@ import { Alerts, EmptyState, ICONS, PageHeader, Person, Skeleton } from "../comp
 import { when } from "../format";
 import { useAction } from "../useAction";
 
-// Coordinator inbox of requests to approve or reject; RegistrationRequestsPage and DeletionRequestsPage configure it.
+// Coordinator inbox of requests to approve or reject; the pages exported below configure it.
 function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
   const [requests, setRequests] = useState(null);
   const { user, refreshCounts } = useOutletContext();
@@ -74,9 +74,20 @@ export const DeletionRequestsPage = () => (
   <RequestsPage
     path="/auth/deletion-requests"
     title="Deletion requests"
-    intro={(h) => `Users who asked to delete their account. Approving deletes the account and its proposal for good. A request you do not approve within ${h} hours lapses and the account is kept.`}
+    intro={(h) => `Users who asked to delete their account. Approving deletes the account. Its thesis and every proposal version are kept as an archive. A request you do not approve within ${h} hours lapses and the account is kept.`}
     approved="was deleted"
     rejected="keeps their account"
     dateField="deletion_requested_at"
+  />
+);
+
+export const RestartRequestsPage = () => (
+  <RequestsPage
+    path="/auth/restart-requests"
+    title="Restart requests"
+    intro={() => "Students whose account froze after a missed deadline or a second deferral. Approving moves them back to P1: their old thesis is archived with all its versions, and their next group gets a new thesis ID."}
+    approved="restarts at P1"
+    rejected="stays frozen"
+    dateField="restart_requested_at"
   />
 );

@@ -25,7 +25,8 @@ class MilestoneOut(BaseModel):
     # What the live countdown ticks toward: due_at while open, closes_at in grace, else None.
     countdown_to: datetime | None = None
     countdown_label: str | None = None
-    # Students only: their latest upload for this phase and what it costs them.
+    mine: bool = False  # students only: the phase they are in this semester
+    # Students, for their own phase only: their latest upload and what it costs them.
     submitted_at: datetime | None = None
     late_days: int | None = None
     penalty_percent: int | None = None

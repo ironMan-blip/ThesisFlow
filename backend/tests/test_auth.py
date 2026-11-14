@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.models.user import Role, User
 from app.services import auth_service
-from tests.helpers import auth, upload
+from tests.helpers import auth, student as make_student, upload
 
 
 def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
@@ -34,7 +34,8 @@ def test_register_login_me(client, db):
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
     assert me.json()["role"] == "student"
-    assert me.json()["tools"] == ["proposal", "deadlines", "account"]
+    assert me.json()["tools"] == ["thesis", "proposal", "deadlines", "account"]
+    assert me.json()["phase"] == "P1"  # every student starts at P1
     assert me.json()["review_hours"] == 48
 
 
@@ -210,7 +211,7 @@ def test_register_rejects_bad_email_and_weak_password(client):
 
 
 def test_account_deletion_needs_coordinator_approval(client, db, tmp_path, timelines):
-    student = auth(client, db, "s@b.com")
+    student = make_student(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
     pdfs = list(tmp_path.rglob("*.pdf"))
@@ -229,8 +230,10 @@ def test_account_deletion_needs_coordinator_approval(client, db, tmp_path, timel
     uid = pending[0]["id"]
     assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 204
     assert db.get(User, uid) is None
-    assert not pdfs[0].exists()
+    assert pdfs[0].exists()  # the thesis and its versions are kept as an archive
     assert client.get("/api/auth/me", headers=student).status_code == 401
+    theses = client.get("/api/theses", headers=coord).json()
+    assert [(t["status"], t["student"], len(t["versions"])) for t in theses] == [("dropped", None, 1)]
 
 
 def test_reject_deletion_keeps_account(client, db):
@@ -261,7 +264,7 @@ def test_deletion_request_lapses_after_48_hours(client, db):
 
 
 def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path, timelines):
-    student = auth(client, db, "s@b.com")
+    student = make_student(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
     assert register(client).status_code == 201  # unapproved sign-up: not an account yet
@@ -269,20 +272,24 @@ def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path, timelines)
     assert client.get("/api/auth/accounts", headers=student).status_code == 403
     accounts = client.get("/api/auth/accounts", headers=coord).json()
     by_email = {a["email"]: a["id"] for a in accounts}
-    assert set(by_email) == {"s@b.com"}  # coordinator is the admin login, not listed
+    supervisor_email = next(e for e in by_email if e.startswith("sup"))
+    assert set(by_email) == {"s@b.com", supervisor_email}  # coordinator is the admin login, not listed
     student_id = db.scalar(select(User.id_number).where(User.email == "s@b.com"))
     emails = lambda q: [a["email"] for a in client.get(f"/api/auth/accounts?{q}", headers=coord).json()]
     assert emails(f"role=student&id_prefix={student_id[:3]}") == ["s@b.com"]
-    assert emails("role=faculty") == []
+    assert emails("role=faculty") == [supervisor_email]
     assert emails("id_prefix=%25") == []  # LIKE wildcards are matched literally
     assert client.get("/api/auth/accounts?role=coordinator", headers=coord).status_code == 422
 
     coord_id = db.scalar(select(User.id).where(User.email == "coord@b.com"))
     assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=student).status_code == 403
     assert client.delete(f"/api/auth/accounts/{coord_id}", headers=coord).status_code == 403
+    # A supervisor of an active thesis is kept; once the thesis is archived they can go.
+    assert client.delete(f"/api/auth/accounts/{by_email[supervisor_email]}", headers=coord).status_code == 409
     assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 204
     assert db.get(User, by_email["s@b.com"]) is None
-    assert not list(tmp_path.rglob("*.pdf"))
+    assert len(list(tmp_path.rglob("*.pdf"))) == 1  # versions are never lost
+    assert client.delete(f"/api/auth/accounts/{by_email[supervisor_email]}", headers=coord).status_code == 204
     assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 404
 
 
@@ -293,7 +300,11 @@ def test_pending_counts_and_name_fields(client, db):
     assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
 
     assert client.get("/api/auth/me/counts", headers=student).json() == {}
-    assert client.get("/api/auth/me/counts", headers=coord).json() == {"registration_requests": 1, "deletion_requests": 1}
+    assert client.get("/api/auth/me/counts", headers=coord).json() == {
+        "registration_requests": 1,
+        "deletion_requests": 1,
+        "restart_requests": 0,
+    }
 
     user = User(full_name="ada byron king")
     assert (user.first_name, user.monogram) == ("ada", "AB")

@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.models.milestone import Phase
 from app.models.user import REVIEW_HOURS, REVIEW_WINDOW, Role, User
 from app.schemas.user import UserCreate
 from app.security import create_access_token, hash_password, verify_password
@@ -44,6 +45,7 @@ def create_user(
         password_hash=hash_password(password),
         role=role,
         approved=approved,
+        phase=Phase.P1 if role == Role.student else None,  # every student starts at P1
     )
     db.add(user)
     try:

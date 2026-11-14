@@ -4,15 +4,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.milestone import Milestone, Phase
-from app.models.proposal import Proposal, ProposalVersion
-from app.models.user import Role, User
+from app.models.proposal import ProposalVersion
+from app.models.thesis import Thesis, ThesisStatus
+from app.models.user import User
 from app.schemas.proposal import ProposalOut
+from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
 
@@ -23,75 +24,50 @@ def _upload_dir() -> Path:
     return path
 
 
-def _can_view(user: User, proposal: Proposal) -> bool:
-    # Faculty and coordinator see all proposals (review, F13); students only their own.
-    return user.role in (Role.faculty, Role.coordinator) or proposal.owner_id == user.id
+def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service.Standing]:
+    """Why this student can't upload right now (None means they can), and their standing."""
+    s = progress_service.standing(db, user)
+    thesis = user.thesis
+    if user.phase is None:
+        return "Your thesis is complete", s
+    if s.frozen:
+        return f"{s.frozen_reason}, so your account is frozen. Ask to restart at P1 on the Thesis page", s
+    if thesis is None:
+        return "Form a thesis group first: choose a supervisor on the Thesis page", s
+    if thesis.status != ThesisStatus.active:
+        return "Your supervisor has not accepted your thesis group yet", s
+    if s.milestone is None:
+        return f"The {user.phase.value} timeline is not set yet", s
+    if datetime.now(timezone.utc) > s.milestone.closes_at:
+        return f"The {user.phase.value} deadline and grace period have passed", s
+    return None, s
 
 
-def _phases(db: Session) -> tuple[set[Phase], set[Phase]]:
-    """Phases whose timeline is set, and those whose due date and grace period have both passed."""
-    now = datetime.now(timezone.utc)
-    milestones = list(db.scalars(select(Milestone)))
-    return {m.phase for m in milestones}, {m.phase for m in milestones if now > m.closes_at}
-
-
-def last_upload_by_phase(db: Session, owner_id: int) -> dict[Phase, datetime]:
-    # The latest upload per phase is the one that counts, so a late re-upload is late.
-    return dict(
-        db.execute(
-            select(ProposalVersion.phase, func.max(ProposalVersion.created_at))
-            .join(Proposal)
-            .where(Proposal.owner_id == owner_id)
-            .group_by(ProposalVersion.phase)
-        ).all()
-    )
-
-
-def _missed_notice(phase: Phase) -> str:
-    return f"You missed {phase.value}, so uploads are closed until the next semester"
-
-
-def _upload_blocks(
-    db: Session, owner_id: int, set_phases: set[Phase], closed: set[Phase]
-) -> tuple[dict[Phase, str], Phase | None]:
-    """Why each phase is closed to this student (phases not in the result are open), and the first phase they missed."""
-    submitted = last_upload_by_phase(db, owner_id)
-    blocks, missed = {}, None
-    for p in Phase:
-        if missed:
-            # A missed phase locks every later one until a new semester's deadlines are set.
-            blocks[p] = _missed_notice(missed)
-        elif p not in set_phases:
-            blocks[p] = f"The {p.value} timeline is not set yet"
-        elif p in closed:
-            blocks[p] = f"The {p.value} deadline and grace period have passed"
-        if p in closed and p not in submitted:
-            missed = missed or p
-    return blocks, missed
-
-
-def _out(db: Session, proposal: Proposal) -> ProposalOut:
-    set_phases, closed = _phases(db)
-    blocks, missed = _upload_blocks(db, proposal.owner_id, set_phases, closed)
+def _out(db: Session, user: User) -> ProposalOut:
+    block, s = _upload_block(db, user)
+    thesis = user.thesis
     out = ProposalOut(
-        versions=proposal.versions,
-        phases=[p for p in Phase if p not in blocks],
-        missed_notice=missed and _missed_notice(missed),
+        versions=thesis.versions if thesis else [],
+        thesis_code=thesis and thesis.code,
+        phase=user.phase,
+        upload_block=block,
+        freeze_at=s.milestone.closes_at
+        if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.milestone.due_at
+        else None,
     )
     for v in out.versions:
-        v.can_delete = v.phase not in closed
+        # A submission is final once its phase closes, or once it belongs to an earlier phase or semester.
+        v.can_delete = block is None and v.phase == user.phase and v.created_at >= user.phase_started_at
     return out
 
 
 def get_mine(db: Session, user: User) -> ProposalOut:
-    # Before the first upload, use an unsaved empty proposal so the page always gets one shape.
-    proposal = db.scalar(select(Proposal).where(Proposal.owner_id == user.id)) or Proposal(owner_id=user.id)
-    return _out(db, proposal)
+    return _out(db, user)
 
 
-def _lock_mine(db: Session, user: User) -> Proposal | None:
-    # Row lock so uploads and deletes for one student never race on version numbers.
-    return db.scalar(select(Proposal).where(Proposal.owner_id == user.id).with_for_update())
+def _lock_thesis(db: Session, user: User) -> Thesis | None:
+    # Row lock so uploads and deletes on one thesis never race on version numbers.
+    return db.scalar(select(Thesis).where(Thesis.id == user.thesis_id).with_for_update())
 
 
 def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
@@ -121,20 +97,21 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     return stored, size, digest.hexdigest()
 
 
-def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
+def _close_gap(db: Session, thesis_id: int, removed_no: int) -> None:
     # Later versions move down by one. Two steps through negatives because
-    # Postgres checks the (proposal_id, version_no) unique constraint row by row.
-    later = (ProposalVersion.proposal_id == proposal_id) & (ProposalVersion.version_no > removed_no)
+    # Postgres checks the (thesis_id, version_no) unique constraint row by row.
+    later = (ProposalVersion.thesis_id == thesis_id) & (ProposalVersion.version_no > removed_no)
     db.execute(update(ProposalVersion).where(later).values(version_no=1 - ProposalVersion.version_no))
     db.execute(
         update(ProposalVersion)
-        .where(ProposalVersion.proposal_id == proposal_id, ProposalVersion.version_no < 0)
+        .where(ProposalVersion.thesis_id == thesis_id, ProposalVersion.version_no < 0)
         .values(version_no=-ProposalVersion.version_no)
     )
 
 
-def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: str, file: UploadFile) -> ProposalOut:
-    if block := _upload_blocks(db, user.id, *_phases(db))[0].get(phase):
+def upload_version(db: Session, user: User, title: str, abstract: str, file: UploadFile) -> ProposalOut:
+    # Uploads always go to the student's current phase, under their thesis ID.
+    if block := _upload_block(db, user)[0]:
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
@@ -145,21 +122,20 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
     stored, size, sha256 = _save_pdf(file)
     keep_new_file = True
     try:
-        proposal = _lock_mine(db, user)
-        if proposal is None:
-            proposal = Proposal(owner_id=user.id)
-            db.add(proposal)
-            db.flush()
-        last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.proposal_id == proposal.id))
+        thesis = _lock_thesis(db, user)
+        last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.thesis_id == thesis.id))
         fields = dict(
-            phase=phase,
+            phase=user.phase,
             original_filename=Path(file.filename or "proposal.pdf").name[:255],
             uploaded_by_id=user.id,
         )
-        # Same PDF with a different title or abstract is a real new version.
+        # Same PDF with a different title or abstract is a real new version. Only this phase's uploads are
+        # reused, so a final submission from an earlier phase or semester is never rewritten.
         same = db.scalar(
             select(ProposalVersion).where(
-                ProposalVersion.proposal_id == proposal.id,
+                ProposalVersion.thesis_id == thesis.id,
+                ProposalVersion.phase == user.phase,
+                ProposalVersion.created_at >= user.phase_started_at,
                 ProposalVersion.sha256 == sha256,
                 ProposalVersion.title == title,
                 ProposalVersion.abstract == abstract,
@@ -168,7 +144,7 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
         if same is None:
             db.add(
                 ProposalVersion(
-                    proposal_id=proposal.id,
+                    thesis_id=thesis.id,
                     version_no=(last or 0) + 1,
                     title=title,
                     abstract=abstract,
@@ -184,11 +160,11 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
             moved_from = same.version_no
             same.version_no = 0
             db.flush()
-            _close_gap(db, proposal.id, moved_from)
+            _close_gap(db, thesis.id, moved_from)
             db.execute(
                 update(ProposalVersion)
                 .where(ProposalVersion.id == same.id)
-                .values(version_no=last, created_at=func.now(), **fields)
+                .values(version_no=last, created_at=datetime.now(timezone.utc), **fields)
             )
         db.commit()
     except BaseException as exc:
@@ -200,47 +176,35 @@ def upload_version(db: Session, user: User, phase: Phase, title: str, abstract: 
     finally:
         if not keep_new_file:
             (_upload_dir() / stored).unlink(missing_ok=True)
-    db.refresh(proposal)
-    return _out(db, proposal)
+    db.refresh(thesis)
+    return _out(db, user)
 
 
 def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
-    proposal = _lock_mine(db, user)
+    thesis = user.thesis_id and _lock_thesis(db, user)
     # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
-    version = proposal and db.scalar(
-        select(ProposalVersion).where(ProposalVersion.id == version_id, ProposalVersion.proposal_id == proposal.id)
+    version = thesis and db.scalar(
+        select(ProposalVersion).where(ProposalVersion.id == version_id, ProposalVersion.thesis_id == thesis.id)
     )
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
-    if version.phase in _phases(db)[1]:
-        # Submissions are final once the phase closes; removing one would also turn it into a missed phase.
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"The {version.phase.value} deadline and grace period have passed, so it can't be removed"
-        )
+    if not next(v.can_delete for v in _out(db, user).versions if v.id == version.id):
+        # Submissions are final once the phase closes; removing one could also turn it into a missed deadline.
+        raise HTTPException(status.HTTP_409_CONFLICT, "This version is a final submission, so it can't be removed")
     stored, removed_no = version.stored_filename, version.version_no
     db.delete(version)
     db.flush()
-    _close_gap(db, proposal.id, removed_no)
+    _close_gap(db, thesis.id, removed_no)
     db.commit()
     # File goes only after the row is gone, so a failed commit never loses a PDF.
     (_upload_dir() / stored).unlink(missing_ok=True)
-    db.refresh(proposal)
-    return _out(db, proposal)
-
-
-def delete_owned(db: Session, user: User) -> list[Path]:
-    """Delete the user's proposal and its versions (no commit). Returns their PDFs for the caller to remove after commit."""
-    names = list(
-        db.scalars(select(ProposalVersion.stored_filename).join(Proposal).where(Proposal.owner_id == user.id))
-    )
-    # Explicit, not the users FK cascade: proposal_versions.uploaded_by_id would block that.
-    db.execute(delete(Proposal).where(Proposal.owner_id == user.id))
-    return [_upload_dir() / name for name in names]
+    db.refresh(thesis)
+    return _out(db, user)
 
 
 def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, str]:
     version = db.get(ProposalVersion, version_id)
-    if version is None or not _can_view(user, version.proposal):
+    if version is None or not thesis_service.can_view(user, version.thesis):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
     path = _upload_dir() / version.stored_filename
     if not path.is_file():

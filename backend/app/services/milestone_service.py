@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.milestone import Milestone, Phase
 from app.models.user import Role, User
 from app.schemas.milestone import MilestoneIn, MilestoneOut, TimelineOut
-from app.services import proposal_service
+from app.services import progress_service
 
 DAY = timedelta(days=1)
 
@@ -17,9 +17,11 @@ def late_days(due_at: datetime, at: datetime) -> int:
     return max(0, math.ceil((at - due_at) / DAY))
 
 
-def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_student: bool):
+def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_mine: bool):
     if m is None:
-        return MilestoneOut(phase=phase, due_at=None, grace_days=0, penalty_per_day=0, closes_at=None, status="not_set")
+        return MilestoneOut(
+            phase=phase, due_at=None, grace_days=0, penalty_per_day=0, closes_at=None, status="not_set", mine=is_mine
+        )
     closes_at = m.closes_at
     status = "open" if now <= m.due_at else "grace" if now <= closes_at else "closed"
     out = MilestoneOut(
@@ -29,12 +31,13 @@ def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetim
         penalty_per_day=m.penalty_per_day,
         closes_at=closes_at,
         status=status,
+        mine=is_mine,
     )
     if status == "open":
         out.countdown_to, out.countdown_label = m.due_at, "Due in"
     elif status == "grace":
         out.countdown_to, out.countdown_label = closes_at, "Grace ends in"
-    if is_student:
+    if is_mine:
         # Grace is the late window: days count from the due date. Not submitted yet: they keep
         # counting until grace ends, since no upload is accepted after that.
         days = late_days(m.due_at, submitted_at or min(now, closes_at))
@@ -48,17 +51,16 @@ def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetim
 def timeline(db: Session, user: User) -> TimelineOut:
     now = datetime.now(timezone.utc)
     milestones = {m.phase: m for m in db.scalars(select(Milestone))}
-    submitted = proposal_service.last_upload_by_phase(db, user.id) if user.role == Role.student else {}
+    # A student only has a submission for the phase they are in this semester.
+    submitted = progress_service.submitted_at(db, user) if user.role == Role.student else None
     return TimelineOut(
         now=now,
-        milestones=[
-            _row(milestones.get(p), p, now, submitted.get(p), user.role == Role.student) for p in Phase
-        ],
+        milestones=[_row(milestones.get(p), p, now, submitted, p == user.phase) for p in Phase],
         can_edit=user.role == Role.coordinator,
     )
 
 
 def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
-    # No cross-phase order check: deadlines may differ per semester/group once those land.
+    # No cross-phase order check: students in different phases have separate deadlines each semester.
     db.merge(Milestone(phase=phase, **data.model_dump()))
     db.commit()

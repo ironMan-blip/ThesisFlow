@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.user import Role, User
-from app.schemas.user import DeletionRequestOut, RegistrationRequestOut, UserOut
-from app.services import account_service
+from app.schemas.user import DeletionRequestOut, RegistrationRequestOut, RestartRequestOut, UserOut
+from app.services import account_service, progress_service
 
 # Same /api/auth prefix as auth_controller, so existing URLs keep working.
 router = APIRouter(prefix="/api/auth", tags=["accounts"])
@@ -51,6 +51,26 @@ def approve_deletion(user_id: int, db: Session = Depends(get_db)):
 @router.delete("/deletion-requests/{user_id}", response_model=UserOut, dependencies=[Depends(coordinator)])
 def reject_deletion(user_id: int, db: Session = Depends(get_db)):
     return account_service.reject_deletion(db, user_id)
+
+
+@router.post("/me/restart-request", response_model=UserOut)
+def request_restart(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return progress_service.request_restart(db, user)
+
+
+@router.get("/restart-requests", response_model=list[RestartRequestOut], dependencies=[Depends(coordinator)])
+def restart_requests(db: Session = Depends(get_db)):
+    return progress_service.pending_restarts(db)
+
+
+@router.post("/restart-requests/{user_id}/approve", response_model=UserOut, dependencies=[Depends(coordinator)])
+def approve_restart(user_id: int, db: Session = Depends(get_db)):
+    return progress_service.approve_restart(db, user_id)
+
+
+@router.delete("/restart-requests/{user_id}", response_model=UserOut, dependencies=[Depends(coordinator)])
+def reject_restart(user_id: int, db: Session = Depends(get_db)):
+    return progress_service.reject_restart(db, user_id)
 
 
 @router.get("/me/counts")

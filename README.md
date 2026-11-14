@@ -71,13 +71,13 @@ There are three roles. Each one sees only its own tools in the navigation and on
 
 | Role | Tools |
 |------|-------|
-| Student | Proposal, Deadlines, Account |
-| Faculty | Deadlines, Account |
-| Coordinator | Deadlines, Accounts, Registration requests, Deletion requests |
+| Student | Thesis group, Proposal, Deadlines, Account |
+| Faculty | Theses, Deadlines, Account |
+| Coordinator | Theses, Deadlines, Accounts, Registration requests, Deletion requests, Restart requests |
 
-Tools with waiting work (registration or deletion requests) show a count badge in the nav and on the dashboard. The nav is a fixed sidebar on desktop and a slide-out drawer on phones.
+Tools with waiting work (registration, deletion, restart or supervision requests) show a count badge in the nav and on the dashboard. The nav is a fixed sidebar on desktop and a slide-out drawer on phones.
 
-Supervisor and panel member are not account roles. They will be links between a faculty user and a group or defense.
+Supervisor and panel member are not account roles. A supervisor is a faculty user linked to a thesis group; panel members will be linked to a defense.
 
 ### 1. Accounts and login
 
@@ -101,13 +101,13 @@ Supervisor and panel member are not account roles. They will be links between a 
 - Students and faculty can ask to delete their account under **Account**. The account keeps working while the request waits.
 - The coordinator approves or rejects it under **Deletion requests**.
 - A request not approved within **48 hours** lapses and the account is kept.
-- Approving deletes the user, their proposal, all its versions and the stored PDF files.
-- The coordinator account cannot be deleted.
+- Approving deletes the user. Their thesis, all its proposal versions and the PDF files are kept as an archive.
+- The coordinator account cannot be deleted, and neither can a faculty member who supervises an active or requested thesis.
 
 ### 4. Account management (coordinator)
 
 - **Accounts** lists every approved student and faculty account, with Students / Faculty tabs and a search by ID number prefix. Waiting sign-ups and the coordinator account are not listed.
-- The coordinator can delete any listed account directly. This removes the user, their proposal, all versions and the stored PDF files.
+- The coordinator can delete any listed account directly, with the same rules: theses and versions are kept.
 
 ### 5. Deadlines (phases P1, P2, P3)
 
@@ -115,27 +115,37 @@ Supervisor and panel member are not account roles. They will be links between a 
   - a **due date and time** (time defaults to 11:59 PM),
   - a **grace period** in days (0 to 7),
   - a **late penalty** in percent per day (0 to 100).
-- Phase deadlines are independent: any phase can be due before or after another (dates will vary per semester and group).
+- Phase deadlines are independent: any phase can be due before or after another. In one semester P1, P2 and P3 students each work to their own phase's deadline.
 - Everyone sees each phase's status: **not set**, **open**, **in grace**, or **closed**, with a live countdown ("Due in" while open, "Grace ends in" during grace).
-- Students also see, per phase, their own submission status:
+- Students also see, for their own phase (marked **Your phase**), their submission status:
   - **on time**, **late**, or **not submitted**,
   - **late days**: uploads during the grace period are accepted but late; every started day after the due date counts as a full day, and keeps counting until they submit or the grace period ends,
   - **penalty**: late days × penalty per day, capped at 100%.
 - The latest upload for a phase is the one that counts.
 
-### 6. Proposal submission
+### 6. Thesis groups and phase progression
 
-- Students can upload only for phases whose timeline is set and whose grace period has not ended; once it ends, uploads for that phase are closed.
-- A student who misses a phase (its grace period ends with no upload from them) cannot upload for any later phase (P1 → P2 → P3, whatever the dates) until the next semester's deadlines are set.
-- Students upload a proposal version with a **phase** (P1/P2/P3), **title** (1 to 255 characters), **abstract** and a **PDF file**.
+- A student needs a **thesis group** to upload: the student, a **supervisor** (required) and a **co-supervisor** (optional), both faculty. The student sends the request on the **Thesis group** page.
+- Faculty accept or decline under **Theses**. When the supervisor accepts, the thesis becomes active and gets its **thesis ID** (e.g. `TH-0007`). The co-supervisor accepts their own slot; a decline just leaves it empty. A supervisor's decline, or the student cancelling, lets the student choose again.
+- Every proposal version is stored under the thesis ID, so nothing is lost: deleting an account or restarting keeps the thesis and its versions as an archive. Faculty see the theses they supervise; the coordinator sees all of them.
+- **One phase per semester.** A new student starts at **P1**. A student who submits their phase (late inside grace counts) moves to the next phase next semester: P1 → P2 → P3.
+- **Missed deadline:** if grace ends with no upload, the account is **frozen**. The student can still log in, but cannot upload or form a group. During grace they see a warning with the freeze time. Extending the deadline lifts the freeze until the semester ends. A student whose phase started after the deadline closed (late sign-up or restart) is not frozen; they wait for next semester.
+- **Restart:** a frozen student asks to restart on the Thesis group page. The coordinator approves under **Restart requests**: the student goes back to P1, the old thesis is archived, and the next group gets a new thesis ID.
+- **P3 deferral** (no panel members yet): after a P3 submission the coordinator can **defer** the thesis under Theses (and undo it until the semester ends). Deferred once: P3 again next semester, and last semester's upload no longer counts. Deferred twice: the account is frozen. Not deferred: the thesis is **completed**.
+- **Start next semester** (coordinator, on Deadlines) applies all of this once every grace time has ended, then clears the deadlines so the new ones can be set.
+
+### 7. Proposal submission
+
+- Uploads always go to the student's current phase, under their thesis ID, and only while that phase's timeline is set and its grace period has not ended.
+- Students upload a proposal version with a **title** (1 to 255 characters), **abstract** and a **PDF file**.
 - The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default).
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
-- Re-submitting the exact same PDF with the same title and abstract does not store a copy: that existing version moves to the top as the latest.
-- Students can delete a version (with a confirmation dialog) until its phase's grace period ends; after that it is final and the Remove button is hidden. Later versions shift down so numbers stay in order, and the PDF file is removed.
-- Students see only their own proposal. Faculty and the coordinator can download any version (for review).
-- Uploads and deletes by the same student are locked against each other, so version numbers never clash.
+- Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
+- Students can delete a version of their current phase (with a confirmation dialog) until its grace period ends; after that it is final and the Remove button is hidden. Later versions shift down so numbers stay in order, and the PDF file is removed.
+- Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
+- Uploads and deletes on the same thesis are locked against each other, so version numbers never clash.
 
-### 7. Security
+### 8. Security
 
 - **Rate limiting** per client IP, over a 60-second window: 10 requests to `/api/auth/login` and `/api/auth/register`, 300 to any other `/api/` path. Over the limit returns `429`. The counter is in memory, per backend process.
 - Login takes the same time whether the ID exists or not (constant-time password check), so IDs cannot be guessed from response time.
@@ -145,7 +155,7 @@ Supervisor and panel member are not account roles. They will be links between a 
 
 ```
 backend/app/
-  models/       Model: SQLAlchemy tables (User, Milestone, Proposal, ProposalVersion)
+  models/       Model: SQLAlchemy tables (User, Milestone, Thesis, ProposalVersion)
   services/     Model: business rules
   controllers/  Controller: FastAPI routers (check user, call a service, nothing else)
   schemas/      Pydantic request/response shapes
@@ -178,12 +188,21 @@ frontend/src/
 | GET / DELETE | `/api/auth/accounts[/{id}]` (`?role=&id_prefix=` filters) | coordinator |
 | GET / POST / DELETE | `/api/auth/registration-requests[/{id}[/approve]]` | coordinator |
 | GET / POST / DELETE | `/api/auth/deletion-requests[/{id}[/approve]]` | coordinator |
+| POST | `/api/auth/me/restart-request` | frozen student |
+| GET / POST / DELETE | `/api/auth/restart-requests[/{id}[/approve]]` | coordinator |
 | GET | `/api/milestones` | logged in |
 | PUT | `/api/milestones/{phase}` | coordinator |
+| POST | `/api/milestones/next-semester` | coordinator |
+| GET | `/api/theses/faculty` | student |
+| GET / POST / DELETE | `/api/theses/mine` (status, request a group, cancel a pending one) | student |
+| GET | `/api/theses/requests` | faculty |
+| POST | `/api/theses/requests/{id}/accept`, `/decline` | faculty |
+| GET | `/api/theses` (with versions) | faculty (own), coordinator (all) |
+| PUT | `/api/theses/{id}/defer` | coordinator |
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
 | DELETE | `/api/proposals/versions/{id}` | student (own) |
-| GET | `/api/proposals/versions/{id}/file` | owner, faculty, coordinator |
+| GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisors, coordinator |
 
 Full request/response shapes are at http://localhost:8000/docs.
 

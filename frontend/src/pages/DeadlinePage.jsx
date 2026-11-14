@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Alerts, PageHeader, Skeleton } from "../components/ui";
 import { when } from "../format";
@@ -38,6 +38,8 @@ const toLocalInput = (iso) => {
 
 export default function DeadlinePage() {
   const [data, setData] = useState(null);
+  const [confirming, setConfirming] = useState(false);
+  const dialog = useRef(null);
   const [offset, setOffset] = useState(0); // server clock minus browser clock
   const [now, setNow] = useState(Date.now());
   const { busy: saving, error, notice, setError, run } = useAction(); // busy key is the phase being saved
@@ -79,12 +81,41 @@ export default function DeadlinePage() {
 
   const serverNow = now + offset;
 
+  useEffect(() => {
+    if (confirming) dialog.current.showModal();
+    else dialog.current.close();
+  }, [confirming]);
+
+  const nextSemester = () => {
+    setConfirming(false);
+    run("semester", async () => {
+      const r = await api("/milestones/next-semester", { method: "POST" });
+      show(await api("/milestones"));
+      return `New semester started: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.frozen} frozen. Set the new deadlines below.`;
+    });
+  };
+
   return (
     <div className="space-y-8">
       <PageHeader
         title="Deadlines"
         intro="Each phase has a due date and a grace time. Work handed in after the grace time loses marks for every late day."
       />
+
+      {data?.can_edit && (
+        <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
+          <div className="max-w-prose">
+            <h2 className="font-semibold">End this semester</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Once every grace time has ended: students who submitted move to their next phase, P3 theses are completed
+              or deferred, students who missed are frozen, and all deadlines are cleared for next semester.
+            </p>
+          </div>
+          <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">
+            {saving === "semester" ? "Starting..." : "Start next semester"}
+          </button>
+        </section>
+      )}
 
       <Alerts error={error} notice={notice} />
 
@@ -101,6 +132,7 @@ export default function DeadlinePage() {
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold">{m.phase}</h2>
                     <span className={`badge ${tone}`}>{label}</span>
+                    {m.mine && <span className="badge bg-zinc-900 text-white ring-zinc-900">Your phase</span>}
                   </div>
                   {m.countdown_to && (
                     <div className="flex items-center gap-3 text-sm text-zinc-600">
@@ -160,6 +192,19 @@ export default function DeadlinePage() {
           })}
         </ol>
       )}
+
+      {/* Esc closes the dialog natively; onClose keeps state in sync. */}
+      <dialog ref={dialog} onClose={() => setConfirming(false)} aria-labelledby="semester-title"
+        className="card m-auto w-full max-w-md p-6 backdrop:bg-zinc-900/40">
+        <h2 id="semester-title" className="font-semibold">Start the next semester?</h2>
+        <p className="mt-2 text-sm text-zinc-600">
+          This moves every student on and clears all P1, P2 and P3 deadlines. It cannot be undone.
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button onClick={() => setConfirming(false)} autoFocus className="btn-secondary">Cancel</button>
+          <button onClick={nextSemester} className="btn-primary">Yes, start it</button>
+        </div>
+      </dialog>
     </div>
   );
 }

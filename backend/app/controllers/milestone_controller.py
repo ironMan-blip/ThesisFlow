@@ -6,7 +6,7 @@ from app.deps import get_current_user, require_roles
 from app.models.milestone import Phase
 from app.models.user import Role, User
 from app.schemas.milestone import MilestoneIn, TimelineOut
-from app.services import milestone_service
+from app.services import milestone_service, progress_service
 
 router = APIRouter(prefix="/api/milestones", tags=["milestones"])
 
@@ -22,3 +22,8 @@ def set_deadline(
 ):
     milestone_service.set_milestone(db, phase, data)
     return milestone_service.timeline(db, user)
+
+
+@router.post("/next-semester", dependencies=[Depends(require_roles(Role.coordinator))])
+def next_semester(db: Session = Depends(get_db)) -> dict[str, int]:
+    return progress_service.next_semester(db)
