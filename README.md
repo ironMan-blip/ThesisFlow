@@ -6,9 +6,13 @@ ThesisFlow brings the thesis process into one place: students submit their propo
 
 **Stack:** FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + Tailwind, all run with Docker Compose.
 
-## Architecture
+## Class Diagram
 
 ![ThesisFlow class diagram](470_class_diagram_g7.svg)
+
+Member 3's part (auth & accounts, F11–F15), made in draw.io. Open `470_class_diagram_g7.svg` in draw.io to edit it. The other members' parts will be added to this same file.
+
+## Architecture
 
 **Example — a student uploads a proposal PDF:**
 
