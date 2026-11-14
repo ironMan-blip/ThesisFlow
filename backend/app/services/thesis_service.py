@@ -6,6 +6,8 @@ The supervisor accepting makes the thesis active and issues its thesis ID. Every
 stored under that thesis, so it is never lost when accounts change.
 """
 
+import secrets
+
 from fastapi import HTTPException, status
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -18,6 +20,14 @@ from app.schemas.thesis import MyThesisOut, SupervisionRequestOut, ThesisDetailO
 from app.services import progress_service
 
 LIVE = (ThesisStatus.pending, ThesisStatus.active)
+
+
+def new_code(db: Session) -> str:
+    # "T" + 8 random digits; retry on the rare clash. The unique column guards concurrent accepts.
+    while True:
+        code = f"T{secrets.randbelow(10**8):08d}"
+        if not db.scalar(select(Thesis.id).where(Thesis.code == code)):
+            return code
 
 
 def faculty(db: Session) -> list[User]:
@@ -120,7 +130,7 @@ def decide(db: Session, member: User, thesis_id: int, accept: bool) -> None:
     thesis = db.scalar(select(Thesis).where(Thesis.id == thesis_id).with_for_update())
     if thesis and thesis.supervisor_id == member.id and thesis.status == ThesisStatus.pending:
         if accept:
-            thesis.status = ThesisStatus.active
+            thesis.status, thesis.code = ThesisStatus.active, new_code(db)
         else:
             # Declined: the student picks again. Never accepted, so there are no versions to keep.
             thesis.student.thesis = None

@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -73,7 +74,7 @@ def test_group_needs_supervisor_acceptance_and_gets_a_thesis_id(client, db):
     assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=sup).status_code == 204
     flags = mine(client, s)
     t = flags["thesis"]
-    assert (t["status"], t["code"]) == ("active", f"TH-{t['id']:04d}")
+    assert t["status"] == "active" and re.fullmatch(r"T\d{8}", t["code"])
     assert (flags["can_cancel"], flags["show_p1_registration"], flags["show_deferral_warning"]) == (False, True, False)
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
     assert client.get("/api/theses", headers=co).json() == []  # not accepted yet: not their thesis

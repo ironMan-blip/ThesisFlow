@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -15,7 +16,7 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     h = student(client, db, "s@x.com")
     empty = client.get("/api/proposals/mine", headers=h).json()
     assert (empty["versions"], empty["phase"], empty["upload_block"]) == ([], "P1", None)
-    assert empty["thesis_code"].startswith("TH-")
+    assert re.fullmatch(r"T\d{8}", empty["thesis_code"])
 
     assert upload(client, h, title="v1").status_code == 201
     res = upload(client, h, content=PDF + b"v2", title="v2", name="p2.pdf")
