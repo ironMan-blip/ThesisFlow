@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.config import settings
-from app.models.milestone import Milestone, Phase
+from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role
 from tests.helpers import PDF, auth, me, student, upload
 
@@ -159,7 +159,7 @@ def test_same_pdf_with_new_title_or_abstract_is_a_new_version(client, db):
 
 def test_upload_needs_the_phase_timeline(client, db):
     h = student(client, db, "s@x.com")
-    db.delete(db.get(Milestone, Phase.P1))
+    db.delete(db.get(MilestoneTemplate, Phase.P1))
     db.flush()
     mine = client.get("/api/proposals/mine", headers=h).json()
     assert mine["upload_block"] == "The P1 timeline is not set yet"
@@ -169,7 +169,7 @@ def test_upload_needs_the_phase_timeline(client, db):
 
 def test_grace_period_warns_and_then_uploads_close(client, db):
     h = student(client, db, "s@x.com")
-    p1 = db.get(Milestone, Phase.P1)
+    p1 = db.get(MilestoneTemplate, Phase.P1)
     p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 1  # past due, still in grace
     db.flush()
     mine = client.get("/api/proposals/mine", headers=h).json()

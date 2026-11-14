@@ -40,9 +40,12 @@ class Thesis(Base):
     student = relationship("User", foreign_keys=[student_id])
     supervisor = relationship("User", foreign_keys=[supervisor_id])
     co_supervisor = relationship("User", foreign_keys=[co_supervisor_id])
-    versions = relationship(
-        "ProposalVersion", back_populates="thesis", order_by="ProposalVersion.version_no.desc()"
-    )
+    proposal = relationship("Proposal", back_populates="thesis", uselist=False)
+
+    @property
+    def versions(self) -> list:
+        # Newest first; empty until the group's first upload makes its proposal.
+        return self.proposal.versions if self.proposal else []
 
     @property
     def code(self) -> str | None:

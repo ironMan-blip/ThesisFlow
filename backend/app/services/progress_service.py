@@ -16,7 +16,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from app.models.milestone import Milestone, Phase
+from app.models.milestone import Deliverable, GroupMilestone, MilestoneTemplate, Phase
 from app.models.proposal import ProposalVersion
 from app.models.semester import Semester
 from app.models.thesis import Thesis, ThesisStatus
@@ -31,13 +31,29 @@ REGISTRATION_WINDOW = timedelta(weeks=1)
 class Standing:
     """Where a student stands in their current phase this semester."""
 
-    milestone: Milestone | None  # this semester's deadline for their phase
-    submitted_at: datetime | None  # latest upload that counts for their phase
-    frozen_reason: str | None  # set when the account is frozen
+    template: MilestoneTemplate | None  # this semester's deadline for their phase
+    group_milestone: GroupMilestone | None  # their group's own milestone this semester; None until they submit
+    frozen_reason: str | None = None  # set when the account is frozen
 
     @property
     def frozen(self) -> bool:
         return self.frozen_reason is not None
+
+    @property
+    def submitted_at(self) -> datetime | None:
+        # Latest upload that counts for their phase; a late re-upload is late.
+        return self.group_milestone and self.group_milestone.submitted_at
+
+    @property
+    def due_at(self) -> datetime | None:
+        # An approved extension moves only this group's due date.
+        if self.template is None:
+            return None
+        return self.group_milestone.effective_due_at(self.template) if self.group_milestone else self.template.due_at
+
+    @property
+    def closes_at(self) -> datetime | None:
+        return self.due_at and self.due_at + timedelta(days=self.template.grace_days)
 
 
 def _now() -> datetime:
@@ -55,52 +71,87 @@ def registration_open(db: Session) -> bool:
     return closes is not None and _now() <= closes
 
 
-def submitted_at(db: Session, user: User) -> datetime | None:
-    # The latest upload counts, so a late re-upload is late. Uploads from before this phase started
-    # (a deferred P3, or an earlier semester) don't count.
+def current_semester_id(db: Session) -> int | None:
+    return db.scalar(select(func.max(Semester.id)))
+
+
+def group_milestone(db: Session, user: User, create: bool = False) -> GroupMilestone | None:
+    """The student's group milestone for their current phase this semester. Earlier semesters (a deferred P3) don't count."""
     if user.thesis_id is None or user.phase is None:
         return None
-    return db.scalar(
-        select(func.max(ProposalVersion.created_at)).where(
-            ProposalVersion.thesis_id == user.thesis_id,
-            ProposalVersion.phase == user.phase,
-            ProposalVersion.created_at >= user.phase_started_at,
-        )
+    key = dict(thesis_id=user.thesis_id, semester_id=current_semester_id(db), phase=user.phase)
+    gm = db.scalar(select(GroupMilestone).filter_by(**key))
+    if gm is None and create:
+        gm = GroupMilestone(**key)
+        db.add(gm)
+        db.flush()
+    return gm
+
+
+def phase_uploads(user: User):
+    """Filter for the uploads that count toward the student's group milestone: this phase, since it started."""
+    return (
+        ProposalVersion.proposal.has(thesis_id=user.thesis_id)
+        & (ProposalVersion.phase == user.phase)
+        & (ProposalVersion.created_at >= user.phase_started_at)
     )
 
 
-def held_to(user: User, m: Milestone) -> bool:
+def sync_deliverable(db: Session, gm: GroupMilestone, user: User) -> None:
+    # The deliverable is the latest upload for the phase; call after adding or removing one.
+    db.flush()
+    latest = db.scalar(
+        select(ProposalVersion)
+        .where(phase_uploads(user))
+        .order_by(ProposalVersion.created_at.desc())
+        .limit(1)
+        .execution_options(populate_existing=True)  # a re-submit bumps created_at with a bulk UPDATE
+    )
+    db.execute(delete(Deliverable).where(Deliverable.group_milestone_id == gm.id))
+    if latest is not None:
+        db.add(Deliverable(group_milestone_id=gm.id, proposal_version_id=latest.id))
+    gm.submitted_at = latest and latest.created_at
+    db.flush()
+    db.expire(gm, ["deliverable"])
+
+
+def submitted_at(db: Session, user: User) -> datetime | None:
+    gm = group_milestone(db, user)
+    return gm and gm.submitted_at
+
+
+def held_to(user: User, closes_at: datetime) -> bool:
     # Only students who could upload have anything due: their phase started before the deadline closed, their
     # group is accepted and, in P1, registered this semester. Everyone else waits for next semester.
     thesis = user.thesis
     return (
-        user.phase_started_at < m.closes_at
+        user.phase_started_at < closes_at
         and thesis is not None
         and thesis.status == ThesisStatus.active
         and (user.phase != Phase.P1 or thesis.p1_registered)
     )
 
 
-def _missed(user: User, m: Milestone | None, submitted: datetime | None, now: datetime) -> bool:
-    return m is not None and now > m.closes_at and submitted is None and held_to(user, m)
+def _missed(user: User, s: Standing, now: datetime) -> bool:
+    return s.closes_at is not None and now > s.closes_at and s.submitted_at is None and held_to(user, s.closes_at)
 
 
 def standing(db: Session, user: User, now: datetime | None = None) -> Standing:
     now = now or _now()
-    m = db.get(Milestone, user.phase) if user.phase else None
-    submitted = submitted_at(db, user)
+    s = Standing(db.get(MilestoneTemplate, user.phase) if user.phase else None, group_milestone(db, user))
     reason = None
     if user.frozen_at is not None:
         thesis = user.thesis
         deferred = thesis is not None and thesis.deferrals >= MAX_DEFERRALS
         reason = "Your thesis was deferred twice" if deferred else f"You missed the {user.phase.value} deadline"
-    elif user.phase and _missed(user, m, submitted, now):
+    elif user.phase and _missed(user, s, now):
         # Shown as soon as grace ends; saved at the rollover. A deadline extension lifts it before then.
         reason = f"You missed the {user.phase.value} deadline"
     elif user.restart_pending or user.restart_approved:
         # Asking for a fresh start is final: a later deadline extension doesn't reopen this thesis.
         reason = "You asked to restart at P1"
-    return Standing(m, submitted, reason)
+    s.frozen_reason = reason
+    return s
 
 
 def _students(db: Session):
@@ -112,11 +163,19 @@ def _students(db: Session):
 def next_semester(db: Session) -> dict[str, int]:
     """Coordinator: end the semester. Moves students on, applies P3 deferrals, saves freezes and clears the deadlines."""
     now = _now()
-    milestones = list(db.scalars(select(Milestone).with_for_update()))
-    if still_open := sorted(m.phase.value for m in milestones if now <= m.closes_at):
+    templates = {t.phase: t for t in db.scalars(select(MilestoneTemplate).with_for_update())}
+    extended = db.scalars(
+        select(GroupMilestone).where(
+            GroupMilestone.semester_id == current_semester_id(db), GroupMilestone.extended_due_at.is_not(None)
+        )
+    )
+    still_open = {t.phase.value for t in templates.values() if now <= t.closes_at}
+    # A group with an extension can still upload after the phase's own grace ends.
+    still_open |= {g.phase.value for g in extended if g.phase in templates and now <= Standing(templates[g.phase], g).closes_at}
+    if still_open:
         # Moving on now would cut off students who can still upload.
         raise HTTPException(
-            status.HTTP_409_CONFLICT, f"{', '.join(still_open)} is still open, wait until its grace period ends"
+            status.HTTP_409_CONFLICT, f"{', '.join(sorted(still_open))} is still open, wait until its grace period ends"
         )
     result = {"advanced": 0, "completed": 0, "deferred": 0, "frozen": 0, "restarted": 0}
     for user in _students(db):
@@ -148,7 +207,7 @@ def next_semester(db: Session) -> dict[str, int]:
         else:
             thesis.status, user.phase = ThesisStatus.completed, None
             result["completed"] += 1
-    db.execute(delete(Milestone))
+    db.execute(delete(MilestoneTemplate))
     db.execute(update(Thesis).values(p1_registered=False))  # P1 registration is per semester
     db.add(Semester(started_at=now))  # opens P1 registration for the new semester
     db.commit()

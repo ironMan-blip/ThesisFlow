@@ -158,7 +158,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 ```
 backend/app/
-  models/       Model: SQLAlchemy tables (User, Milestone, Thesis, ProposalVersion)
+  models/       Model: SQLAlchemy tables (User, Thesis, Proposal, ProposalVersion, MilestoneTemplate, GroupMilestone, Deliverable)
   services/     Model: business rules
   controllers/  Controller: FastAPI routers (check user, call a service, nothing else)
   schemas/      Pydantic request/response shapes

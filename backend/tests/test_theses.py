@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import delete
 
-from app.models.milestone import Milestone, Phase
-from app.models.proposal import ProposalVersion
+from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.user import Role, User
 from tests.helpers import PDF, auth, close_registration, form_group, me, student, upload
 
@@ -31,7 +30,7 @@ def started_yesterday(client, db, h):
 
 
 def close(db, phase):
-    m = db.get(Milestone, phase)
+    m = db.get(MilestoneTemplate, phase)
     m.due_at, m.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0
     db.flush()
 
@@ -39,7 +38,7 @@ def close(db, phase):
 def reopen(db):
     # A new semester's deadlines.
     due = datetime.now(timezone.utc) + timedelta(days=30)
-    db.add_all(Milestone(phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
+    db.add_all(MilestoneTemplate(phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
     db.flush()
 
 
@@ -100,8 +99,8 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     old_thesis = mine(client, s)["thesis"]
     upload(client, s)
-    # That upload was from an earlier phase, so it doesn't count for this one.
-    db.execute(update(ProposalVersion).values(created_at=datetime.now(timezone.utc) - timedelta(days=2)))
+    # That upload was from an earlier phase, so it isn't a deliverable for this one.
+    db.execute(delete(GroupMilestone))
     started_yesterday(client, db, s)
     close(db, Phase.P1)
 
@@ -111,7 +110,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     assert res.status_code == 409 and "frozen" in res.json()["detail"]
 
     # Extending the deadline lifts the freeze before the semester ends.
-    db.get(Milestone, Phase.P1).grace_days = 2
+    db.get(MilestoneTemplate, Phase.P1).grace_days = 2
     db.flush()
     assert mine(client, s)["frozen_reason"] is None
     close(db, Phase.P1)
@@ -122,7 +121,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     assert r.status_code == 200 and r.json()["restart_pending"] is True
     assert client.post("/api/auth/me/restart-request", headers=s).status_code == 409
     # No going back once asked: extending the deadline again doesn't reopen this thesis.
-    db.get(Milestone, Phase.P1).grace_days = 2
+    db.get(MilestoneTemplate, Phase.P1).grace_days = 2
     db.flush()
     assert mine(client, s)["frozen_reason"] == "You asked to restart at P1"
     assert upload(client, s).status_code == 409
@@ -157,7 +156,7 @@ def test_extension_without_restart_request_lets_a_frozen_student_continue(client
     started_yesterday(client, db, s)
     close(db, Phase.P1)
     assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
-    db.get(Milestone, Phase.P1).grace_days = 2  # extended, and they never asked to restart
+    db.get(MilestoneTemplate, Phase.P1).grace_days = 2  # extended, and they never asked to restart
     db.flush()
     assert upload(client, s).status_code == 201
     assert close_all_and_roll(client, db, coord)["advanced"] == 1

@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
-from app.models.milestone import Milestone, Phase
+from sqlalchemy import select
+
+from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
+from app.models.proposal import Proposal
 from app.models.user import Role, User
 from app.services import milestone_service
-from tests.helpers import auth, close_registration, me, student, upload
+from tests.helpers import PDF, auth, close_registration, me, student, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
 F = datetime(2099, 11, 1, 23, 59, tzinfo=timezone.utc)  # a deadline far in the future
@@ -100,7 +103,7 @@ def test_student_late_days_and_penalty(client, db):
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
     # Grace over and never submitted: a missed deadline, not a late one.
-    m = db.get(Milestone, Phase.P1)
+    m = db.get(MilestoneTemplate, Phase.P1)
     m.due_at, m.grace_days, m.penalty_per_day = now - timedelta(days=3), 1, 15
     for h in (other, no_group):
         db.get(User, me(client, h)["id"]).phase_started_at = now - timedelta(days=5)
@@ -117,3 +120,47 @@ def test_student_late_days_and_penalty(client, db):
     # Signed up after grace ended: nothing was due, so no late days or penalty.
     late = by_phase(client.get("/api/milestones", headers=auth(client, db, "late@x.com")))["P1"]
     assert (late["mine"], late["submission_status"], late["late_days"]) == (True, None, None)
+
+
+def test_each_group_gets_its_own_milestone_and_extension(client, db):
+    # MilestoneTemplate is the coordinator's deadline; GroupMilestone is one group's copy; its Deliverable is the
+    # version that counts (the latest upload).
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    s, other = student(client, db, "s@x.com"), student(client, db, "o@x.com")
+    close_registration(db)
+    now = datetime.now(timezone.utc)
+    put(client, coord, "P1", now - timedelta(hours=1), grace=1, penalty=10)  # in grace
+
+    v1 = upload(client, s, title="v1").json()["versions"][0]
+    v2 = upload(client, s, content=PDF + b"2", title="v2").json()["versions"][0]
+    thesis_id = db.get(User, me(client, s)["id"]).thesis_id
+    gm = db.scalar(select(GroupMilestone).filter_by(thesis_id=thesis_id))
+    assert gm.phase == Phase.P1 and gm.extended_due_at is None
+    assert gm.deliverable.proposal_version_id == v2["id"] and gm.submitted_at == gm.deliverable.proposal_version.created_at
+    assert db.scalar(select(Proposal).filter_by(thesis_id=thesis_id)).latest_version.id == v2["id"]
+    row = by_phase(client.get("/api/milestones", headers=s))["P1"]
+    assert row["submitted_at"] is not None
+    assert (row["late_days"], row["penalty_percent"]) == (1, 10)
+
+    # Re-submitting v1 unchanged makes it the deliverable again, with a new submit time.
+    before = gm.submitted_at
+    upload(client, s, title="v1")
+    db.refresh(gm)
+    assert gm.deliverable.proposal_version_id == v1["id"] and gm.submitted_at > before
+
+    # Removing the deliverable falls back to the other upload; removing both leaves nothing submitted.
+    client.delete(f"/api/proposals/versions/{v1['id']}", headers=s)
+    db.refresh(gm)
+    assert gm.deliverable.proposal_version_id == v2["id"]
+    client.delete(f"/api/proposals/versions/{v2['id']}", headers=s)
+    db.refresh(gm)
+    assert (gm.deliverable, gm.submitted_at) == (None, None)
+    v1 = upload(client, s, title="v1").json()["versions"][0]
+
+    # An extension moves only this group's due date: no late days for them, the other group is still late.
+    gm.extended_due_at = now + timedelta(days=2)
+    db.flush()
+    mine_row = by_phase(client.get("/api/milestones", headers=s))["P1"]
+    other_row = by_phase(client.get("/api/milestones", headers=other))["P1"]
+    assert (mine_row["status"], mine_row["late_days"], mine_row["submission_status"]) == ("open", 0, "on_time")
+    assert (other_row["status"], other_row["submission_status"]) == ("grace", "late")

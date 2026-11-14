@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Alerts, PageHeader, Skeleton } from "../components/ui";
-import { when } from "../format";
+import { fromDhakaInput, toDhakaInput, when } from "../format";
 import { useAction } from "../useAction";
 
 // status -> [label, badge tone, timeline dot]
@@ -29,12 +29,6 @@ function Countdown({ ms }) {
     </span>
   );
 }
-
-// ISO string -> "YYYY-MM-DDTHH:mm" in the browser's time zone, split for the date and time inputs.
-const toLocalInput = (iso) => {
-  const d = new Date(iso);
-  return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-};
 
 export default function DeadlinePage() {
   const [data, setData] = useState(null);
@@ -69,7 +63,7 @@ export default function DeadlinePage() {
         await api(`/milestones/${phase}`, {
           method: "PUT",
           body: {
-            due_at: new Date(`${f.get("due_date")}T${f.get("due_time")}`).toISOString(),
+            due_at: fromDhakaInput(f.get("due_date"), f.get("due_time")),
             grace_days: Number(f.get("grace_days")),
             penalty_per_day: Number(f.get("penalty_per_day")),
           },
@@ -177,11 +171,11 @@ export default function DeadlinePage() {
                   <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
                     <label className="label">
                       Due date
-                      <input name="due_date" type="date" required defaultValue={m.due_at ? toLocalInput(m.due_at).slice(0, 10) : ""} className="input" />
+                      <input name="due_date" type="date" required defaultValue={m.due_at ? toDhakaInput(m.due_at).slice(0, 10) : ""} className="input" />
                     </label>
                     <label className="label">
-                      Due time
-                      <input name="due_time" type="time" required defaultValue={m.due_at ? toLocalInput(m.due_at).slice(11) : "23:59"} className="input" />
+                      Due time (Dhaka)
+                      <input name="due_time" type="time" required defaultValue={m.due_at ? toDhakaInput(m.due_at).slice(11) : "23:59"} className="input" />
                     </label>
                     <label className="label">
                       Grace (days)

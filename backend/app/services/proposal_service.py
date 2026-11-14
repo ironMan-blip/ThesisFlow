@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.milestone import Phase
-from app.models.proposal import ProposalVersion
+from app.models.proposal import Proposal, ProposalVersion
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import User
 from app.schemas.proposal import ProposalOut
@@ -43,9 +43,9 @@ def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service
         if progress_service.registration_open(db):
             return "Register your group for P1 on the Thesis page first", s
         return "Your group isn't registered for P1, and P1 registration is closed, so wait for next semester", s
-    if s.milestone is None:
+    if s.template is None:
         return f"The {user.phase.value} timeline is not set yet", s
-    if datetime.now(timezone.utc) > s.milestone.closes_at:
+    if datetime.now(timezone.utc) > s.closes_at:
         return f"The {user.phase.value} deadline and grace period have passed", s
     return None, s
 
@@ -58,9 +58,7 @@ def _out(db: Session, user: User) -> ProposalOut:
         thesis_code=thesis and thesis.code,
         phase=user.phase,
         upload_block=block,
-        freeze_at=s.milestone.closes_at
-        if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.milestone.due_at
-        else None,
+        freeze_at=s.closes_at if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.due_at else None,
     )
     for v in out.versions:
         # A submission is final once its phase closes, or once it belongs to an earlier phase or semester.
@@ -104,14 +102,14 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     return stored, size, digest.hexdigest()
 
 
-def _close_gap(db: Session, thesis_id: int, removed_no: int) -> None:
+def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
     # Later versions move down by one. Two steps through negatives because
-    # Postgres checks the (thesis_id, version_no) unique constraint row by row.
-    later = (ProposalVersion.thesis_id == thesis_id) & (ProposalVersion.version_no > removed_no)
+    # Postgres checks the (proposal_id, version_no) unique constraint row by row.
+    later = (ProposalVersion.proposal_id == proposal_id) & (ProposalVersion.version_no > removed_no)
     db.execute(update(ProposalVersion).where(later).values(version_no=1 - ProposalVersion.version_no))
     db.execute(
         update(ProposalVersion)
-        .where(ProposalVersion.thesis_id == thesis_id, ProposalVersion.version_no < 0)
+        .where(ProposalVersion.proposal_id == proposal_id, ProposalVersion.version_no < 0)
         .values(version_no=-ProposalVersion.version_no)
     )
 
@@ -134,7 +132,13 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         db.refresh(user)
         if block := _upload_block(db, user)[0]:
             raise HTTPException(status.HTTP_409_CONFLICT, block)
-        last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.thesis_id == thesis.id))
+        proposal = thesis.proposal
+        if proposal is None:
+            proposal = Proposal(thesis_id=thesis.id)
+            db.add(proposal)
+            db.flush()
+        gm = progress_service.group_milestone(db, user, create=True)
+        last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.proposal_id == proposal.id))
         fields = dict(
             phase=user.phase,
             original_filename=Path(file.filename or "proposal.pdf").name[:255],
@@ -144,39 +148,37 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         # reused, so a final submission from an earlier phase or semester is never rewritten.
         same = db.scalar(
             select(ProposalVersion).where(
-                ProposalVersion.thesis_id == thesis.id,
-                ProposalVersion.phase == user.phase,
-                ProposalVersion.created_at >= user.phase_started_at,
+                progress_service.phase_uploads(user),
                 ProposalVersion.sha256 == sha256,
                 ProposalVersion.title == title,
                 ProposalVersion.abstract == abstract,
             )
         )
         if same is None:
-            db.add(
-                ProposalVersion(
-                    thesis_id=thesis.id,
-                    version_no=(last or 0) + 1,
-                    title=title,
-                    abstract=abstract,
-                    stored_filename=stored,
-                    size_bytes=size,
-                    sha256=sha256,
-                    **fields,
-                )
+            version = ProposalVersion(
+                proposal_id=proposal.id,
+                version_no=(last or 0) + 1,
+                title=title,
+                abstract=abstract,
+                stored_filename=stored,
+                size_bytes=size,
+                sha256=sha256,
+                **fields,
             )
+            db.add(version)
         else:
             # Identical submission already stored: reuse its file and move that version to the top.
             keep_new_file = False
             moved_from = same.version_no
             same.version_no = 0
             db.flush()
-            _close_gap(db, thesis.id, moved_from)
+            _close_gap(db, proposal.id, moved_from)
             db.execute(
                 update(ProposalVersion)
                 .where(ProposalVersion.id == same.id)
                 .values(version_no=last, created_at=datetime.now(timezone.utc), **fields)
             )
+        progress_service.sync_deliverable(db, gm, user)
         db.commit()
     except BaseException as exc:
         db.rollback()
@@ -195,7 +197,9 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     thesis = user.thesis_id and _lock_thesis(db, user)
     # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
     version = thesis and db.scalar(
-        select(ProposalVersion).where(ProposalVersion.id == version_id, ProposalVersion.thesis_id == thesis.id)
+        select(ProposalVersion)
+        .join(Proposal)
+        .where(ProposalVersion.id == version_id, Proposal.thesis_id == thesis.id)
     )
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
@@ -205,7 +209,9 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     stored, removed_no = version.stored_filename, version.version_no
     db.delete(version)
     db.flush()
-    _close_gap(db, thesis.id, removed_no)
+    _close_gap(db, version.proposal_id, removed_no)
+    if gm := progress_service.group_milestone(db, user):
+        progress_service.sync_deliverable(db, gm, user)
     if progress_service.submitted_at(db, user) is None:
         thesis.defer_pending = False  # a deferral needs a P3 submission this semester
     db.commit()
@@ -217,7 +223,7 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
 
 def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, str]:
     version = db.get(ProposalVersion, version_id)
-    if version is None or not thesis_service.can_view(user, version.thesis):
+    if version is None or not thesis_service.can_view(user, version.proposal.thesis):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
     path = _upload_dir() / version.stored_filename
     if not path.is_file():
