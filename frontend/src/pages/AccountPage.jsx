@@ -45,8 +45,8 @@ export default function AccountPage() {
       <section className="card max-w-2xl space-y-3 p-6 ring-red-200" aria-labelledby="delete-heading">
         <h2 id="delete-heading" className="font-semibold text-red-800">Delete account</h2>
         <p className="text-sm text-zinc-600">
-          Your request goes to the coordinator. If they approve it within {user.review_hours} hours, your account and your proposal
-          are deleted for good. If they don't, your account is kept and you can ask again.
+          Your request goes to the coordinator. If they approve it within {user.review_hours} hours, your account is deleted for good.
+          Your thesis and proposal versions stay archived with the coordinator. If they don't, your account is kept and you can ask again.
         </p>
 
         <Alerts error={error} />
@@ -56,8 +56,8 @@ export default function AccountPage() {
         ) : confirming ? (
           <div className="flex flex-wrap items-center gap-2">
             <p role="alert" className="alert-error w-full">
-              <strong>Warning: this can't be undone.</strong> If the coordinator approves, your account and your
-              proposal will be deleted permanently and cannot be recovered.
+              <strong>Warning: this can't be undone.</strong> If the coordinator approves, your account will be
+              deleted permanently and cannot be recovered. Your thesis and proposal versions stay as an archive.
             </p>
             <span className="text-sm font-medium">Send the deletion request?</span>
             <button onClick={() => setConfirming(false)} disabled={sending} className="btn-secondary">Cancel</button>
