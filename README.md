@@ -119,7 +119,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Everyone sees each phase's status: **not set**, **open**, **in grace**, or **closed**, with a live countdown ("Due in" while open, "Grace ends in" during grace).
 - Students also see, for their own phase (marked **Your phase**), their submission status:
   - **on time**, **late**, or **not submitted**,
-  - **late days**: uploads during the grace period are accepted but late; every started day after the due date counts as a full day, and keeps counting until they submit or the grace period ends,
+  - **late days**: uploads during the grace period are accepted but late; every started day after the due date counts as a full day, and keeps counting until they submit. Grace over with no upload shows **not submitted** (a missed deadline, no late count). A student whose phase started after grace ended (late sign-up or restart) gets no status for that deadline,
   - **penalty**: late days × penalty per day, capped at 100%.
 - The latest upload for a phase is the one that counts.
 
@@ -138,7 +138,8 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 - Uploads always go to the student's current phase, under their thesis ID, and only while that phase's timeline is set and its grace period has not ended.
 - Students upload a proposal version with a **title** (1 to 255 characters), **abstract** and a **PDF file**.
-- The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default).
+- The file must really be a PDF (checked by its content, not its name) and at most `MAX_UPLOAD_MB` (20 MB by default). A request whose `Content-Length` is over that limit plus 1 MB is refused (`413`) before its body is read.
+- Only the student uploads. The coordinator and the group (the student, the supervisor, and the co-supervisor once they accept) can view and download its versions.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
 - Students can delete a version of their current phase (with a confirmation dialog) until its grace period ends; after that it is final and the Remove button is hidden. Later versions shift down so numbers stay in order, and the PDF file is removed.
@@ -147,7 +148,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 ### 8. Security
 
-- **Rate limiting** per client IP, over a 60-second window: 10 requests to `/api/auth/login` and `/api/auth/register`, 300 to any other `/api/` path. Over the limit returns `429`. The counter is in memory, per backend process.
+- **Rate limiting** per client IP, over a 60-second window: 10 requests to `/api/auth/login` and `/api/auth/register`, 300 to any other `/api/` path. Over the limit returns `429`. The counter is in memory, per backend process. The Vite proxy overwrites `X-Forwarded-For` with the real client IP, so a client cannot dodge the limit by sending its own header.
 - Login takes the same time whether the ID exists or not (constant-time password check), so IDs cannot be guessed from response time.
 - `JWT_SECRET` shorter than 32 characters stops the backend from starting.
 

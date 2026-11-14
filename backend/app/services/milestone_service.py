@@ -17,7 +17,9 @@ def late_days(due_at: datetime, at: datetime) -> int:
     return max(0, math.ceil((at - due_at) / DAY))
 
 
-def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_mine: bool):
+def _row(
+    m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_mine: bool, started_at: datetime
+):
     if m is None:
         return MilestoneOut(
             phase=phase, due_at=None, grace_days=0, penalty_per_day=0, closes_at=None, status="not_set", mine=is_mine
@@ -37,14 +39,18 @@ def _row(m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetim
         out.countdown_to, out.countdown_label = m.due_at, "Due in"
     elif status == "grace":
         out.countdown_to, out.countdown_label = closes_at, "Grace ends in"
-    if is_mine:
-        # Grace is the late window: days count from the due date. Not submitted yet: they keep
-        # counting until grace ends, since no upload is accepted after that.
-        days = late_days(m.due_at, submitted_at or min(now, closes_at))
+    # A phase that started after grace ended (late sign-up, restart) had nothing due: no personal status,
+    # same rule as progress_service._missed.
+    if is_mine and started_at < closes_at:
         out.submitted_at = submitted_at
-        out.late_days = days
-        out.penalty_percent = min(100, days * m.penalty_per_day)
-        out.submission_status = "late" if days else "on_time" if submitted_at else "not_submitted"
+        if submitted_at is None and now > closes_at:
+            out.submission_status = "not_submitted"  # missed: no late count, the account freezes instead
+        else:
+            # Grace is the late window: days count from the due date, and keep counting until they submit.
+            days = late_days(m.due_at, submitted_at or now)
+            out.late_days = days
+            out.penalty_percent = min(100, days * m.penalty_per_day)
+            out.submission_status = "late" if days else "on_time" if submitted_at else "not_submitted"
     return out
 
 
@@ -55,7 +61,9 @@ def timeline(db: Session, user: User) -> TimelineOut:
     submitted = progress_service.submitted_at(db, user) if user.role == Role.student else None
     return TimelineOut(
         now=now,
-        milestones=[_row(milestones.get(p), p, now, submitted, p == user.phase) for p in Phase],
+        milestones=[
+            _row(milestones.get(p), p, now, submitted, p == user.phase, user.phase_started_at) for p in Phase
+        ],
         can_edit=user.role == Role.coordinator,
     )
 

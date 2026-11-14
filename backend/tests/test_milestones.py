@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
-from app.models.user import Role
+from app.models.user import Role, User
 from app.services import milestone_service
-from tests.helpers import auth, student, upload
+from tests.helpers import auth, me, student, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
 
@@ -84,9 +84,16 @@ def test_student_late_days_and_penalty(client, db):
     put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=40)
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
-    # Grace over and never submitted: late days stop at grace end (1 day grace).
+    # Grace over and never submitted: a missed deadline, not a late one.
     put(client, coord, "P1", now - timedelta(days=3), grace=1, penalty=15)
     other = auth(client, db, "o@x.com")
+    db.get(User, me(client, other)["id"]).phase_started_at = now - timedelta(days=5)
+    db.flush()
     rows = by_phase(client.get("/api/milestones", headers=other))
-    assert (rows["P1"]["status"], rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == ("closed", 1, 15)
+    assert (rows["P1"]["status"], rows["P1"]["submission_status"]) == ("closed", "not_submitted")
+    assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (None, None)
     assert rows["P1"]["submitted_at"] is None  # another student's uploads don't count for this one
+
+    # Signed up after grace ended: nothing was due, so no late days or penalty.
+    late = by_phase(client.get("/api/milestones", headers=auth(client, db, "late@x.com")))["P1"]
+    assert (late["mine"], late["submission_status"], late["late_days"]) == (True, None, None)

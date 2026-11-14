@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller, thesis_controller
+from app.config import settings
 from app.database import SessionLocal
 from app.rate_limit import rate_limit
 from app.services import auth_service
@@ -19,6 +20,16 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ThesisFlow API", lifespan=lifespan)
 app.middleware("http")(rate_limit)
+
+@app.middleware("http")
+async def limit_body(request: Request, call_next):
+    # The server reads the whole body to disk before the upload's own size check runs, so refuse huge ones up front.
+    # shortcut: trusts Content-Length (browsers always send it); chunked bodies are still only checked by the service.
+    size = request.headers.get("content-length", "")
+    # 1 MB on top of the PDF limit for the title, abstract and form overhead.
+    if size.isdigit() and int(size) > (settings.max_upload_mb + 1) * 1024 * 1024:
+        return JSONResponse(status_code=413, content={"detail": f"Upload is larger than {settings.max_upload_mb} MB"})
+    return await call_next(request)
 
 # No CORS: the browser only talks to the Vite dev server, which proxies /api here.
 # Register each feature's router here.

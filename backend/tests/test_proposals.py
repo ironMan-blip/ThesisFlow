@@ -5,7 +5,7 @@ import pytest
 from app.config import settings
 from app.models.milestone import Milestone, Phase
 from app.models.user import Role
-from tests.helpers import PDF, auth, student, upload
+from tests.helpers import PDF, auth, me, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -39,6 +39,9 @@ def test_rejects_non_pdf_and_oversize(client, db, monkeypatch):
     assert upload(client, h, title="  ").status_code == 422
     monkeypatch.setattr(settings, "max_upload_mb", 1)
     assert upload(client, h, content=PDF + b"x" * 1024 * 1024).status_code == 413
+    # Far over the limit: refused from Content-Length before the body is read.
+    res = upload(client, h, content=PDF + b"x" * 3 * 1024 * 1024)
+    assert (res.status_code, res.json()["detail"]) == (413, "Upload is larger than 1 MB")
     assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
 
 
@@ -63,6 +66,25 @@ def test_only_the_student_and_their_supervisors_see_versions(client, db):
     assert client.get(f"/api/proposals/versions/{vid}/file", headers=other).status_code == 404
     assert client.get(f"/api/proposals/versions/{vid}/file", headers=other_faculty).status_code == 404
     assert client.get(f"/api/proposals/versions/{vid}/file", headers=coord).status_code == 200
+
+
+def test_group_members_and_coordinator_download_but_only_the_student_uploads(client, db):
+    owner = auth(client, db, "s@x.com")
+    sup, co = auth(client, db, "f1@x.com", Role.faculty), auth(client, db, "f2@x.com", Role.faculty)
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    body = {"supervisor_id": me(client, sup)["id"], "co_supervisor_id": me(client, co)["id"]}
+    tid = client.post("/api/theses/mine", headers=owner, json=body).json()["thesis"]["id"]
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
+    vid = upload(client, owner).json()["versions"][0]["id"]
+    file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
+
+    assert (file(owner), file(sup), file(coord)) == (200, 200, 200)
+    assert file(co) == 404  # not a group member until they accept
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=co).status_code == 204
+    assert file(co) == 200
+    assert [t["id"] for t in client.get("/api/theses", headers=co).json()] == [tid]
+    for h in (sup, co, coord):
+        assert upload(client, h).status_code == 403
 
 
 def test_only_students_upload(client, db):
