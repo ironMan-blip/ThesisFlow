@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     admin_name: str
     admin_email: str
     admin_id_number: str
-    admin_password: str
+    admin_password: str = Field(max_length=128)  # login refuses longer passwords (schemas.user.MAX_PASSWORD)
     # Password for the dev accounts made by app.seed. Only the seed script needs it.
     seed_password: str | None = None
     jwt_expire_minutes: int = 60 * 24

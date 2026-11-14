@@ -13,7 +13,7 @@ from app.models.milestone import Phase
 from app.models.proposal import Proposal, ProposalVersion
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import User
-from app.schemas.proposal import ProposalOut
+from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut
 from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
@@ -121,8 +121,8 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title must be 1 to 255 characters")
-    if not abstract:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Abstract is required")
+    if not abstract or len(abstract) > MAX_ABSTRACT_CHARS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Abstract must be 1 to {MAX_ABSTRACT_CHARS} characters")
 
     stored, size, sha256 = _save_pdf(file)
     keep_new_file = True

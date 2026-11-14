@@ -2,8 +2,10 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
+from app import rate_limit
 from app.config import settings
 from app.models.user import Role, User
+from app.security import hash_password
 from app.services import auth_service
 from tests.helpers import auth, student as make_student, upload
 
@@ -185,7 +187,7 @@ def test_cannot_reregister_within_48_hours(client, db):
     old_id = client.post("/api/auth/register", json=body).json()["id"]
     r = client.post("/api/auth/register", json=body)
     assert r.status_code == 409
-    assert r.json()["detail"] == "User already applied to register, waiting for approval"
+    assert r.json()["detail"] == "User already applied to register, waiting for approval. If this wasn't you, contact the coordinator"
 
     # 48 hours pass without a decision: a new submission replaces the old one.
     user = db.get(User, old_id)
@@ -310,8 +312,43 @@ def test_pending_counts_and_name_fields(client, db):
     assert (user.first_name, user.monogram) == ("ada", "AB")
 
 
-def test_login_is_rate_limited(client):
+def test_login_is_rate_limited_per_account(client):
+    codes = [login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1)]
+    assert set(codes[:-1]) == {401}
+    assert codes[-1] == 429
+    # Another account from the same IP is not locked out.
+    assert login(client, id_number="87654321", password="Wrong1234").status_code == 401
+
+
+def test_login_is_rate_limited_per_ip(client):
     body = {"email": "nobody@example.com", "password": "wrong"}
-    codes = [client.post("/api/auth/login", json=body).status_code for _ in range(11)]
-    assert 429 not in codes[:10]
-    assert codes[10] == 429
+    codes = [client.post("/api/auth/login", json=body).status_code for _ in range(rate_limit.LIMITS["/api/auth/login"] + 1)]
+    assert 429 not in codes[:-1]
+    assert codes[-1] == 429
+
+
+def test_signed_in_users_get_their_own_bucket(client, db, monkeypatch):
+    a, b = auth(client, db, "a@b.com"), auth(client, db, "b@b.com")
+    monkeypatch.setitem(rate_limit.LIMITS, "/api/", 2)
+    assert [client.get("/api/auth/me", headers=a).status_code for _ in range(3)] == [200, 200, 429]
+    assert client.get("/api/auth/me", headers=b).status_code == 200
+
+
+def test_password_change_logs_out_old_tokens(client, db):
+    headers = auth(client, db, "a@b.com")
+    user = db.scalar(select(User).where(User.email == "a@b.com"))
+    user.password_hash = hash_password("NewPassword1")
+    db.flush()
+    assert client.get("/api/auth/me", headers=headers).status_code == 401
+
+
+def test_overlong_login_password_is_refused(client):
+    register(client)
+    assert login(client, password="A" * 10_000).status_code == 401
+
+
+def test_chunked_body_is_refused_before_auth(client):
+    def body():
+        yield b"x" * 1024
+
+    assert client.post("/api/proposals/mine/versions", content=body()).status_code == 411

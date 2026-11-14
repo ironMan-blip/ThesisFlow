@@ -74,7 +74,7 @@ export default function ProposalPage() {
           </label>
           <label className="label">
             Abstract
-            <textarea name="abstract" required rows={5} placeholder="A short summary of the problem and approach" className="input resize-y" />
+            <textarea name="abstract" required maxLength={proposal?.max_abstract_chars} rows={5} placeholder="A short summary of the problem and approach" className="input resize-y" />
           </label>
           <div>
             <span className="label">PDF file</span>

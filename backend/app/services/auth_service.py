@@ -5,10 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import rate_limit
 from app.config import settings
 from app.models.milestone import Phase
 from app.models.user import REVIEW_HOURS, REVIEW_WINDOW, Role, User
-from app.schemas.user import UserCreate
+from app.schemas.user import MAX_PASSWORD, UserCreate
 from app.security import create_access_token, hash_password, verify_password
 
 _DUMMY_HASH = hash_password("timing-equaliser")
@@ -64,7 +65,11 @@ def register(db: Session, data: UserCreate) -> User:
     existing = get_by_id_number(db, data.id_number) or get_by_email(db, data.email)
     if existing and not existing.approved:
         if now < existing.created_at + REVIEW_WINDOW:
-            raise HTTPException(status.HTTP_409_CONFLICT, "User already applied to register, waiting for approval")
+            # No email check exists, so someone may have used this ID or email; the coordinator can reject it.
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "User already applied to register, waiting for approval. If this wasn't you, contact the coordinator",
+            )
         # The review window ran out: the new submission replaces the old request.
         db.delete(existing)
         db.flush()
@@ -98,12 +103,16 @@ def ensure_admin(db: Session) -> User:
 
 
 def login(db: Session, id_number: str, password: str) -> str:
-    user = get_by_id_number(db, id_number)
+    # Per account, not per IP: stops guessing one password even from many IPs or behind one shared IP.
+    if retry := rate_limit.hit(("login", id_number[:32]), rate_limit.LOGIN_PER_ACCOUNT):
+        raise rate_limit.too_many(retry)
+    # Sign-up caps passwords at MAX_PASSWORD, so a longer one can't be right; skip hashing a huge input.
+    user = get_by_id_number(db, id_number) if len(password) <= MAX_PASSWORD else None
     # Hash even for unknown IDs so response time doesn't reveal which IDs exist.
-    if not verify_password(password, user.password_hash if user else _DUMMY_HASH) or user is None:
+    if not verify_password(password[:MAX_PASSWORD], user.password_hash if user else _DUMMY_HASH) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong ID number or password")
     if not user.approved:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
         )
-    return create_access_token(user.id)
+    return create_access_token(user.id, user.password_hash)

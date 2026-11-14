@@ -24,7 +24,10 @@ app.middleware("http")(rate_limit)
 @app.middleware("http")
 async def limit_body(request: Request, call_next):
     # The server reads the whole body to disk before the upload's own size check runs, so refuse huge ones up front.
-    # shortcut: trusts Content-Length (browsers always send it); chunked bodies are still only checked by the service.
+    # FastAPI parses the body before auth runs, so a chunked body (no Content-Length) could stream forever
+    # anonymously. Browsers always send Content-Length, so refuse chunked bodies outright.
+    if "transfer-encoding" in request.headers:
+        return JSONResponse(status_code=411, content={"detail": "Content-Length is required"})
     size = request.headers.get("content-length", "")
     # 1 MB on top of the PDF limit for the title, abstract and form overhead.
     if size.isdigit() and int(size) > (settings.max_upload_mb + 1) * 1024 * 1024:

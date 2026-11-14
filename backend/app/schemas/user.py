@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, fie
 from app.models.milestone import Phase
 from app.models.user import REVIEW_HOURS, Role
 
+MAX_PASSWORD = 128
+
 
 class UserCreate(BaseModel):
     # Run validators on defaults too, so faculty cannot skip initials by leaving them out.
@@ -14,7 +16,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     id_number: str
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD)
     # Coordinator is the single admin account from settings; nobody can sign up as one.
     role: Literal[Role.student, Role.faculty] = Role.student
     initials: str | None = None  # faculty only

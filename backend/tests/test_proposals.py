@@ -5,6 +5,7 @@ import pytest
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role
+from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from tests.helpers import PDF, auth, me, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
@@ -42,6 +43,18 @@ def test_rejects_non_pdf_and_oversize(client, db, monkeypatch):
     # Far over the limit: refused from Content-Length before the body is read.
     res = upload(client, h, content=PDF + b"x" * 3 * 1024 * 1024)
     assert (res.status_code, res.json()["detail"]) == (413, "Upload is larger than 1 MB")
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
+
+
+def test_rejects_overlong_abstract(client, db):
+    h = student(client, db, "s@x.com")
+    res = client.post(
+        "/api/proposals/mine/versions",
+        headers=h,
+        data={"title": "T", "abstract": "a" * (MAX_ABSTRACT_CHARS + 1)},
+        files={"file": ("p.pdf", PDF, "application/pdf")},
+    )
+    assert res.status_code == 422
     assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
 
 

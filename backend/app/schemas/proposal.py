@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 from app.config import settings
 from app.models.milestone import Phase
 
+MAX_ABSTRACT_CHARS = 5000
+
 
 class ProposalVersionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -42,6 +44,7 @@ class ProposalOut(BaseModel):
     # In grace with nothing submitted: the account freezes at this time unless they upload.
     freeze_at: datetime | None = None
     max_upload_mb: int = settings.max_upload_mb
+    max_abstract_chars: int = MAX_ABSTRACT_CHARS
 
     @model_validator(mode="after")
     def _mark_latest(self):
