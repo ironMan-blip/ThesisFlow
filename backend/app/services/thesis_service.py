@@ -1,5 +1,7 @@
 """Thesis groups: a student picks a supervisor (required) and a co-supervisor (optional); each must accept.
 
+Groups can be formed and accepted any time; registering for P1 (progress_service.register_p1) is limited to a week.
+
 The supervisor accepting makes the thesis active and issues its thesis ID. Every proposal version is
 stored under that thesis, so it is never lost when accounts change.
 """
@@ -39,6 +41,9 @@ def mine(db: Session, user: User) -> MyThesisOut:
         frozen_reason=s.frozen_reason,
         restart_pending=user.restart_pending,
         restart_approved=user.restart_approved,
+        registration_closes_at=progress_service.registration_closes_at(db),
+        registration_open=progress_service.registration_open(db),
+        can_register=progress_service.can_register(db, user),
         can_form_group=user.thesis_id is None and user.phase is not None and not s.frozen,
     )
 

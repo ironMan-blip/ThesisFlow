@@ -75,6 +75,7 @@ def test_group_members_and_coordinator_download_but_only_the_student_uploads(cli
     body = {"supervisor_id": me(client, sup)["id"], "co_supervisor_id": me(client, co)["id"]}
     tid = client.post("/api/theses/mine", headers=owner, json=body).json()["thesis"]["id"]
     assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
+    assert client.post("/api/theses/mine/register", headers=owner).status_code == 200
     vid = upload(client, owner).json()["versions"][0]["id"]
     file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
 

@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
+from app.models.milestone import Milestone, Phase
 from app.models.user import Role, User
 from app.services import milestone_service
-from tests.helpers import auth, me, student, upload
+from tests.helpers import auth, close_registration, me, student, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
+F = datetime(2099, 11, 1, 23, 59, tzinfo=timezone.utc)  # a deadline far in the future
 
 
 def test_late_days_with_fixed_clock():
@@ -17,6 +19,7 @@ def test_late_days_with_fixed_clock():
 
 def test_grace_countdown_targets_closes_at(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
+    close_registration(db)
     put(client, coord, "P1", datetime.now(timezone.utc) - timedelta(minutes=5), grace=1)
     p1 = by_phase(client.get("/api/milestones", headers=coord))["P1"]
     assert (p1["status"], p1["countdown_to"], p1["countdown_label"]) == ("grace", p1["closes_at"], "Grace ends in")
@@ -34,36 +37,48 @@ def by_phase(res):
 def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     student = auth(client, db, "s@x.com")
-    assert put(client, student, "P1", T).status_code == 403
-    assert put(client, coord, "P4", T).status_code == 422
-    assert put(client, coord, "P1", T, penalty=101).status_code == 422
-    assert put(client, coord, "P1", T, grace=-1).status_code == 422
-    naive = {"due_at": "2026-11-01T23:59:00", "grace_days": 0, "penalty_per_day": 0}
+    assert put(client, student, "P1", F).status_code == 403
+    assert put(client, coord, "P4", F).status_code == 422
+    assert put(client, coord, "P1", F, penalty=101).status_code == 422
+    assert put(client, coord, "P1", F, grace=-1).status_code == 422
+    naive = {"due_at": "2099-11-01T23:59:00", "grace_days": 0, "penalty_per_day": 0}
     assert client.put("/api/milestones/P1", headers=coord, json=naive).status_code == 422
+    # A deadline that is already over would freeze the whole phase.
+    now = datetime.now(timezone.utc)
+    res = put(client, coord, "P2", now - timedelta(days=2), grace=1)
+    assert (res.status_code, res.json()["detail"]) == (422, "The deadline and grace period must end in the future")
+    # P1 registration is open for this week, so P1 can't be due inside it.
+    res = put(client, coord, "P1", now + timedelta(days=2))
+    assert (res.status_code, res.json()["detail"]) == (422, "P1 can't be due before P1 registration closes")
+    assert put(client, coord, "P1", now + timedelta(days=8)).status_code == 200
 
-    res = put(client, coord, "P1", T, grace=2)
+    res = put(client, coord, "P1", F, grace=2)
     assert res.status_code == 200
+    assert res.json()["registration_closes_at"] is not None
     p1 = by_phase(res)["P1"]
-    assert p1["closes_at"].startswith("2026-11-03T23:59")
+    assert p1["closes_at"].startswith("2099-11-03T23:59")
     assert p1["late_days"] is None and p1["submission_status"] is None  # staff get no personal late count
     assert by_phase(res)["P2"]["status"] == "not_set"
     assert res.json()["can_edit"] is True
     assert client.get("/api/milestones", headers=student).json()["can_edit"] is False
 
-    put(client, coord, "P1", T + timedelta(days=1))  # setting again replaces it
-    assert by_phase(client.get("/api/milestones", headers=student))["P1"]["due_at"].startswith("2026-11-02T23:59")
+    put(client, coord, "P1", F + timedelta(days=1))  # setting again replaces it
+    assert by_phase(client.get("/api/milestones", headers=student))["P1"]["due_at"].startswith("2099-11-02T23:59")
 
 
 def test_phase_deadlines_need_not_be_in_order(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
-    assert put(client, coord, "P2", T).status_code == 200
-    assert put(client, coord, "P1", T + timedelta(days=1)).status_code == 200
-    assert put(client, coord, "P3", T - timedelta(days=1)).status_code == 200
+    assert put(client, coord, "P2", F).status_code == 200
+    assert put(client, coord, "P1", F + timedelta(days=1)).status_code == 200
+    assert put(client, coord, "P3", F - timedelta(days=1)).status_code == 200
 
 
 def test_student_late_days_and_penalty(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     s = student(client, db, "s@x.com")
+    other = student(client, db, "o@x.com")
+    no_group = auth(client, db, "n@x.com")  # signed up in time but never got a group accepted
+    close_registration(db)
     now = datetime.now(timezone.utc)
     put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=15)  # ~3 days into grace
     put(client, coord, "P2", now + timedelta(days=5), penalty=10)
@@ -85,14 +100,19 @@ def test_student_late_days_and_penalty(client, db):
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
     # Grace over and never submitted: a missed deadline, not a late one.
-    put(client, coord, "P1", now - timedelta(days=3), grace=1, penalty=15)
-    other = auth(client, db, "o@x.com")
-    db.get(User, me(client, other)["id"]).phase_started_at = now - timedelta(days=5)
+    m = db.get(Milestone, Phase.P1)
+    m.due_at, m.grace_days, m.penalty_per_day = now - timedelta(days=3), 1, 15
+    for h in (other, no_group):
+        db.get(User, me(client, h)["id"]).phase_started_at = now - timedelta(days=5)
     db.flush()
     rows = by_phase(client.get("/api/milestones", headers=other))
     assert (rows["P1"]["status"], rows["P1"]["submission_status"]) == ("closed", "not_submitted")
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (None, None)
     assert rows["P1"]["submitted_at"] is None  # another student's uploads don't count for this one
+
+    # No accepted group, so they couldn't upload: nothing was due.
+    rows = by_phase(client.get("/api/milestones", headers=no_group))
+    assert (rows["P1"]["mine"], rows["P1"]["submission_status"]) == (True, None)
 
     # Signed up after grace ended: nothing was due, so no late days or penalty.
     late = by_phase(client.get("/api/milestones", headers=auth(client, db, "late@x.com")))["P1"]

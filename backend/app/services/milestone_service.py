@@ -1,6 +1,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ def late_days(due_at: datetime, at: datetime) -> int:
 
 
 def _row(
-    m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_mine: bool, started_at: datetime
+    m: Milestone | None, phase: Phase, now: datetime, submitted_at: datetime | None, is_mine: bool, user: User
 ):
     if m is None:
         return MilestoneOut(
@@ -39,9 +40,9 @@ def _row(
         out.countdown_to, out.countdown_label = m.due_at, "Due in"
     elif status == "grace":
         out.countdown_to, out.countdown_label = closes_at, "Grace ends in"
-    # A phase that started after grace ended (late sign-up, restart) had nothing due: no personal status,
-    # same rule as progress_service._missed.
-    if is_mine and started_at < closes_at:
+    # A student who couldn't upload (phase started after grace ended, or no accepted group) had nothing due:
+    # no personal status, same rule as progress_service._missed.
+    if is_mine and progress_service.held_to(user, m):
         out.submitted_at = submitted_at
         if submitted_at is None and now > closes_at:
             out.submission_status = "not_submitted"  # missed: no late count, the account freezes instead
@@ -62,13 +63,21 @@ def timeline(db: Session, user: User) -> TimelineOut:
     return TimelineOut(
         now=now,
         milestones=[
-            _row(milestones.get(p), p, now, submitted, p == user.phase, user.phase_started_at) for p in Phase
+            _row(milestones.get(p), p, now, submitted, p == user.phase, user) for p in Phase
         ],
         can_edit=user.role == Role.coordinator,
+        registration_closes_at=progress_service.registration_closes_at(db),
     )
 
 
 def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
     # No cross-phase order check: students in different phases have separate deadlines each semester.
+    if data.due_at + timedelta(days=data.grace_days) <= datetime.now(timezone.utc):
+        # A deadline that is already over would count everyone in the phase as missing it.
+        raise HTTPException(422, "The deadline and grace period must end in the future")
+    registration_closes = progress_service.registration_closes_at(db)
+    if phase == Phase.P1 and registration_closes and data.due_at <= registration_closes:
+        # Groups can still register until then, so an earlier P1 deadline would catch them mid-registration.
+        raise HTTPException(422, "P1 can't be due before P1 registration closes")
     db.merge(Milestone(phase=phase, **data.model_dump()))
     db.commit()

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Alerts, Icon, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
+import { when } from "../format";
 import { useAction } from "../useAction";
 
 const STATUS = {
@@ -39,6 +40,11 @@ export default function ThesisPage() {
   const cancel = () => run("cancel", async () => {
     setState(await api("/theses/mine", { method: "DELETE" }));
     return "Request cancelled. You can choose a supervisor again.";
+  });
+
+  const register = () => run("register", async () => {
+    setState(await api("/theses/mine/register", { method: "POST" }));
+    return "Your group is registered for P1 this semester.";
   });
 
   const restart = () => run("restart", async () => {
@@ -126,6 +132,26 @@ export default function ThesisPage() {
               {t.status === "pending" && (
                 <button onClick={cancel} disabled={busy === "cancel"} className="btn-secondary">
                   {busy === "cancel" ? "Cancelling…" : "Cancel request"}
+                </button>
+              )}
+            </section>
+          )}
+
+          {state.phase === "P1" && t?.status === "active" && !state.frozen_reason && (
+            <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
+              <div className="max-w-prose">
+                <h2 className="font-semibold">P1 registration</h2>
+                <p className="mt-1 text-sm text-zinc-600">
+                  {t.p1_registered
+                    ? "Your group is registered for P1 this semester."
+                    : state.registration_open
+                      ? <>Register your group to work on P1 this semester. Open until <span className="font-medium tabular-nums">{when(state.registration_closes_at)}</span>.</>
+                      : "P1 registration is closed. Your group can register in the first week of next semester; nothing is due for you until then."}
+                </p>
+              </div>
+              {state.can_register && (
+                <button onClick={register} disabled={busy === "register"} className="btn-primary">
+                  {busy === "register" ? "Registering…" : "Register for P1"}
                 </button>
               )}
             </section>

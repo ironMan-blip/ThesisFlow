@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.models.milestone import Phase
 from app.models.proposal import ProposalVersion
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import User
@@ -38,6 +39,10 @@ def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service
         return "Form a thesis group first: choose a supervisor on the Thesis page", s
     if thesis.status != ThesisStatus.active:
         return "Your supervisor has not accepted your thesis group yet", s
+    if user.phase == Phase.P1 and not thesis.p1_registered:
+        if progress_service.registration_open(db):
+            return "Register your group for P1 on the Thesis page first", s
+        return "Your group isn't registered for P1, and P1 registration is closed, so wait for next semester", s
     if s.milestone is None:
         return f"The {user.phase.value} timeline is not set yet", s
     if datetime.now(timezone.utc) > s.milestone.closes_at:
@@ -125,6 +130,10 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
     keep_new_file = True
     try:
         thesis = _lock_thesis(db, user)
+        # Checked again under the lock: grace may have ended, or the semester moved on, while the file was saved.
+        db.refresh(user)
+        if block := _upload_block(db, user)[0]:
+            raise HTTPException(status.HTTP_409_CONFLICT, block)
         last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.thesis_id == thesis.id))
         fields = dict(
             phase=user.phase,
@@ -197,6 +206,8 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     db.delete(version)
     db.flush()
     _close_gap(db, thesis.id, removed_no)
+    if progress_service.submitted_at(db, user) is None:
+        thesis.defer_pending = False  # a deferral needs a P3 submission this semester
     db.commit()
     # File goes only after the row is gone, so a failed commit never loses a PDF.
     (_upload_dir() / stored).unlink(missing_ok=True)

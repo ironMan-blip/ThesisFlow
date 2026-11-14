@@ -115,24 +115,26 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
   - a **due date and time** (time defaults to 11:59 PM),
   - a **grace period** in days (0 to 7),
   - a **late penalty** in percent per day (0 to 100).
+- A deadline must end (due date plus grace) in the future, and P1 can only be due after P1 registration closes.
 - Phase deadlines are independent: any phase can be due before or after another. In one semester P1, P2 and P3 students each work to their own phase's deadline.
 - Everyone sees each phase's status: **not set**, **open**, **in grace**, or **closed**, with a live countdown ("Due in" while open, "Grace ends in" during grace).
 - Students also see, for their own phase (marked **Your phase**), their submission status:
   - **on time**, **late**, or **not submitted**,
-  - **late days**: uploads during the grace period are accepted but late; every started day after the due date counts as a full day, and keeps counting until they submit. Grace over with no upload shows **not submitted** (a missed deadline, no late count). A student whose phase started after grace ended (late sign-up or restart) gets no status for that deadline,
+  - **late days**: uploads during the grace period are accepted but late; every started day after the due date counts as a full day, and keeps counting until they submit. Grace over with no upload shows **not submitted** (a missed deadline, no late count). A student who couldn't upload (phase started after grace ended, or no accepted group registered for P1) gets no status for that deadline,
   - **penalty**: late days × penalty per day, capped at 100%.
 - The latest upload for a phase is the one that counts.
 
 ### 6. Thesis groups and phase progression
 
 - A student needs a **thesis group** to upload: the student, a **supervisor** (required) and a **co-supervisor** (optional), both faculty. The student sends the request on the **Thesis group** page.
+- **P1 registration:** students sign up, ask for a group, and faculty accept any time. But an accepted group can only **register for P1** (button on the Thesis group page) in the **first week of each semester** (from the semester rollover; the first one starts when the database is set up). Only a registered group can upload for P1. A P1 group that didn't register has nothing due that semester and stays at P1; registration is cleared at every rollover.
 - Faculty accept or decline under **Theses**. When the supervisor accepts, the thesis becomes active and gets its **thesis ID** (e.g. `TH-0007`). The co-supervisor accepts their own slot; a decline just leaves it empty. A supervisor's decline, or the student cancelling, lets the student choose again.
 - Every proposal version is stored under the thesis ID, so nothing is lost: deleting an account or restarting keeps the thesis and its versions as an archive. Faculty see the theses they supervise; the coordinator sees all of them.
 - **One phase per semester.** A new student starts at **P1**. A student who submits their phase (late inside grace counts) moves to the next phase next semester: P1 → P2 → P3.
-- **Missed deadline:** if grace ends with no upload, the account is **frozen**. The student can still log in, but cannot upload or form a group. During grace they see a warning with the freeze time. Extending the deadline lifts the freeze until the semester ends. A student whose phase started after the deadline closed (late sign-up or restart) is not frozen; they wait for next semester.
+- **Missed deadline:** if grace ends with no upload, the account is **frozen**. The student can still log in, but cannot upload or form a group. During grace they see a warning with the freeze time. Extending the deadline lifts the freeze until the semester ends. A student who couldn't upload (phase started after the deadline closed, or a P1 group that didn't register) is not frozen; they wait for next semester.
 - **Restart:** a frozen student can ask to restart at any time on the Thesis group page. Once the coordinator approves under **Restart requests**, the next semester rollover starts them fresh at P1. Asking is final: the account stays frozen even if the deadline is extended later (unless the coordinator rejects the request). At the rollover: the old thesis is archived, they have no group, and the next group gets a new thesis ID.
-- **P3 deferral** (no panel members yet): after a P3 submission the coordinator can **defer** the thesis under Theses (and undo it until the semester ends). Deferred once: P3 again next semester, and last semester's upload no longer counts. Deferred twice: the account is frozen. Not deferred: the thesis is **completed**.
-- **Start next semester** (coordinator, on Deadlines) applies all of this once every grace time has ended, then clears the deadlines so the new ones can be set.
+- **P3 deferral** (no panel members yet): after a P3 submission the coordinator can **defer** the thesis under Theses (and undo it until the semester ends). Removing the P3 submission undoes the deferral. Deferred once: P3 again next semester, and last semester's upload no longer counts. Deferred twice: the account is frozen. Not deferred: the thesis is **completed**.
+- **Start next semester** (coordinator, on Deadlines) applies all of this once every grace time has ended, then clears the deadlines so the new ones can be set and opens a new week of P1 registration.
 
 ### 7. Proposal submission
 

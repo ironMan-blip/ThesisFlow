@@ -109,6 +109,7 @@ export default function DeadlinePage() {
             <p className="mt-1 text-sm text-zinc-600">
               Once every grace time has ended: students who submitted move to their next phase, P3 theses are completed
               or deferred, students who missed are frozen, approved restarts start fresh at P1, and all deadlines are cleared for next semester.
+              P1 registration then opens for one week.
             </p>
           </div>
           <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">
@@ -118,6 +119,14 @@ export default function DeadlinePage() {
       )}
 
       <Alerts error={error} notice={notice} />
+
+      {data?.registration_closes_at && (
+        <p className="text-sm text-zinc-600">
+          {new Date(data.registration_closes_at) > new Date(data.now) ? "P1 registration is open until " : "P1 registration closed on "}
+          <span className="font-medium tabular-nums">{when(data.registration_closes_at)}</span>.
+          {data.can_edit && " P1 can only be due after it closes."}
+        </p>
+      )}
 
       {!data ? (
         <Skeleton rows={3} row="h-36 rounded-xl" className="space-y-4" />

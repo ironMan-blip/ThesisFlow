@@ -33,6 +33,7 @@ class ThesisOut(BaseModel):
     co_supervisor_accepted: bool
     deferrals: int
     defer_pending: bool
+    p1_registered: bool
     created_at: datetime
 
 
@@ -51,6 +52,9 @@ class MyThesisOut(BaseModel):
     frozen_reason: str | None
     restart_pending: bool
     restart_approved: bool  # they start fresh at P1 at the next semester rollover
+    registration_closes_at: datetime | None  # end of this semester's one-week P1 registration
+    registration_open: bool
+    can_register: bool  # an accepted group in P1 that can register now
     can_form_group: bool
 
 

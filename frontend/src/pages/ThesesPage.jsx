@@ -11,7 +11,7 @@ const STATUS = {
   dropped: ["Archived", "bg-zinc-100 text-zinc-700 ring-zinc-300"],
 };
 
-const fullName = (p) => (p ? `${p.full_name}${p.initials ? ` (${p.initials})` : ""}` : "None");
+const fullName = (p) => (p ? `${p.full_name}${p.initials ? ` (${p.initials})` : ""}` : "Account deleted");
 
 function Requests({ requests, decide, busy }) {
   if (!requests.length) return null;

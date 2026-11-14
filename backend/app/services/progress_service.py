@@ -1,5 +1,7 @@
 """Student phase rules: one phase per semester, P1 -> P2 -> P3.
 
+- Groups can be formed and accepted any time, but an accepted group can only register for P1 in the first week
+  of each semester. A P1 student whose group didn't register has nothing due and waits for the next semester.
 - Uploading for the current phase before its grace period ends counts as submitted (late or not).
 - Grace ends with no upload: the student is frozen and can ask the coordinator to restart at P1 at any time.
   An approved restart starts fresh at P1 at the next semester rollover.
@@ -8,19 +10,21 @@
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.milestone import Milestone, Phase
 from app.models.proposal import ProposalVersion
+from app.models.semester import Semester
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
 
 NEXT_PHASE = {Phase.P1: Phase.P2, Phase.P2: Phase.P3}
 MAX_DEFERRALS = 2  # the second deferral freezes the student
+REGISTRATION_WINDOW = timedelta(weeks=1)
 
 
 @dataclass
@@ -40,6 +44,17 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def registration_closes_at(db: Session) -> datetime | None:
+    # The latest semester is the current one; the migration creates the first.
+    started = db.scalar(select(func.max(Semester.started_at)))
+    return started and started + REGISTRATION_WINDOW
+
+
+def registration_open(db: Session) -> bool:
+    closes = registration_closes_at(db)
+    return closes is not None and _now() <= closes
+
+
 def submitted_at(db: Session, user: User) -> datetime | None:
     # The latest upload counts, so a late re-upload is late. Uploads from before this phase started
     # (a deferred P3, or an earlier semester) don't count.
@@ -54,10 +69,20 @@ def submitted_at(db: Session, user: User) -> datetime | None:
     )
 
 
+def held_to(user: User, m: Milestone) -> bool:
+    # Only students who could upload have anything due: their phase started before the deadline closed, their
+    # group is accepted and, in P1, registered this semester. Everyone else waits for next semester.
+    thesis = user.thesis
+    return (
+        user.phase_started_at < m.closes_at
+        and thesis is not None
+        and thesis.status == ThesisStatus.active
+        and (user.phase != Phase.P1 or thesis.p1_registered)
+    )
+
+
 def _missed(user: User, m: Milestone | None, submitted: datetime | None, now: datetime) -> bool:
-    # A student whose phase started after the deadline closed (signed up late, or restarted) waits
-    # for next semester instead of being frozen.
-    return m is not None and now > m.closes_at and submitted is None and user.phase_started_at < m.closes_at
+    return m is not None and now > m.closes_at and submitted is None and held_to(user, m)
 
 
 def standing(db: Session, user: User, now: datetime | None = None) -> Standing:
@@ -124,8 +149,33 @@ def next_semester(db: Session) -> dict[str, int]:
             thesis.status, user.phase = ThesisStatus.completed, None
             result["completed"] += 1
     db.execute(delete(Milestone))
+    db.execute(update(Thesis).values(p1_registered=False))  # P1 registration is per semester
+    db.add(Semester(started_at=now))  # opens P1 registration for the new semester
     db.commit()
     return result
+
+
+def can_register(db: Session, user: User) -> bool:
+    thesis = user.thesis
+    return (
+        user.phase == Phase.P1
+        and thesis is not None
+        and thesis.status == ThesisStatus.active
+        and not thesis.p1_registered
+        and not standing(db, user).frozen
+        and registration_open(db)
+    )
+
+
+def register_p1(db: Session, user: User) -> None:
+    """Student: register their accepted group for P1 this semester. Only in the first week of the semester."""
+    user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if not can_register(db, user):
+        if not registration_open(db):
+            raise HTTPException(status.HTTP_409_CONFLICT, "P1 registration is closed, register in the first week of next semester")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Only a P1 student with an accepted thesis group can register, once per semester")
+    user.thesis.p1_registered = True
+    db.commit()
 
 
 def can_defer(db: Session, thesis: Thesis) -> bool:

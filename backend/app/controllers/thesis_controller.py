@@ -36,6 +36,12 @@ def request_group(data: ThesisRequestIn, user: User = Depends(student), db: Sess
     return thesis_service.request_group(db, user, data)
 
 
+@router.post("/mine/register", response_model=MyThesisOut)
+def register_p1(user: User = Depends(student), db: Session = Depends(get_db)):
+    progress_service.register_p1(db, user)
+    return thesis_service.mine(db, user)
+
+
 @router.delete("/mine", response_model=MyThesisOut)
 def cancel(user: User = Depends(student), db: Session = Depends(get_db)):
     return thesis_service.cancel(db, user)

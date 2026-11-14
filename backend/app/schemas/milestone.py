@@ -37,6 +37,7 @@ class TimelineOut(BaseModel):
     now: datetime  # server clock, so countdowns don't trust the browser's
     milestones: list[MilestoneOut]
     can_edit: bool  # coordinator only
+    registration_closes_at: datetime | None  # end of this semester's one-week P1 registration
     # Input limits for the coordinator form, same values MilestoneIn enforces.
     max_grace_days: int = MAX_GRACE_DAYS
     max_penalty_per_day: int = MAX_PENALTY_PER_DAY

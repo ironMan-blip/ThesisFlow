@@ -12,6 +12,7 @@ from app.database import Base, get_db
 from app import rate_limit
 from app.main import app
 from app.models.milestone import Milestone, Phase
+from app.models.semester import Semester
 
 # Tests use a separate database so they never touch dev data.
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
@@ -51,6 +52,15 @@ def upload_dir(tmp_path, monkeypatch):
 def fresh_rate_limit():
     # Every test shares the "testclient" IP; start each with empty buckets.
     rate_limit.reset()
+
+
+@pytest.fixture(autouse=True)
+def semester(db):
+    # The migration creates the first semester; tests start inside its P1 registration week.
+    row = Semester(started_at=datetime.now(timezone.utc))
+    db.add(row)
+    db.flush()
+    return row
 
 
 @pytest.fixture()

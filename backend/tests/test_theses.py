@@ -6,7 +6,7 @@ from sqlalchemy import update
 from app.models.milestone import Milestone, Phase
 from app.models.proposal import ProposalVersion
 from app.models.user import Role, User
-from tests.helpers import PDF, auth, form_group, me, student, upload
+from tests.helpers import PDF, auth, close_registration, form_group, me, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -165,7 +165,7 @@ def test_extension_without_restart_request_lets_a_frozen_student_continue(client
 
 
 def test_restart_can_be_rejected(client, db):
-    s = auth(client, db, "s@x.com")
+    s = student(client, db, "s@x.com")
     coord = auth(client, db, "c@x.com", Role.coordinator)
     started_yesterday(client, db, s)
     close(db, Phase.P1)
@@ -182,6 +182,45 @@ def test_late_sign_up_waits_for_next_semester_instead_of_freezing(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     assert close_all_and_roll(client, db, coord)["frozen"] == 0
     assert me(client, s)["phase"] == "P1"
+
+
+def test_groups_form_any_time_but_register_for_p1_only_in_the_first_week(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    on_time, unregistered, late = (auth(client, db, f"{n}@x.com") for n in ("on_time", "unregistered", "late"))
+    form_group(client, db, on_time, sup)
+    state = mine(client, on_time)
+    assert (state["registration_open"], state["can_register"], state["thesis"]["p1_registered"]) == (True, True, False)
+    assert client.get("/api/proposals/mine", headers=on_time).json()["upload_block"] == (
+        "Register your group for P1 on the Thesis page first"
+    )
+    state = client.post("/api/theses/mine/register", headers=on_time).json()
+    assert (state["can_register"], state["thesis"]["p1_registered"]) == (False, True)
+    assert client.post("/api/theses/mine/register", headers=on_time).status_code == 409  # once per semester
+    assert upload(client, on_time).status_code == 201
+    form_group(client, db, unregistered, sup)
+
+    # After the first week, groups still form and get accepted, but can't register for P1.
+    close_registration(db)
+    assert mine(client, late)["can_form_group"] is True
+    form_group(client, db, late, sup)
+    assert mine(client, late)["can_register"] is False
+    res = client.post("/api/theses/mine/register", headers=late)
+    assert (res.status_code, res.json()["detail"]) == (409, "P1 registration is closed, register in the first week of next semester")
+    assert "registration is closed" in client.get("/api/proposals/mine", headers=late).json()["upload_block"]
+
+    # Not registered, so nothing was due: missing P1 doesn't freeze them.
+    for h in (unregistered, late):
+        started_yesterday(client, db, h)
+    close(db, Phase.P1)
+    assert [mine(client, h)["frozen_reason"] for h in (unregistered, late)] == [None, None]
+    res = close_all_and_roll(client, db, coord)
+    assert (res["advanced"], res["frozen"]) == (1, 0)
+    assert [me(client, h)["phase"] for h in (on_time, unregistered, late)] == ["P2", "P1", "P1"]
+
+    # The new semester opens registration again.
+    assert mine(client, late)["can_register"] is True
+    assert client.post("/api/theses/mine/register", headers=late).status_code == 200
 
 
 def test_rollover_moves_students_on_and_saves_freezes(client, db):
@@ -227,6 +266,16 @@ def test_p3_without_deferral_completes_the_thesis(client, db):
     assert (state["phase"], state["thesis"]["status"]) == (None, "completed")
     reopen(db)
     assert client.get("/api/proposals/mine", headers=s).json()["upload_block"] == "Your thesis is complete"
+
+
+def test_removing_the_p3_submission_undoes_a_deferral(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    s = p3_student(client, db, "s@x.com")
+    tid = mine(client, s)["thesis"]["id"]
+    vid = upload(client, s).json()["versions"][0]["id"]
+    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).json()["defer_pending"] is True
+    assert client.delete(f"/api/proposals/versions/{vid}", headers=s).status_code == 200
+    assert [t["defer_pending"] for t in client.get("/api/theses", headers=coord).json()] == [False]
 
 
 def test_deferred_twice_freezes(client, db):
