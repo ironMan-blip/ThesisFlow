@@ -1,17 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, download } from "../api/client";
-import { Alerts, EmptyState, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
-import { when } from "../format";
+import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, Skeleton, ThesisBadge, VersionInfo } from "../components/ui";
+import { personName } from "../format";
 import { useAction } from "../useAction";
 
-const STATUS = {
-  active: ["Active", "bg-teal-50 text-teal-800 ring-teal-600/20"],
-  completed: ["Completed", "bg-teal-50 text-teal-800 ring-teal-600/20"],
-  dropped: ["Archived", "bg-zinc-100 text-zinc-700 ring-zinc-300"],
-};
-
-const fullName = (p) => (p ? `${p.full_name}${p.initials ? ` (${p.initials})` : ""}` : "Account deleted");
+const fullName = (p) => (p ? personName(p) : "Account deleted");
 
 function Requests({ requests, decide, busy }) {
   if (!requests.length) return null;
@@ -24,12 +18,8 @@ function Requests({ requests, decide, busy }) {
         {requests.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <Person user={r.student}> · asks you to be {r.slot === "supervisor" ? "supervisor" : "co-supervisor"}</Person>
-            <div className="flex gap-2">
-              <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary px-3 py-1.5">Decline</button>
-              <button onClick={() => decide(r, true)} disabled={busy === r.id} className="btn-primary px-3 py-1.5">
-                {busy === r.id ? "Saving…" : "Accept"}
-              </button>
-            </div>
+            <DecideButtons busy={busy === r.id} onReject={() => decide(r, false)} onApprove={() => decide(r, true)}
+              reject="Decline" approve="Accept" />
           </li>
         ))}
       </ul>
@@ -94,7 +84,7 @@ export default function ThesesPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold tabular-nums">{t.code}</h2>
-                  <span className={`badge ${STATUS[t.status][1]}`}>{STATUS[t.status][0]}</span>
+                  <ThesisBadge status={t.status} />
                   {t.deferrals > 0 && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">Deferred {t.deferrals}x</span>}
                   {t.defer_pending && <span className="badge bg-red-50 text-red-800 ring-red-600/20">Deferral at semester end</span>}
                 </div>
@@ -114,14 +104,7 @@ export default function ThesesPage() {
                 <ul className="mt-5 divide-y divide-zinc-100 border-t border-zinc-100">
                   {t.versions.map((v) => (
                     <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="badge bg-zinc-50 font-semibold tabular-nums text-zinc-700 ring-zinc-200">v{v.version_no}</span>
-                          <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">{v.phase}</span>
-                          <p className="truncate font-medium">{v.title}</p>
-                        </div>
-                        <p className="mt-1 text-xs text-zinc-500">{v.original_filename} · {v.size_label} · {when(v.created_at)}</p>
-                      </div>
+                      <VersionInfo v={v} />
                       <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
                     </li>
                   ))}

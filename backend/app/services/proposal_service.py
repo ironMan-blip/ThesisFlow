@@ -50,7 +50,7 @@ def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service
     return None, s
 
 
-def _out(db: Session, user: User) -> ProposalOut:
+def get_mine(db: Session, user: User) -> ProposalOut:
     block, s = _upload_block(db, user)
     thesis = user.thesis
     out = ProposalOut(
@@ -64,10 +64,6 @@ def _out(db: Session, user: User) -> ProposalOut:
         # A submission is final once its phase closes, or once it belongs to an earlier phase or semester.
         v.can_delete = block is None and v.phase == user.phase and v.created_at >= user.phase_started_at
     return out
-
-
-def get_mine(db: Session, user: User) -> ProposalOut:
-    return _out(db, user)
 
 
 def _lock_thesis(db: Session, user: User) -> Thesis | None:
@@ -190,7 +186,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         if not keep_new_file:
             (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(thesis)
-    return _out(db, user)
+    return get_mine(db, user)
 
 
 def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
@@ -203,7 +199,7 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     )
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
-    if not next(v.can_delete for v in _out(db, user).versions if v.id == version.id):
+    if not next(v.can_delete for v in get_mine(db, user).versions if v.id == version.id):
         # Submissions are final once the phase closes; removing one could also turn it into a missed deadline.
         raise HTTPException(status.HTTP_409_CONFLICT, "This version is a final submission, so it can't be removed")
     stored, removed_no = version.stored_filename, version.version_no
@@ -218,7 +214,7 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     # File goes only after the row is gone, so a failed commit never loses a PDF.
     (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(thesis)
-    return _out(db, user)
+    return get_mine(db, user)
 
 
 def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, str]:

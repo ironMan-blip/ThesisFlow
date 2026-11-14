@@ -24,10 +24,6 @@ class Proposal(Base):
         "ProposalVersion", back_populates="proposal", order_by="ProposalVersion.version_no.desc()"
     )
 
-    @property
-    def latest_version(self) -> "ProposalVersion | None":
-        return self.versions[0] if self.versions else None
-
 
 class ProposalVersion(Base):
     """One upload of a proposal. Re-submitting the same PDF, title and abstract moves that version to the top."""

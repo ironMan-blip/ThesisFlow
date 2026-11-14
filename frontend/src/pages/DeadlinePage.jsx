@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Alerts, PageHeader, Skeleton } from "../components/ui";
+import { Alerts, ConfirmDialog, PageHeader, Skeleton } from "../components/ui";
 import { fromDhakaInput, toDhakaInput, when } from "../format";
 import { useAction } from "../useAction";
 
@@ -33,7 +33,6 @@ function Countdown({ ms }) {
 export default function DeadlinePage() {
   const [data, setData] = useState(null);
   const [confirming, setConfirming] = useState(false);
-  const dialog = useRef(null);
   const [offset, setOffset] = useState(0); // server clock minus browser clock
   const [now, setNow] = useState(Date.now());
   const { busy: saving, error, notice, setError, run } = useAction(); // busy key is the phase being saved
@@ -74,11 +73,6 @@ export default function DeadlinePage() {
   };
 
   const serverNow = now + offset;
-
-  useEffect(() => {
-    if (confirming) dialog.current.showModal();
-    else dialog.current.close();
-  }, [confirming]);
 
   const nextSemester = () => {
     setConfirming(false);
@@ -196,18 +190,10 @@ export default function DeadlinePage() {
         </ol>
       )}
 
-      {/* Esc closes the dialog natively; onClose keeps state in sync. */}
-      <dialog ref={dialog} onClose={() => setConfirming(false)} aria-labelledby="semester-title"
-        className="card m-auto w-full max-w-md p-6 backdrop:bg-zinc-900/40">
-        <h2 id="semester-title" className="font-semibold">Start the next semester?</h2>
-        <p className="mt-2 text-sm text-zinc-600">
-          This moves every student on and clears all P1, P2 and P3 deadlines. It cannot be undone.
-        </p>
-        <div className="mt-6 flex justify-end gap-2">
-          <button onClick={() => setConfirming(false)} autoFocus className="btn-secondary">Cancel</button>
-          <button onClick={nextSemester} className="btn-primary">Yes, start it</button>
-        </div>
-      </dialog>
+      <ConfirmDialog open={confirming} title="Start the next semester?" confirm="Yes, start it"
+        onCancel={() => setConfirming(false)} onConfirm={nextSemester}>
+        This moves every student on and clears all P1, P2 and P3 deadlines. It cannot be undone.
+      </ConfirmDialog>
     </div>
   );
 }

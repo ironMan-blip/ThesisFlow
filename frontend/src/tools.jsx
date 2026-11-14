@@ -1,13 +1,13 @@
 // Display info for each tool; which tools a user gets comes from the API (user.tools).
 // Nav and dashboard both read this, so a new tool is added here only.
+const BOOK = <><path d="M4 19.5V5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2.5" /><path d="M8 7h6M8 11h4" /></>;
+
 export const TOOLS = {
   thesis: {
-    to: "/thesis", title: "Thesis group", text: "Choose your supervisor, see your thesis ID and your phase.",
-    icon: <><path d="M4 19.5V5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2.5" /><path d="M8 7h6M8 11h4" /></>,
+    to: "/thesis", title: "Thesis group", text: "Choose your supervisor, see your thesis ID and your phase.", icon: BOOK,
   },
   theses: {
-    to: "/theses", title: "Theses", text: "Thesis groups, supervision requests and every proposal version.",
-    icon: <><path d="M4 19.5V5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2.5" /><path d="M8 7h6M8 11h4" /></>,
+    to: "/theses", title: "Theses", text: "Thesis groups, supervision requests and every proposal version.", icon: BOOK,
   },
   proposal: {
     to: "/proposal", title: "Proposal", text: "Upload a new version and see your past submissions.",

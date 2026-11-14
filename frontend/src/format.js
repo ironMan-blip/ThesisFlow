@@ -7,6 +7,9 @@ export const DHAKA_OFFSET = "+06:00";
 export const when = (iso) =>
   new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: TIME_ZONE });
 
+// "Full Name (INI)"; faculty have initials, students don't.
+export const personName = (p) => `${p.full_name}${p.initials ? ` (${p.initials})` : ""}`;
+
 // ISO string -> "YYYY-MM-DDTHH:mm" in Dhaka time, for date and time inputs.
 export const toDhakaInput = (iso) => new Date(new Date(iso).getTime() + 6 * 3600000).toISOString().slice(0, 16);
 

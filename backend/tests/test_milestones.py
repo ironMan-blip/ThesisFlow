@@ -137,7 +137,7 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     gm = db.scalar(select(GroupMilestone).filter_by(thesis_id=thesis_id))
     assert gm.phase == Phase.P1 and gm.extended_due_at is None
     assert gm.deliverable.proposal_version_id == v2["id"] and gm.submitted_at == gm.deliverable.proposal_version.created_at
-    assert db.scalar(select(Proposal).filter_by(thesis_id=thesis_id)).latest_version.id == v2["id"]
+    assert db.scalar(select(Proposal).filter_by(thesis_id=thesis_id)).versions[0].id == v2["id"]
     row = by_phase(client.get("/api/milestones", headers=s))["P1"]
     assert row["submitted_at"] is not None
     assert (row["late_days"], row["penalty_percent"]) == (1, 10)

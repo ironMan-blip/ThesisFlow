@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, download } from "../api/client";
-import { Alerts, EmptyState, Icon, ICONS, PageHeader, Skeleton } from "../components/ui";
+import { Alerts, ConfirmDialog, EmptyState, Icon, ICONS, PageHeader, Skeleton, VersionInfo } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
@@ -9,7 +9,6 @@ export default function ProposalPage() {
   const [pending, setPending] = useState(null);
   const [fileName, setFileName] = useState("");
   const { busy, error, notice, setError, run } = useAction();
-  const dialog = useRef(null);
 
   useEffect(() => {
     api("/proposals/mine").then(setProposal).catch((err) => setError(err.message));
@@ -38,11 +37,6 @@ export default function ProposalPage() {
   };
 
   const saving = busy === "upload";
-
-  useEffect(() => {
-    if (pending) dialog.current.showModal();
-    else dialog.current.close();
-  }, [pending]);
 
   return (
     <div className="space-y-8">
@@ -114,18 +108,7 @@ export default function ProposalPage() {
             <ul className="divide-y divide-zinc-100">
               {proposal.versions.map((v) => (
                 <li key={v.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="badge bg-zinc-50 font-semibold tabular-nums text-zinc-700 ring-zinc-200">v{v.version_no}</span>
-                      <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">{v.phase}</span>
-                      {v.is_latest && <span className="badge bg-teal-50 text-teal-800 ring-teal-600/20">Latest</span>}
-                      <p className="truncate font-medium">{v.title}</p>
-                    </div>
-                    <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>
-                    <p className="mt-1.5 break-words text-xs text-zinc-500">
-                      {v.original_filename} · {v.size_label} · {when(v.created_at)}
-                    </p>
-                  </div>
+                  <VersionInfo v={v} abstract />
                   <div className="flex shrink-0 gap-2">
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
                     {v.can_delete && (
@@ -140,19 +123,11 @@ export default function ProposalPage() {
         </section>
       </div>
 
-      {/* Esc closes the dialog natively; onClose keeps state in sync. */}
-      <dialog ref={dialog} onClose={() => setPending(null)} aria-labelledby="remove-title"
-        className="card m-auto w-full max-w-md p-6 backdrop:bg-zinc-900/40">
-        <h2 id="remove-title" className="font-semibold">Remove v{pending?.version_no}?</h2>
-        <p className="mt-2 text-sm text-zinc-600">
-          This permanently deletes the version and its PDF. It cannot be undone.
-          Later versions will be renumbered to fill the gap.
-        </p>
-        <div className="mt-6 flex justify-end gap-2">
-          <button onClick={() => setPending(null)} autoFocus className="btn-secondary">Cancel</button>
-          <button onClick={confirmRemove} className="btn-danger">Yes, remove</button>
-        </div>
-      </dialog>
+      <ConfirmDialog open={!!pending} title={`Remove v${pending?.version_no}?`} confirm="Yes, remove" danger
+        onCancel={() => setPending(null)} onConfirm={confirmRemove}>
+        This permanently deletes the version and its PDF. It cannot be undone.
+        Later versions will be renumbered to fill the gap.
+      </ConfirmDialog>
     </div>
   );
 }

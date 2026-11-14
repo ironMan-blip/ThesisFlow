@@ -7,7 +7,7 @@ stored under that thesis, so it is never lost when accounts change.
 """
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.milestone import Phase
@@ -91,19 +91,17 @@ def cancel(db: Session, user: User) -> MyThesisOut:
     return mine(db, user)
 
 
-def requests_for(db: Session, member: User) -> list[SupervisionRequestOut]:
-    rows = db.scalars(
-        select(Thesis)
-        .where(
-            or_(
-                (Thesis.supervisor_id == member.id) & (Thesis.status == ThesisStatus.pending),
-                (Thesis.co_supervisor_id == member.id)
-                & Thesis.co_supervisor_accepted.is_(False)
-                & Thesis.status.in_(LIVE),
-            )
+def _requests(member: User) -> Select:
+    return select(Thesis).where(
+        or_(
+            (Thesis.supervisor_id == member.id) & (Thesis.status == ThesisStatus.pending),
+            (Thesis.co_supervisor_id == member.id) & Thesis.co_supervisor_accepted.is_(False) & Thesis.status.in_(LIVE),
         )
-        .order_by(Thesis.created_at)
     )
+
+
+def requests_for(db: Session, member: User) -> list[SupervisionRequestOut]:
+    rows = db.scalars(_requests(member).order_by(Thesis.created_at))
     return [
         SupervisionRequestOut(
             **ThesisOut.model_validate(t).model_dump(),
@@ -114,7 +112,8 @@ def requests_for(db: Session, member: User) -> list[SupervisionRequestOut]:
 
 
 def count_requests(db: Session, member: User) -> int:
-    return len(requests_for(db, member))
+    # Polled every 10s by the UI badge, so count in SQL.
+    return db.scalar(_requests(member).with_only_columns(func.count()))
 
 
 def decide(db: Session, member: User, thesis_id: int, accept: bool) -> None:

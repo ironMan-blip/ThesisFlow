@@ -1,17 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Alerts, Icon, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
-import { when } from "../format";
+import { Alerts, Icon, ICONS, PageHeader, Person, Skeleton, ThesisBadge } from "../components/ui";
+import { personName, when } from "../format";
 import { useAction } from "../useAction";
-
-const STATUS = {
-  pending: ["Waiting for supervisor", "bg-amber-50 text-amber-800 ring-amber-600/20"],
-  active: ["Active", "bg-teal-50 text-teal-800 ring-teal-600/20"],
-  completed: ["Completed", "bg-teal-50 text-teal-800 ring-teal-600/20"],
-  dropped: ["Archived", "bg-zinc-100 text-zinc-700 ring-zinc-300"],
-};
-
-const name = (f) => `${f.full_name}${f.initials ? ` (${f.initials})` : ""}`;
 
 export default function ThesisPage() {
   const [state, setState] = useState(null);
@@ -107,7 +98,7 @@ export default function ThesisPage() {
             <section className="card space-y-5 p-6">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="font-semibold">Your group</h2>
-                <span className={`badge ${STATUS[t.status][1]}`}>{STATUS[t.status][0]}</span>
+                <ThesisBadge status={t.status} />
               </div>
               {state.show_deferral_warning && (
                 <p className="alert-error">
@@ -164,14 +155,14 @@ export default function ThesisPage() {
                 Supervisor
                 <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
                   <option value="" disabled>Choose a faculty member</option>
-                  {faculty.map((f) => <option key={f.id} value={f.id}>{name(f)}</option>)}
+                  {faculty.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
                 </select>
               </label>
               <label className="label">
                 Co-supervisor (optional)
                 <select name="co_supervisor_id" defaultValue="" className="input">
                   <option value="">None</option>
-                  {faculty.filter((f) => String(f.id) !== supervisor).map((f) => <option key={f.id} value={f.id}>{name(f)}</option>)}
+                  {faculty.filter((f) => String(f.id) !== supervisor).map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
                 </select>
               </label>
               <button disabled={busy === "ask" || !faculty.length} className="btn-primary w-full">

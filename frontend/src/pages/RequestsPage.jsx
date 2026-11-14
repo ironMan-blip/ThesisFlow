@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, EmptyState, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
+import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
@@ -43,12 +43,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField }) {
               {requests.map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
                   <Person user={r}> · requested {when(r[dateField])}</Person>
-                  <div className="flex gap-2">
-                    <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary px-3 py-1.5">Reject</button>
-                    <button onClick={() => decide(r, true)} disabled={busy === r.id} className="btn-primary px-3 py-1.5">
-                      {busy === r.id ? "Saving…" : "Approve"}
-                    </button>
-                  </div>
+                  <DecideButtons busy={busy === r.id} onReject={() => decide(r, false)} onApprove={() => decide(r, true)} />
                 </li>
               ))}
             </ul>
