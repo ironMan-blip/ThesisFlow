@@ -34,7 +34,7 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Accounts" intro="Every approved account. Deleting an account also deletes its proposal for good." />
+      <PageHeader title="Accounts" intro="Every approved account. Deleting an account keeps its thesis and proposal versions as an archive." />
 
       <Alerts error={error} notice={notice} />
 

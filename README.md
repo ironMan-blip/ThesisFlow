@@ -98,7 +98,7 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 
 | What | Where |
 |------|-------|
-| Web app | http://localhost:5173 |
+| Web app | http://localhost:5174 |
 | API docs (Swagger) | http://localhost:8000/docs |
 | Tests | `docker compose exec backend pytest` |
 | Database shell | `docker compose exec db psql -U thesisflow` |
