@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Alerts, PageHeader, Skeleton } from "../components/ui";
-import { when } from "../format";
+import { Alerts, ConfirmDialog, PageHeader, Skeleton } from "../components/ui";
+import { fromDhakaInput, toDhakaInput, when } from "../format";
 import { useAction } from "../useAction";
 
 // status -> [label, badge tone, timeline dot]
@@ -30,14 +30,9 @@ function Countdown({ ms }) {
   );
 }
 
-// ISO string -> "YYYY-MM-DDTHH:mm" in the browser's time zone, split for the date and time inputs.
-const toLocalInput = (iso) => {
-  const d = new Date(iso);
-  return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-};
-
 export default function DeadlinePage() {
   const [data, setData] = useState(null);
+  const [confirming, setConfirming] = useState(false);
   const [offset, setOffset] = useState(0); // server clock minus browser clock
   const [now, setNow] = useState(Date.now());
   const { busy: saving, error, notice, setError, run } = useAction(); // busy key is the phase being saved
@@ -67,7 +62,7 @@ export default function DeadlinePage() {
         await api(`/milestones/${phase}`, {
           method: "PUT",
           body: {
-            due_at: new Date(`${f.get("due_date")}T${f.get("due_time")}`).toISOString(),
+            due_at: fromDhakaInput(f.get("due_date"), f.get("due_time")),
             grace_days: Number(f.get("grace_days")),
             penalty_per_day: Number(f.get("penalty_per_day")),
           },
@@ -79,6 +74,15 @@ export default function DeadlinePage() {
 
   const serverNow = now + offset;
 
+  const nextSemester = () => {
+    setConfirming(false);
+    run("semester", async () => {
+      const r = await api("/milestones/next-semester", { method: "POST" });
+      show(await api("/milestones"));
+      return `New semester started: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.frozen} frozen, ${r.restarted} restarted at P1. Set the new deadlines below.`;
+    });
+  };
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -86,7 +90,31 @@ export default function DeadlinePage() {
         intro="Each phase has a due date and a grace time. Work handed in after the grace time loses marks for every late day."
       />
 
+      {data?.can_edit && (
+        <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
+          <div className="max-w-prose">
+            <h2 className="font-semibold">End this semester</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Once every grace time has ended: students who submitted move to their next phase, P3 theses are completed
+              or deferred, students who missed are frozen, approved restarts start fresh at P1, and all deadlines are cleared for next semester.
+              P1 registration then opens for one week.
+            </p>
+          </div>
+          <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">
+            {saving === "semester" ? "Starting…" : "Start next semester"}
+          </button>
+        </section>
+      )}
+
       <Alerts error={error} notice={notice} />
+
+      {data?.registration_closes_at && (
+        <p className="text-sm text-zinc-600">
+          {data.registration_open ? "P1 registration is open until " : "P1 registration closed on "}
+          <span className="font-medium tabular-nums">{when(data.registration_closes_at)}</span>.
+          {data.can_edit && " P1 can only be due after it closes."}
+        </p>
+      )}
 
       {!data ? (
         <Skeleton rows={3} row="h-36 rounded-xl" className="space-y-4" />
@@ -101,6 +129,7 @@ export default function DeadlinePage() {
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold">{m.phase}</h2>
                     <span className={`badge ${tone}`}>{label}</span>
+                    {m.mine && <span className="badge bg-zinc-900 text-white ring-zinc-900">Your phase</span>}
                   </div>
                   {m.countdown_to && (
                     <div className="flex items-center gap-3 text-sm text-zinc-600">
@@ -136,11 +165,11 @@ export default function DeadlinePage() {
                   <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
                     <label className="label">
                       Due date
-                      <input name="due_date" type="date" required defaultValue={m.due_at ? toLocalInput(m.due_at).slice(0, 10) : ""} className="input" />
+                      <input name="due_date" type="date" required defaultValue={m.due_at ? toDhakaInput(m.due_at).slice(0, 10) : ""} className="input" />
                     </label>
                     <label className="label">
-                      Due time
-                      <input name="due_time" type="time" required defaultValue={m.due_at ? toLocalInput(m.due_at).slice(11) : "23:59"} className="input" />
+                      Due time (Dhaka)
+                      <input name="due_time" type="time" required defaultValue={m.due_at ? toDhakaInput(m.due_at).slice(11) : "23:59"} className="input" />
                     </label>
                     <label className="label">
                       Grace (days)
@@ -151,7 +180,7 @@ export default function DeadlinePage() {
                       <input name="penalty_per_day" type="number" min={0} max={data.max_penalty_per_day} required defaultValue={m.penalty_per_day} className="input" />
                     </label>
                     <button disabled={saving === m.phase} className="btn-primary sm:col-span-5 sm:justify-self-end">
-                      {saving === m.phase ? "Saving..." : `Save ${m.phase}`}
+                      {saving === m.phase ? "Saving…" : `Save ${m.phase}`}
                     </button>
                   </form>
                 )}
@@ -160,6 +189,11 @@ export default function DeadlinePage() {
           })}
         </ol>
       )}
+
+      <ConfirmDialog open={confirming} title="Start the next semester?" confirm="Yes, start it"
+        onCancel={() => setConfirming(false)} onConfirm={nextSemester}>
+        This moves every student on and clears all P1, P2 and P3 deadlines. It cannot be undone.
+      </ConfirmDialog>
     </div>
   );
 }

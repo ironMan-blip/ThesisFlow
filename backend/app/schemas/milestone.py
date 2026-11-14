@@ -25,7 +25,8 @@ class MilestoneOut(BaseModel):
     # What the live countdown ticks toward: due_at while open, closes_at in grace, else None.
     countdown_to: datetime | None = None
     countdown_label: str | None = None
-    # Students only: their latest upload for this phase and what it costs them.
+    mine: bool = False  # students only: the phase they are in this semester
+    # Students, for their own phase only: their latest upload and what it costs them.
     submitted_at: datetime | None = None
     late_days: int | None = None
     penalty_percent: int | None = None
@@ -36,6 +37,8 @@ class TimelineOut(BaseModel):
     now: datetime  # server clock, so countdowns don't trust the browser's
     milestones: list[MilestoneOut]
     can_edit: bool  # coordinator only
+    registration_closes_at: datetime | None  # end of this semester's one-week P1 registration
+    registration_open: bool
     # Input limits for the coordinator form, same values MilestoneIn enforces.
     max_grace_days: int = MAX_GRACE_DAYS
     max_penalty_per_day: int = MAX_PENALTY_PER_DAY

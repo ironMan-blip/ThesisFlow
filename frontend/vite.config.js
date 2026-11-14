@@ -6,7 +6,14 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     // Frontend calls /api/...; Vite forwards it to FastAPI.
-    // xfwd sends the browser's IP as X-Forwarded-For, so the backend rate-limits per user, not per proxy.
-    proxy: { "/api": { target: process.env.API_PROXY_TARGET || "http://localhost:8000", xfwd: true } },
+    // Overwrite X-Forwarded-For with the real browser IP so the backend rate-limits per user, not per proxy.
+    // Appending (xfwd) would keep a client-sent value first, letting anyone pick a fresh IP per request.
+    proxy: {
+      "/api": {
+        target: process.env.API_PROXY_TARGET || "http://localhost:8000",
+        // "start" runs before the outgoing headers are copied from req.
+        configure: (proxy) => proxy.on("start", (req) => (req.headers["x-forwarded-for"] = req.socket.remoteAddress)),
+      },
+    },
   },
 });

@@ -11,7 +11,8 @@ from app.config import settings
 from app.database import Base, get_db
 from app import rate_limit
 from app.main import app
-from app.models.milestone import Milestone, Phase
+from app.models.milestone import MilestoneTemplate, Phase
+from app.models.semester import Semester
 
 # Tests use a separate database so they never touch dev data.
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
@@ -53,6 +54,15 @@ def fresh_rate_limit():
     rate_limit.reset()
 
 
+@pytest.fixture(autouse=True)
+def semester(db):
+    # The migration creates the first semester; tests start inside its P1 registration week.
+    row = Semester(started_at=datetime.now(timezone.utc))
+    db.add(row)
+    db.flush()
+    return row
+
+
 @pytest.fixture()
 def client(db):
     app.dependency_overrides[get_db] = lambda: db
@@ -64,5 +74,5 @@ def client(db):
 def timelines(db):
     # Uploads need the phase's timeline set; tests that aren't about timelines get all of them.
     due = datetime.now(timezone.utc) + timedelta(days=30)
-    db.add_all(Milestone(phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
+    db.add_all(MilestoneTemplate(phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
     db.flush()

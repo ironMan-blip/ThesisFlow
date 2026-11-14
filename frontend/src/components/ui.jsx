@@ -1,4 +1,6 @@
 // Small pieces every page shares.
+import { useEffect, useRef } from "react";
+import { personName, when } from "../format";
 
 // Outline icon in a 24px grid; `children` are the SVG paths (see TOOLS and ICONS).
 export function Icon({ children, className = "size-5" }) {
@@ -74,7 +76,7 @@ export function Person({ user, children }) {
       <Avatar user={user} />
       <div className="min-w-0">
         <p className="font-medium">
-          {user.full_name}{user.initials && ` (${user.initials})`}{" "}
+          {personName(user)}{" "}
           <span className="badge bg-zinc-50 align-middle font-normal capitalize text-zinc-600 ring-zinc-200">{user.role}</span>
         </p>
         <p className="mt-0.5 break-words text-sm text-zinc-500">
@@ -92,6 +94,65 @@ export function EmptyState({ icon = ICONS.inbox, title, children }) {
       <p className="mt-4 font-medium">{title}</p>
       {children && <p className="mt-1 max-w-sm text-sm text-zinc-500">{children}</p>}
     </div>
+  );
+}
+
+const THESIS_STATUS = {
+  pending: ["Waiting for supervisor", "bg-amber-50 text-amber-800 ring-amber-600/20"],
+  active: ["Active", "bg-teal-50 text-teal-800 ring-teal-600/20"],
+  completed: ["Completed", "bg-teal-50 text-teal-800 ring-teal-600/20"],
+  dropped: ["Archived", "bg-zinc-100 text-zinc-700 ring-zinc-300"],
+};
+
+export function ThesisBadge({ status }) {
+  const [label, tone] = THESIS_STATUS[status];
+  return <span className={`badge ${tone}`}>{label}</span>;
+}
+
+// One proposal version: number, phase, title, optional abstract, file details.
+export function VersionInfo({ v, abstract = false }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="badge bg-zinc-50 font-semibold tabular-nums text-zinc-700 ring-zinc-200">v{v.version_no}</span>
+        <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">{v.phase}</span>
+        {v.is_latest && <span className="badge bg-teal-50 text-teal-800 ring-teal-600/20">Latest</span>}
+        <p className="truncate font-medium">{v.title}</p>
+      </div>
+      {abstract && <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>}
+      <p className="mt-1.5 break-words text-xs text-zinc-500">
+        {v.original_filename} · {v.size_label} · {when(v.created_at)}
+      </p>
+    </div>
+  );
+}
+
+// Reject / approve pair for a request row; `busy` disables both while the decision saves.
+export function DecideButtons({ busy, onReject, onApprove, reject = "Reject", approve = "Approve" }) {
+  return (
+    <div className="flex gap-2">
+      <button onClick={onReject} disabled={busy} className="btn-secondary px-3 py-1.5">{reject}</button>
+      <button onClick={onApprove} disabled={busy} className="btn-primary px-3 py-1.5">{busy ? "Saving…" : approve}</button>
+    </div>
+  );
+}
+
+// Modal yes/cancel question. Esc closes the dialog natively; onClose keeps `open` in sync.
+export function ConfirmDialog({ open, title, confirm, danger = false, onCancel, onConfirm, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (open) ref.current.showModal();
+    else ref.current.close();
+  }, [open]);
+  return (
+    <dialog ref={ref} onClose={onCancel} aria-labelledby="confirm-title" className="card m-auto w-full max-w-md p-6 backdrop:bg-zinc-900/40">
+      <h2 id="confirm-title" className="font-semibold">{title}</h2>
+      <p className="mt-2 text-sm text-zinc-600">{children}</p>
+      <div className="mt-6 flex justify-end gap-2">
+        <button onClick={onCancel} autoFocus className="btn-secondary">Cancel</button>
+        <button onClick={onConfirm} className={danger ? "btn-danger" : "btn-primary"}>{confirm}</button>
+      </div>
+    </dialog>
   );
 }
 

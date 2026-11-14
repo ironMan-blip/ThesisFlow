@@ -4,6 +4,14 @@
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px rgb(24 24 27 / 0.04), 0 1px 1px rgb(24 24 27 / 0.03);
   --shadow-lift: 0 8px 24px -8px rgb(15 118 110 / 0.18), 0 2px 4px rgb(24 24 27 / 0.04);
+
+  /* Short entrance motion; used with motion-safe: so reduced-motion users get none. */
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-rise-in: rise-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-slide-in: slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  @keyframes fade-in { from { opacity: 0; } }
+  @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes slide-in { from { transform: translateX(-100%); } }
 }
 
 @layer base {
@@ -18,6 +26,14 @@
   }
   p {
     text-wrap: pretty;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    dialog[open] {
+      animation: var(--animate-rise-in);
+    }
+    dialog[open]::backdrop {
+      animation: var(--animate-fade-in);
+    }
   }
 }
 

@@ -3,17 +3,19 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.config import settings
-from app.models.milestone import Milestone, Phase
+from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role
-from tests.helpers import PDF, auth, upload
+from app.schemas.proposal import MAX_ABSTRACT_CHARS
+from tests.helpers import PDF, auth, me, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
 
 def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
-    h = auth(client, db, "s@x.com")
+    h = student(client, db, "s@x.com")
     empty = client.get("/api/proposals/mine", headers=h).json()
-    assert (empty["versions"], empty["phases"]) == ([], ["P1", "P2", "P3"])
+    assert (empty["versions"], empty["phase"], empty["upload_block"]) == ([], "P1", None)
+    assert empty["thesis_code"].startswith("TH-")
 
     assert upload(client, h, title="v1").status_code == 201
     res = upload(client, h, content=PDF + b"v2", title="v2", name="p2.pdf")
@@ -33,23 +35,70 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
 
 
 def test_rejects_non_pdf_and_oversize(client, db, monkeypatch):
-    h = auth(client, db, "s@x.com")
+    h = student(client, db, "s@x.com")
     assert upload(client, h, content=b"hello").status_code == 422
     assert upload(client, h, title="  ").status_code == 422
-    assert upload(client, h, phase="P9").status_code == 422
     monkeypatch.setattr(settings, "max_upload_mb", 1)
     assert upload(client, h, content=PDF + b"x" * 1024 * 1024).status_code == 413
+    # Far over the limit: refused from Content-Length before the body is read.
+    res = upload(client, h, content=PDF + b"x" * 3 * 1024 * 1024)
+    assert (res.status_code, res.json()["detail"]) == (413, "Upload is larger than 1 MB")
     assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
 
 
-def test_other_students_cannot_see_but_faculty_can(client, db):
-    owner = auth(client, db, "s@x.com")
-    other = auth(client, db, "o@x.com")
-    faculty = auth(client, db, "f@x.com", Role.faculty)
+def test_rejects_overlong_abstract(client, db):
+    h = student(client, db, "s@x.com")
+    res = client.post(
+        "/api/proposals/mine/versions",
+        headers=h,
+        data={"title": "T", "abstract": "a" * (MAX_ABSTRACT_CHARS + 1)},
+        files={"file": ("p.pdf", PDF, "application/pdf")},
+    )
+    assert res.status_code == 422
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
+
+
+def test_upload_needs_an_accepted_thesis_group(client, db):
+    h = auth(client, db, "s@x.com")
+    res = upload(client, h)
+    assert (res.status_code, res.json()["detail"]) == (409, "Form a thesis group first: choose a supervisor on the Thesis page")
+    sup = auth(client, db, "f@x.com", Role.faculty)
+    client.post("/api/theses/mine", headers=h, json={"supervisor_id": client.get("/api/auth/me", headers=sup).json()["id"]})
+    res = upload(client, h)
+    assert (res.status_code, res.json()["detail"]) == (409, "Your supervisor has not accepted your thesis group yet")
+
+
+def test_only_the_student_and_their_supervisors_see_versions(client, db):
+    owner = student(client, db, "s@x.com")
+    other = student(client, db, "o@x.com")
+    other_faculty = auth(client, db, "f@x.com", Role.faculty)
+    coord = auth(client, db, "c@x.com", Role.coordinator)
     vid = upload(client, owner).json()["versions"][0]["id"]
+    assert len(client.get("/api/theses", headers=coord).json()) == 2
 
     assert client.get(f"/api/proposals/versions/{vid}/file", headers=other).status_code == 404
-    assert client.get(f"/api/proposals/versions/{vid}/file", headers=faculty).status_code == 200
+    assert client.get(f"/api/proposals/versions/{vid}/file", headers=other_faculty).status_code == 404
+    assert client.get(f"/api/proposals/versions/{vid}/file", headers=coord).status_code == 200
+
+
+def test_group_members_and_coordinator_download_but_only_the_student_uploads(client, db):
+    owner = auth(client, db, "s@x.com")
+    sup, co = auth(client, db, "f1@x.com", Role.faculty), auth(client, db, "f2@x.com", Role.faculty)
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    body = {"supervisor_id": me(client, sup)["id"], "co_supervisor_id": me(client, co)["id"]}
+    tid = client.post("/api/theses/mine", headers=owner, json=body).json()["thesis"]["id"]
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
+    assert client.post("/api/theses/mine/register", headers=owner).status_code == 200
+    vid = upload(client, owner).json()["versions"][0]["id"]
+    file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
+
+    assert (file(owner), file(sup), file(coord)) == (200, 200, 200)
+    assert file(co) == 404  # not a group member until they accept
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=co).status_code == 204
+    assert file(co) == 200
+    assert [t["id"] for t in client.get("/api/theses", headers=co).json()] == [tid]
+    for h in (sup, co, coord):
+        assert upload(client, h).status_code == 403
 
 
 def test_only_students_upload(client, db):
@@ -58,8 +107,8 @@ def test_only_students_upload(client, db):
 
 
 def test_owner_can_remove_a_version(client, db, tmp_path):
-    owner = auth(client, db, "s@x.com")
-    other = auth(client, db, "o@x.com")
+    owner = student(client, db, "s@x.com")
+    other = student(client, db, "o@x.com")
     upload(client, owner, title="v1")
     v2, v1 = upload(client, owner, content=PDF + b"v2", title="v2").json()["versions"]
 
@@ -73,7 +122,7 @@ def test_owner_can_remove_a_version(client, db, tmp_path):
 
 
 def test_removing_a_version_renumbers_later_ones(client, db):
-    h = auth(client, db, "s@x.com")
+    h = student(client, db, "s@x.com")
     for t in ("a", "b", "c"):
         upload(client, h, content=PDF + t.encode(), title=t)
     c, b, a = client.get("/api/proposals/mine", headers=h).json()["versions"]
@@ -85,16 +134,16 @@ def test_removing_a_version_renumbers_later_ones(client, db):
 
 
 def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
-    h = auth(client, db, "s@x.com")
+    h = student(client, db, "s@x.com")
     for t in ("a", "b", "c"):
         upload(client, h, content=PDF + t.encode(), title=t)
     a_id = client.get("/api/proposals/mine", headers=h).json()["versions"][2]["id"]
 
-    res = upload(client, h, content=PDF + b"a", title="a", phase="P2")
+    res = upload(client, h, content=PDF + b"a", title="a")
     assert res.status_code == 201
     versions = res.json()["versions"]
     assert [(v["title"], v["version_no"]) for v in versions] == [("a", 3), ("c", 2), ("b", 1)]
-    assert (versions[0]["id"], versions[0]["phase"], versions[0]["is_latest"]) == (a_id, "P2", True)
+    assert (versions[0]["id"], versions[0]["is_latest"]) == (a_id, True)
     assert len(list((tmp_path / "proposals").iterdir())) == 3
     assert client.get(f"/api/proposals/versions/{a_id}/file", headers=h).content == PDF + b"a"
 
@@ -104,13 +153,13 @@ def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
 
 
 def test_same_pdf_with_new_title_or_abstract_is_a_new_version(client, db):
-    h = auth(client, db, "s@x.com")
+    h = student(client, db, "s@x.com")
     upload(client, h, title="a")
     upload(client, h, title="a renamed")
     res = client.post(
         "/api/proposals/mine/versions",
         headers=h,
-        data={"phase": "P1", "title": "a renamed", "abstract": "New abstract"},
+        data={"title": "a renamed", "abstract": "New abstract"},
         files={"file": ("p.pdf", PDF, "application/pdf")},
     )
     versions = res.json()["versions"]
@@ -122,64 +171,29 @@ def test_same_pdf_with_new_title_or_abstract_is_a_new_version(client, db):
 
 
 def test_upload_needs_the_phase_timeline(client, db):
-    h = auth(client, db, "s@x.com")
-    db.delete(db.get(Milestone, Phase.P2))
-    db.delete(db.get(Milestone, Phase.P3))
+    h = student(client, db, "s@x.com")
+    db.delete(db.get(MilestoneTemplate, Phase.P1))
     db.flush()
-    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1"]
-    res = upload(client, h, phase="P2")
-    assert (res.status_code, res.json()["detail"]) == (409, "The P2 timeline is not set yet")
-    assert upload(client, h, phase="P1").status_code == 201
+    mine = client.get("/api/proposals/mine", headers=h).json()
+    assert mine["upload_block"] == "The P1 timeline is not set yet"
+    res = upload(client, h)
+    assert (res.status_code, res.json()["detail"]) == (409, "The P1 timeline is not set yet")
 
 
-def test_upload_closes_when_grace_period_ends(client, db):
-    h = auth(client, db, "s@x.com")
-    now = datetime.now(timezone.utc)
-    db.get(Milestone, Phase.P1).due_at = now - timedelta(minutes=5)
-    db.get(Milestone, Phase.P1).grace_days = 1  # past due, still in grace
-    db.get(Milestone, Phase.P2).due_at = now - timedelta(minutes=5)  # no grace: closed
+def test_grace_period_warns_and_then_uploads_close(client, db):
+    h = student(client, db, "s@x.com")
+    p1 = db.get(MilestoneTemplate, Phase.P1)
+    p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 1  # past due, still in grace
     db.flush()
-    assert client.get("/api/proposals/mine", headers=h).json()["phases"] == ["P1"]  # P2 missed locks P3
-    assert upload(client, h, phase="P1").status_code == 201
-    res = upload(client, h, phase="P2")
-    assert (res.status_code, res.json()["detail"]) == (409, "The P2 deadline and grace period have passed")
+    mine = client.get("/api/proposals/mine", headers=h).json()
+    assert mine["upload_block"] is None and mine["freeze_at"] is not None  # warning: upload or be frozen
+    v = upload(client, h).json()["versions"][0]
+    assert client.get("/api/proposals/mine", headers=h).json()["freeze_at"] is None  # submitted (late)
 
-
-def test_missed_phase_locks_later_phases_until_new_semester(client, db):
-    on_time, missed = auth(client, db, "a@x.com"), auth(client, db, "b@x.com")
-    assert upload(client, on_time, phase="P1").status_code == 201
-    p1 = db.get(Milestone, Phase.P1)
-    p1.due_at = datetime.now(timezone.utc) - timedelta(minutes=5)  # P1 closes
+    p1.grace_days = 0  # grace over
     db.flush()
-
-    assert client.get("/api/proposals/mine", headers=on_time).json()["phases"] == ["P2", "P3"]
-    assert client.get("/api/proposals/mine", headers=missed).json()["phases"] == []
-    res = upload(client, missed, phase="P2")
-    assert (res.status_code, res.json()["detail"]) == (409, "You missed P1, so uploads are closed until the next semester")
-
-    mine = client.get("/api/proposals/mine", headers=missed).json()
-    assert mine["missed_notice"] == "You missed P1, so uploads are closed until the next semester"
-    assert client.get("/api/proposals/mine", headers=on_time).json()["missed_notice"] is None
-
-    p1.due_at = datetime.now(timezone.utc) + timedelta(days=1)  # new semester: P1 open again
-    db.flush()
-    assert upload(client, missed, phase="P1").status_code == 201
-
-
-def test_versions_of_a_closed_phase_cannot_be_removed(client, db):
-    h = auth(client, db, "s@x.com")
-    p1 = upload(client, h, phase="P1").json()["versions"][0]
-    p2 = upload(client, h, content=PDF + b"p2", phase="P2").json()["versions"][0]
-    assert (p1["can_delete"], p2["can_delete"]) == (True, True)
-    db.get(Milestone, Phase.P1).due_at = datetime.now(timezone.utc) - timedelta(minutes=5)  # P1 closes
-    db.flush()
-
-    versions = client.get("/api/proposals/mine", headers=h).json()["versions"]
-    assert [(v["phase"], v["can_delete"]) for v in versions] == [("P2", True), ("P1", False)]
-    res = client.delete(f"/api/proposals/versions/{p1['id']}", headers=h)
-    assert (res.status_code, res.json()["detail"]) == (
-        409,
-        "The P1 deadline and grace period have passed, so it can't be removed",
-    )
-    assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 2
-    assert client.delete(f"/api/proposals/versions/{p2['id']}", headers=h).status_code == 200
+    mine = client.get("/api/proposals/mine", headers=h).json()
+    assert mine["upload_block"] == "The P1 deadline and grace period have passed"
+    assert mine["versions"][0]["can_delete"] is False  # a final submission
+    res = client.delete(f"/api/proposals/versions/{v['id']}", headers=h)
+    assert (res.status_code, res.json()["detail"]) == (409, "This version is a final submission, so it can't be removed")

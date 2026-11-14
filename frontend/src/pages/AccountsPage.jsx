@@ -73,7 +73,7 @@ export default function AccountsPage() {
                     <span className="text-sm font-medium text-red-700">Delete permanently? This can't be undone.</span>
                     <button onClick={() => setConfirming(null)} disabled={busy === a.id} className="btn-secondary px-3 py-1.5">Cancel</button>
                     <button onClick={() => remove(a)} disabled={busy === a.id} className="btn-danger px-3 py-1.5">
-                      {busy === a.id ? "Deleting..." : "Yes, delete"}
+                      {busy === a.id ? "Deleting…" : "Yes, delete"}
                     </button>
                   </div>
                 ) : (

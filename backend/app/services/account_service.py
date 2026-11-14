@@ -6,8 +6,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from app.models.thesis import ThesisStatus
 from app.models.user import REVIEW_WINDOW, Role, User
-from app.services import proposal_service
+from app.services import progress_service, thesis_service
 
 
 def _registrations() -> Select:
@@ -31,7 +32,8 @@ def _pending(db: Session, user_id: int) -> User:
 
 def approve_registration(db: Session, user_id: int) -> User:
     user = _pending(db, user_id)
-    user.approved = True
+    # A student's phase starts when they can log in, so a sign-up approved late isn't counted as missing a deadline.
+    user.approved, user.phase_started_at = True, datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
     return user
@@ -70,13 +72,28 @@ def approve_deletion(db: Session, user_id: int) -> None:
     _delete(db, _deletion_pending(db, user_id))
 
 
+def _check_deletable(db: Session, user: User) -> None:
+    if user.role == Role.coordinator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The coordinator account cannot be deleted")
+    if user.role == Role.faculty and thesis_service.supervises_live(db, user):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "This faculty member supervises an active or requested thesis, so the account is kept"
+        )
+
+
 def pending_counts(db: Session, user: User) -> dict[str, int]:
-    # Badge counts keyed by tool; only the coordinator decides requests.
+    # Badge counts keyed by tool: the coordinator decides requests, faculty answer supervision requests.
+    if user.role == Role.faculty:
+        return {"theses": thesis_service.count_requests(db, user)}
     if user.role != Role.coordinator:
         return {}
     # Polled every 10s by the UI, so count in SQL instead of loading the rows.
     count = lambda q: db.scalar(q.with_only_columns(func.count()))
-    return {"registration_requests": count(_registrations()), "deletion_requests": count(_deletions())}
+    return {
+        "registration_requests": count(_registrations()),
+        "deletion_requests": count(_deletions()),
+        "restart_requests": progress_service.count_restarts(db),
+    }
 
 
 def list_accounts(db: Session, role: Role | None = None, id_prefix: str = "") -> list[User]:
@@ -94,18 +111,19 @@ def delete_account(db: Session, user_id: int) -> None:
     user = db.get(User, user_id)
     if user is None or not user.approved:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No account with that id")
-    if user.role == Role.coordinator:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "The coordinator account cannot be deleted")
     _delete(db, user)
 
 
 def _delete(db: Session, user: User) -> None:
-    files = proposal_service.delete_owned(db, user)
+    # The thesis and every proposal version stay as an archive; the foreign keys only clear the user.
+    _check_deletable(db, user)
+    thesis, user.thesis = user.thesis, None
+    if thesis is not None and thesis.status == ThesisStatus.pending:
+        db.delete(thesis)  # never accepted, so no thesis ID and no versions
+    elif thesis is not None and thesis.status == ThesisStatus.active:
+        thesis.status = ThesisStatus.dropped
     db.delete(user)
     db.commit()
-    # Files go only after the rows are gone, so a failed commit never loses a PDF.
-    for path in files:
-        path.unlink(missing_ok=True)
 
 
 def reject_deletion(db: Session, user_id: int) -> User:

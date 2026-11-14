@@ -3,7 +3,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 
+from app.models.milestone import Phase
 from app.models.user import REVIEW_HOURS, Role
+
+MAX_PASSWORD = 128
 
 
 class UserCreate(BaseModel):
@@ -13,7 +16,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     id_number: str
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD)
     # Coordinator is the single admin account from settings; nobody can sign up as one.
     role: Literal[Role.student, Role.faculty] = Role.student
     initials: str | None = None  # faculty only
@@ -61,6 +64,8 @@ class UserOut(BaseModel):
     approved: bool
     tools: list[str]
     deletion_pending: bool
+    phase: Phase | None  # students only
+    restart_pending: bool
     review_hours: int = REVIEW_HOURS  # coordinator's decision window, for page text
 
 
@@ -70,6 +75,10 @@ class RegistrationRequestOut(UserOut):
 
 class DeletionRequestOut(UserOut):
     deletion_requested_at: datetime
+
+
+class RestartRequestOut(UserOut):
+    restart_requested_at: datetime
 
 
 class Token(BaseModel):
