@@ -72,9 +72,15 @@ def timeline(db: Session, user: User) -> TimelineOut:
 
 def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
     # No cross-phase order check: students in different phases have separate deadlines each semester.
-    if data.due_at + timedelta(days=data.grace_days) <= datetime.now(timezone.utc):
+    now = datetime.now(timezone.utc)
+    if data.due_at + timedelta(days=data.grace_days) <= now:
         # A deadline that is already over would count everyone in the phase as missing it.
         raise HTTPException(422, "The deadline and grace period must end in the future")
+    current = db.get(MilestoneTemplate, phase)
+    if data.due_at <= now and (current is None or current.due_at != data.due_at):
+        # A new due date in the past makes everyone late at once. Keeping a passed due date (to change grace or
+        # penalty during grace) is fine.
+        raise HTTPException(422, "The due date must be in the future")
     registration_closes = progress_service.registration_closes_at(db)
     if phase == Phase.P1 and registration_closes and data.due_at <= registration_closes:
         # Groups can still register until then, so an earlier P1 deadline would catch them mid-registration.

@@ -191,6 +191,8 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
 
 def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     thesis = user.thesis_id and _lock_thesis(db, user)
+    # Re-read under the lock, as upload does: the semester may have moved on since the request began.
+    db.refresh(user)
     # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
     version = thesis and db.scalar(
         select(ProposalVersion)

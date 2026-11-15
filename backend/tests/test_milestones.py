@@ -23,9 +23,15 @@ def test_late_days_with_fixed_clock():
 def test_grace_countdown_targets_closes_at(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     close_registration(db)
-    put(client, coord, "P1", datetime.now(timezone.utc) - timedelta(minutes=5), grace=1)
+    set_past(db, "P1", datetime.now(timezone.utc) - timedelta(minutes=5), grace=1)
     p1 = by_phase(client.get("/api/milestones", headers=coord))["P1"]
     assert (p1["status"], p1["countdown_to"], p1["countdown_label"]) == ("grace", p1["closes_at"], "Grace ends in")
+
+
+def set_past(db, phase, due_at, grace=0, penalty=10):
+    # The API refuses due dates in the past, so tests that start mid-grace write the deadline directly.
+    db.merge(MilestoneTemplate(phase=Phase(phase), due_at=due_at, grace_days=grace, penalty_per_day=penalty))
+    db.flush()
 
 
 def put(client, h, phase, due_at, grace=0, penalty=10):
@@ -50,6 +56,9 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     now = datetime.now(timezone.utc)
     res = put(client, coord, "P2", now - timedelta(days=2), grace=1)
     assert (res.status_code, res.json()["detail"]) == (422, "The deadline and grace period must end in the future")
+    # Due already passed but grace still open: everyone would be late at once.
+    res = put(client, coord, "P2", now - timedelta(hours=1), grace=1)
+    assert (res.status_code, res.json()["detail"]) == (422, "The due date must be in the future")
     # P1 registration is open for this week, so P1 can't be due inside it.
     res = put(client, coord, "P1", now + timedelta(days=2))
     assert (res.status_code, res.json()["detail"]) == (422, "P1 can't be due before P1 registration closes")
@@ -83,7 +92,7 @@ def test_student_late_days_and_penalty(client, db):
     no_group = auth(client, db, "n@x.com")  # signed up in time but never got a group accepted
     close_registration(db)
     now = datetime.now(timezone.utc)
-    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=15)  # ~3 days into grace
+    set_past(db, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=15)  # ~3 days into grace
     put(client, coord, "P2", now + timedelta(days=5), penalty=10)
 
     rows = by_phase(client.get("/api/milestones", headers=s))
@@ -99,7 +108,8 @@ def test_student_late_days_and_penalty(client, db):
     assert rows["P1"]["submitted_at"] is not None
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (3, 45)
 
-    put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=40)
+    # Same passed due date: the coordinator may still change the penalty during grace.
+    assert put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=40).status_code == 200
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
     # Grace over and never submitted: a missed deadline, not a late one.
@@ -129,7 +139,7 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     s, other = student(client, db, "s@x.com"), student(client, db, "o@x.com")
     close_registration(db)
     now = datetime.now(timezone.utc)
-    put(client, coord, "P1", now - timedelta(hours=1), grace=1, penalty=10)  # in grace
+    set_past(db, "P1", now - timedelta(hours=1), grace=1, penalty=10)  # in grace
 
     v1 = upload(client, s, title="v1").json()["versions"][0]
     v2 = upload(client, s, content=PDF + b"2", title="v2").json()["versions"][0]

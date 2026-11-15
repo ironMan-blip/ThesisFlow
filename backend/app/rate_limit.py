@@ -8,13 +8,16 @@ from app.security import decode_access_token
 
 WINDOW_SECONDS = 60
 # Per-IP limits. Behind Docker Desktop every client shows up as one gateway IP, so these are loose;
-# guessing one account's password is capped per account instead (LOGIN_PER_ACCOUNT, used by auth_service).
+# guessing one account's password is capped per account instead (used by auth_service, failed logins only).
 LIMITS = {"/api/auth/login": 60, "/api/auth/register": 30, "/api/": 300}
+# Per account and IP, so someone guessing from one IP can't lock the owner out from another.
 LOGIN_PER_ACCOUNT = 10
+# Per account across all IPs: caps guessing spread over many IPs.
+LOGIN_PER_ACCOUNT_ALL_IPS = 100
 MAX_KEYS = 10_000
 
 # shortcut: in-memory, per-process; move to Redis if we run more than one worker.
-_hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+_hits: dict[tuple[str, ...], deque[float]] = defaultdict(deque)
 
 
 def _limit_for(path: str) -> tuple[str, int] | None:
@@ -24,7 +27,7 @@ def _limit_for(path: str) -> tuple[str, int] | None:
     return None
 
 
-def hit(key: tuple[str, str], limit: int) -> int | None:
+def hit(key: tuple[str, ...], limit: int) -> int | None:
     """Record one request for key. Returns seconds to wait if over the limit, else None."""
     now = time.monotonic()
     if len(_hits) > MAX_KEYS:
@@ -38,6 +41,12 @@ def hit(key: tuple[str, str], limit: int) -> int | None:
         return int(WINDOW_SECONDS - (now - hits[0])) + 1
     hits.append(now)
     return None
+
+
+def unhit(key: tuple[str, ...]) -> None:
+    """Take back the last request recorded for key (e.g. a login that turned out to be right)."""
+    if hits := _hits.get(key):
+        hits.pop()
 
 
 def too_many(retry: int) -> HTTPException:

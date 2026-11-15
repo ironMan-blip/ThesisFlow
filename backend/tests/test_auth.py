@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import select
 
 from app import rate_limit
@@ -318,6 +320,21 @@ def test_login_is_rate_limited_per_account(client):
     assert codes[-1] == 429
     # Another account from the same IP is not locked out.
     assert login(client, id_number="87654321", password="Wrong1234").status_code == 401
+
+
+def test_failed_logins_from_one_ip_do_not_lock_out_the_owner(client, db):
+    register(client)
+    db.scalar(select(User).where(User.id_number == "12345678")).approved = True
+    db.flush()
+    for _ in range(rate_limit.LOGIN_PER_ACCOUNT):
+        with pytest.raises(HTTPException) as exc:
+            auth_service.login(db, "12345678", "Wrong1234", ip="10.0.0.9")
+        assert exc.value.status_code == 401
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db, "12345678", "Wrong1234", ip="10.0.0.9")
+    assert exc.value.status_code == 429
+    # The owner, from another IP, still gets in; right logins don't use up the budget.
+    assert all(login(client).status_code == 200 for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1))
 
 
 def test_login_is_rate_limited_per_ip(client):

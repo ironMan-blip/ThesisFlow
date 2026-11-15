@@ -102,15 +102,25 @@ def ensure_admin(db: Session) -> User:
     return user
 
 
-def login(db: Session, id_number: str, password: str) -> str:
-    # Per account, not per IP: stops guessing one password even from many IPs or behind one shared IP.
-    if retry := rate_limit.hit(("login", id_number[:32]), rate_limit.LOGIN_PER_ACCOUNT):
-        raise rate_limit.too_many(retry)
+def login(db: Session, id_number: str, password: str, ip: str) -> str:
+    # Per account, not just per IP: stops guessing one password from many IPs or behind one shared IP.
+    # Only failed logins count (a right one is taken back), and recorded before hashing so parallel guesses can't slip past.
+    keys = [
+        (("login", id_number[:32], ip), rate_limit.LOGIN_PER_ACCOUNT),
+        (("login", id_number[:32]), rate_limit.LOGIN_PER_ACCOUNT_ALL_IPS),
+    ]
+    for i, (key, limit) in enumerate(keys):
+        if retry := rate_limit.hit(key, limit):
+            for done, _ in keys[:i]:
+                rate_limit.unhit(done)
+            raise rate_limit.too_many(retry)
     # Sign-up caps passwords at MAX_PASSWORD, so a longer one can't be right; skip hashing a huge input.
     user = get_by_id_number(db, id_number) if len(password) <= MAX_PASSWORD else None
     # Hash even for unknown IDs so response time doesn't reveal which IDs exist.
     if not verify_password(password[:MAX_PASSWORD], user.password_hash if user else _DUMMY_HASH) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong ID number or password")
+    for key, _ in keys:
+        rate_limit.unhit(key)
     if not user.approved:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"

@@ -45,8 +45,11 @@ export async function download(path, filename) {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Revoking right away can cancel the download in Safari.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 export async function login(idNumber, password) {
