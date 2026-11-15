@@ -337,6 +337,21 @@ def test_failed_logins_from_one_ip_do_not_lock_out_the_owner(client, db):
     assert all(login(client).status_code == 200 for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1))
 
 
+def test_guessing_from_many_ips_does_not_lock_out_a_known_ip(client, db, monkeypatch):
+    monkeypatch.setattr(rate_limit, "LOGIN_PER_ACCOUNT_ALL_IPS", 3)
+    register(client)
+    db.scalar(select(User).where(User.id_number == "12345678")).approved = True
+    db.flush()
+    assert login(client).status_code == 200  # the owner's usual IP is now known
+    for i in range(3):
+        with pytest.raises(HTTPException):
+            auth_service.login(db, "12345678", "Wrong1234", ip=f"10.0.0.{i}")
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db, "12345678", "Wrong1234", ip="10.0.0.99")
+    assert exc.value.status_code == 429  # new IPs hit the account-wide cap
+    assert login(client).status_code == 200
+
+
 def test_login_is_rate_limited_per_ip(client):
     body = {"email": "nobody@example.com", "password": "wrong"}
     codes = [client.post("/api/auth/login", json=body).status_code for _ in range(rate_limit.LIMITS["/api/auth/login"] + 1)]

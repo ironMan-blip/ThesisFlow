@@ -12,12 +12,25 @@ WINDOW_SECONDS = 60
 LIMITS = {"/api/auth/login": 60, "/api/auth/register": 30, "/api/": 300}
 # Per account and IP, so someone guessing from one IP can't lock the owner out from another.
 LOGIN_PER_ACCOUNT = 10
-# Per account across all IPs: caps guessing spread over many IPs.
+# Per account across all IPs: caps guessing spread over many IPs. IPs the account logged in from before skip it,
+# so a guesser spread over many IPs can't lock the owner out of their usual devices.
 LOGIN_PER_ACCOUNT_ALL_IPS = 100
+KNOWN_IPS_PER_ACCOUNT = 5
 MAX_KEYS = 10_000
 
 # shortcut: in-memory, per-process; move to Redis if we run more than one worker.
 _hits: dict[tuple[str, ...], deque[float]] = defaultdict(deque)
+# Keyed only by accounts that logged in, so it grows with real users, not with typed IDs.
+_known_ips: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=KNOWN_IPS_PER_ACCOUNT))
+
+
+def is_known_ip(account: str, ip: str) -> bool:
+    return ip in _known_ips.get(account, ())
+
+
+def remember_ip(account: str, ip: str) -> None:
+    if not is_known_ip(account, ip):
+        _known_ips[account].append(ip)
 
 
 def _limit_for(path: str) -> tuple[str, int] | None:
@@ -73,3 +86,4 @@ async def rate_limit(request: Request, call_next):
 
 def reset() -> None:
     _hits.clear()
+    _known_ips.clear()

@@ -54,7 +54,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Uploads and deletes on one thesis are locked so version numbers never clash.
 
 **Security**
-- Rate limits per minute: login 60 per IP, 10 failed tries per account per IP and 100 per account overall (right logins don't count), register 30 per IP, other API paths 300 per user (`429` over limit).
+- Rate limits per minute: login 60 per IP, 10 failed tries per account per IP and 100 per account overall except from IPs that logged in to it before (right logins don't count), register 30 per IP, other API paths 300 per user (`429` over limit).
 - Constant-time password check so IDs cannot be guessed by timing.
 - Changing a password logs out every older session.
 - Required secrets with no defaults; `JWT_SECRET` must be at least 32 characters.

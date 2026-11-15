@@ -105,10 +105,10 @@ def ensure_admin(db: Session) -> User:
 def login(db: Session, id_number: str, password: str, ip: str) -> str:
     # Per account, not just per IP: stops guessing one password from many IPs or behind one shared IP.
     # Only failed logins count (a right one is taken back), and recorded before hashing so parallel guesses can't slip past.
-    keys = [
-        (("login", id_number[:32], ip), rate_limit.LOGIN_PER_ACCOUNT),
-        (("login", id_number[:32]), rate_limit.LOGIN_PER_ACCOUNT_ALL_IPS),
-    ]
+    account = id_number[:32]
+    keys = [(("login", account, ip), rate_limit.LOGIN_PER_ACCOUNT)]
+    if not rate_limit.is_known_ip(account, ip):
+        keys.append((("login", account), rate_limit.LOGIN_PER_ACCOUNT_ALL_IPS))
     for i, (key, limit) in enumerate(keys):
         if retry := rate_limit.hit(key, limit):
             for done, _ in keys[:i]:
@@ -125,4 +125,5 @@ def login(db: Session, id_number: str, password: str, ip: str) -> str:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
         )
+    rate_limit.remember_ip(account, ip)
     return create_access_token(user.id, user.password_hash)
