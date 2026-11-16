@@ -15,6 +15,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Each role sees only its own tools; the API returns the tool list.
 - Count badges on tools with waiting work (registration, deletion, restart, supervision requests).
 - Fixed sidebar on desktop, slide-out drawer on phones.
+- Each page's rules fold away under a "How this works" toggle; on long pages, success and error messages float at the bottom of the screen and can be dismissed.
 
 **Accounts and login**
 - Sign up as student or faculty with name, email, 8-digit ID number and password (faculty also give unique initials).
