@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     seed_password: str | None = None
     # Rate-limit counters (app.rate_limit). Not a secret: Redis has no host port.
     redis_url: str = "redis://redis:6379/0"
+    # Virus scanner for uploads (app.virus_scan). Not a secret: clamd has no host port.
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
     jwt_expire_minutes: int = 60 * 24
     upload_dir: str = "uploads"
     max_upload_mb: int = 20

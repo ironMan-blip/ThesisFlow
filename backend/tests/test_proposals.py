@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pypdf.generic import DictionaryObject, NameObject, TextStringObject
 
+from app import virus_scan
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role
@@ -364,3 +365,18 @@ def test_uploads_per_phase_are_capped(client, db, monkeypatch):
     assert r.status_code == 409 and "2 versions" in r.json()["detail"]
     # Re-sending a stored version adds nothing, so it still works at the cap.
     assert upload(client, h, title="one").status_code == 201
+
+
+def test_infected_uploads_are_refused_and_uploads_pause_without_a_scanner(client, db, tmp_path, monkeypatch):
+    h = student(client, db, "s@x.com")
+    monkeypatch.setattr(virus_scan, "scan", lambda path: "Win.Test.EICAR_HDB-1")
+    res = upload(client, h)
+    assert res.status_code == 422 and "Win.Test.EICAR_HDB-1" in res.json()["detail"]
+
+    def down(path):
+        raise virus_scan.ScannerUnavailable("connection refused")
+
+    monkeypatch.setattr(virus_scan, "scan", down)
+    assert upload(client, h).status_code == 503
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
+    assert list((tmp_path / "proposals").iterdir()) == []  # neither file was kept

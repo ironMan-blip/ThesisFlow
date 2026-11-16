@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +11,7 @@ from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.orm import Session
 
+from app import virus_scan
 from app.config import settings
 from app.models.milestone import Deliverable, Phase
 from app.models.proposal import Proposal, ProposalVersion
@@ -24,6 +26,7 @@ ACTIVE_KEYS = {"/JS", "/JavaScript", "/EmbeddedFiles", "/EmbeddedFile", "/XFA", 
 ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToE", "/RichMediaExecute", "/SubmitForm"}
 # Bounds the object walk, so a crafted file with millions of tiny objects can't tie up a worker.
 MAX_PDF_OBJECTS = 200_000
+log = logging.getLogger(__name__)
 # Each new version is a stored PDF, so without a cap one student could fill the disk.
 MAX_VERSIONS_PER_PHASE = 20
 
@@ -131,6 +134,24 @@ def _refresh_user(db: Session, user: User) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account no longer exists") from None
 
 
+def _scan(path: Path) -> None:
+    # Fails closed: with no scanner, nothing is stored unchecked.
+    try:
+        found = virus_scan.scan(path)
+    except virus_scan.ScannerUnavailable as exc:
+        log.error("Virus scan unavailable, upload refused: %s", exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "The virus scanner isn't ready, so uploads are paused. Try again in a few minutes",
+            headers={"Retry-After": "30"},
+        ) from None
+    if found:
+        log.warning("Upload refused, ClamAV found %s", found)
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"This file contains malware ({found}), so it wasn't stored"
+        )
+
+
 def _check_pdf(path: Path) -> None:
     """Refuse anything a PDF reader can't open, an encrypted file (it can't be checked), or one with active content."""
     try:
@@ -186,6 +207,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
                     )
                 out.write(chunk)
                 digest.update(chunk)
+        _scan(path)  # before parsing, so pypdf never reads a known-bad file
         _check_pdf(path)
     except BaseException:
         path.unlink(missing_ok=True)

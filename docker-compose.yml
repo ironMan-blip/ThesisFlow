@@ -26,6 +26,14 @@ services:
       interval: 2s
       retries: 20
 
+  clamav:
+    # Virus scanner for uploads (app.virus_scan). No host port, like db. Needs ~1.5 GB RAM; the first start downloads
+    # signatures for a few minutes, and uploads get a 503 until it's ready.
+    image: clamav/clamav-debian:1.5  # the Debian build, as it has arm64 images
+    restart: unless-stopped
+    volumes:
+      - clamavdata:/var/lib/clamav
+
   backend:
     build: ./backend
     restart: unless-stopped
@@ -44,6 +52,10 @@ services:
         condition: service_healthy
       # Optional: without Redis the backend keeps rate limits in memory (app.rate_limit).
       redis:
+        condition: service_started
+        required: false
+      # Uploads need it (they get a 503 while it's down); everything else works without it.
+      clamav:
         condition: service_started
         required: false
 
@@ -66,4 +78,5 @@ services:
 volumes:
   pgdata:
   redisdata:
+  clamavdata:
   frontend_node_modules:
