@@ -17,6 +17,7 @@ LOGIN_PER_ACCOUNT = 10
 LOGIN_PER_ACCOUNT_ALL_IPS = 100
 KNOWN_IPS_PER_ACCOUNT = 5
 MAX_KEYS = 10_000
+_next_sweep = 0.0
 
 # shortcut: in-memory, per-process; move to Redis if we run more than one worker.
 _hits: dict[tuple[str, ...], deque[float]] = defaultdict(deque)
@@ -42,8 +43,11 @@ def _limit_for(path: str) -> tuple[str, int] | None:
 
 def hit(key: tuple[str, ...], limit: int) -> int | None:
     """Record one request for key. Returns seconds to wait if over the limit, else None."""
+    global _next_sweep
     now = time.monotonic()
-    if len(_hits) > MAX_KEYS:
+    if len(_hits) > MAX_KEYS and now >= _next_sweep:
+        # At most one full scan a second, so a flood of live keys can't make every request scan them all.
+        _next_sweep = now + 1
         # Callers choose keys (IDs typed at login), so drop idle buckets before the dict grows without bound.
         for k in [k for k, h in _hits.items() if not h or now - h[-1] > WINDOW_SECONDS]:
             del _hits[k]
@@ -85,5 +89,7 @@ async def rate_limit(request: Request, call_next):
 
 
 def reset() -> None:
+    global _next_sweep
     _hits.clear()
     _known_ips.clear()
+    _next_sweep = 0.0

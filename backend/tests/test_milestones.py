@@ -195,3 +195,14 @@ def test_extension_keeps_upload_open_and_blocks_rollover_after_template_grace(cl
     res = client.post("/api/milestones/next-semester", headers=coord)
     assert (res.status_code, res.json()["detail"]) == (409, "P1 is still open, wait until its grace period ends")
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["submission_status"] == "on_time"
+
+
+def test_keeping_a_passed_due_date_set_with_seconds(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    close_registration(db)
+    due = (datetime.now(timezone.utc) - timedelta(hours=1)).replace(second=42, microsecond=123)
+    set_past(db, "P1", due, grace=1)
+    # The form sends whole minutes; the same minute keeps the stored due date.
+    assert put(client, coord, "P1", due.replace(second=0, microsecond=0), grace=2).status_code == 200
+    db.expire_all()
+    assert (db.get(MilestoneTemplate, Phase.P1).due_at, db.get(MilestoneTemplate, Phase.P1).grace_days) == (due, 2)
