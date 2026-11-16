@@ -120,6 +120,7 @@ export function EmptyState({ icon = ICONS.inbox, title, children }) {
 
 const THESIS_STATUS = {
   pending: ["Waiting for supervisor", "bg-amber-50 text-amber-800 ring-amber-600/20"],
+  formed: ["Not registered for P1", "bg-amber-50 text-amber-800 ring-amber-600/20"],
   active: ["Active", "bg-teal-50 text-teal-800 ring-teal-600/20"],
   completed: ["Completed", "bg-teal-50 text-teal-800 ring-teal-600/20"],
   dropped: ["Archived", "bg-zinc-100 text-zinc-700 ring-zinc-300"],

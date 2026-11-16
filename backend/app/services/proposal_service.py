@@ -51,9 +51,9 @@ def _upload_block(
         return f"{s.frozen_reason}, so your account is frozen. Ask to restart at P1 on the Thesis page", s
     if thesis is None:
         return "Form a thesis group first: choose a supervisor on the Thesis page", s
-    if thesis.status != ThesisStatus.active:
+    if thesis.status == ThesisStatus.pending:
         return "Your supervisor has not accepted your thesis group yet", s
-    if user.phase == Phase.P1 and not thesis.p1_registered:
+    if thesis.status != ThesisStatus.active or (user.phase == Phase.P1 and not thesis.p1_registered):
         if progress_service.registration_open(db):
             return "Register your group for P1 on the Thesis page first", s
         return "Your group isn't registered for P1, and P1 registration is closed, so wait for next semester", s

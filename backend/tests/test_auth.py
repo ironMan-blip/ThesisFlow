@@ -17,9 +17,11 @@ from app.services.auth_service import REGISTER_TAKEN
 from tests.helpers import REASON, auth, run_deletions_due, student as make_student, supervised_student, upload
 
 
-def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
+def register(client, email=None, password="Password123", id_number="12345678", role="student", initials=None):
     if initials is None and role == "faculty":
         initials = "ABC"
+    if email is None:
+        email = "a@bracu.ac.bd" if role == "faculty" else "a@g.bracu.ac.bd"
     return client.post(
         "/api/auth/register",
         json={
@@ -49,20 +51,26 @@ def test_register_login_me(client, db):
 
 
 def test_duplicate_email_rejected(client, db):
-    auth_service.create_user(db, "a@b.com", "12345678", "A", "Password123", Role.student)
-    r = register(client, email="A@B.com", id_number="87654321")
+    auth_service.create_user(db, "a@g.bracu.ac.bd", "12345678", "A", "Password123", Role.student)
+    r = register(client, email="A@G.BRACU.AC.BD", id_number="87654321")
     assert r.status_code == 409
     assert r.json()["detail"] == REGISTER_TAKEN
-    # Same email under the other role is also taken.
-    r = register(client, id_number="87654321", role="faculty")
-    assert r.status_code == 409
-    assert r.json()["detail"] == REGISTER_TAKEN
+
+
+def test_register_needs_bracu_email_for_role(client):
+    # Students sign up with @g.bracu.ac.bd, faculty with @bracu.ac.bd; neither domain works for the other role.
+    for email, role in [("a@gmail.com", "student"), ("a@bracu.ac.bd", "student"),
+                        ("a@gmail.com", "faculty"), ("a@g.bracu.ac.bd", "faculty"), ("a@xbracu.ac.bd", "faculty")]:
+        r = register(client, email=email, role=role)
+        assert r.status_code == 422 and r.json()["detail"].startswith("email:"), (email, role)
+    assert register(client, email="A@G.BRACU.AC.BD").status_code == 201
+    assert register(client, email="f@bracu.ac.bd", id_number="87654321", role="faculty").status_code == 201
 
 
 def test_duplicate_id_number_rejected(client, db):
     auth_service.create_user(db, "a@b.com", "12345678", "A", "Password123", Role.student)
     for role in ["student", "faculty"]:
-        r = register(client, email="other@b.com", role=role)
+        r = register(client, role=role)
         assert r.status_code == 409
         assert r.json()["detail"] == REGISTER_TAKEN
 
@@ -99,10 +107,10 @@ def test_faculty_initials(client, db):
         assert register(client, role="faculty", initials=bad).status_code == 422
     r = register(client, role="faculty", initials="MMR")
     assert r.status_code == 201 and r.json()["initials"] == "MMR"
-    r = register(client, email="x@b.com", id_number="87654321", role="faculty", initials="MMR")
+    r = register(client, email="x@bracu.ac.bd", id_number="87654321", role="faculty", initials="MMR")
     assert r.status_code == 409 and r.json()["detail"] == "Initials already registered"
     # Students never carry initials.
-    r = register(client, email="s@b.com", id_number="11111111", initials="ZZ")
+    r = register(client, email="s@g.bracu.ac.bd", id_number="11111111", initials="ZZ")
     assert r.status_code == 201 and r.json()["initials"] is None
 
 
@@ -110,7 +118,7 @@ def test_expired_request_frees_initials(client, db):
     old_id = register(client, role="faculty", initials="MMR").json()["id"]
     db.get(User, old_id).created_at -= timedelta(hours=48, minutes=1)
     db.commit()
-    r = register(client, email="x@b.com", id_number="87654321", role="faculty", initials="MMR")
+    r = register(client, email="x@bracu.ac.bd", id_number="87654321", role="faculty", initials="MMR")
     assert r.status_code == 201 and db.get(User, old_id) is None
 
 
@@ -119,21 +127,21 @@ def test_parallel_signup_gives_409(client, db, monkeypatch):
     # Simulate a parallel sign-up: the pre-checks see nothing, the unique constraint catches it.
     monkeypatch.setattr(auth_service, "get_by_id_number", lambda db, n: None)
     monkeypatch.setattr(auth_service, "get_by_email", lambda db, e: None)
-    r = register(client, email="x@b.com", role="faculty", initials="ZZ")
+    r = register(client, email="x@bracu.ac.bd", role="faculty", initials="ZZ")
     assert r.status_code == 409 and r.json()["detail"].startswith("Email, ID number or initials")
 
 
 def test_signups_wait_for_approval(client, db):
-    r = register(client, email="f@b.com", role="faculty")
+    r = register(client, email="f@bracu.ac.bd", role="faculty")
     assert r.status_code == 201 and r.json()["approved"] is False
     assert login(client).status_code == 403
-    assert register(client, email="s@x.com", id_number="33333333").json()["approved"] is False
+    assert register(client, email="s@g.bracu.ac.bd", id_number="33333333").json()["approved"] is False
 
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     student = auth(client, db, "s@b.com")
     assert client.get("/api/auth/registration-requests", headers=student).status_code == 403
     pending = client.get("/api/auth/registration-requests", headers=coord).json()
-    assert [(p["email"], p["role"]) for p in pending] == [("f@b.com", "faculty"), ("s@x.com", "student")]
+    assert [(p["email"], p["role"]) for p in pending] == [("f@bracu.ac.bd", "faculty"), ("s@g.bracu.ac.bd", "student")]
 
     for p in pending:
         assert client.post(f"/api/auth/registration-requests/{p['id']}/approve", headers=coord).status_code == 200
@@ -146,7 +154,7 @@ def test_signups_wait_for_approval(client, db):
 
 
 def test_reject_frees_email(client, db):
-    body = {"email": "f@b.com", "id_number": "22222222", "full_name": "F", "password": "Password123", "role": "faculty", "initials": "FB"}
+    body = {"email": "f@bracu.ac.bd", "id_number": "22222222", "full_name": "F", "password": "Password123", "role": "faculty", "initials": "FB"}
     uid = client.post("/api/auth/register", json=body).json()["id"]
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert client.delete(f"/api/auth/registration-requests/{uid}", headers=coord).status_code == 204
@@ -190,7 +198,7 @@ def test_ensure_admin_changing_id_and_email_keeps_one_admin(client, db, monkeypa
 
 
 def test_cannot_reregister_within_48_hours(client, db):
-    body = {"email": "s@b.com", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
+    body = {"email": "s@g.bracu.ac.bd", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
     old_id = client.post("/api/auth/register", json=body).json()["id"]
     r = client.post("/api/auth/register", json=body)
     assert r.status_code == 409
@@ -442,7 +450,7 @@ def test_database_outage_is_a_clear_503(client):
 @pytest.mark.parametrize("body", [{"full_name": "a\x00b"}, {"id_number": "1234\x00"}])
 def test_nul_characters_are_a_422_not_a_500(client, body):
     if "full_name" in body:
-        res = client.post("/api/auth/register", json={**body, "email": "n@b.com", "id_number": "12345670", "password": "Password123"})
+        res = client.post("/api/auth/register", json={**body, "email": "n@g.bracu.ac.bd", "id_number": "12345670", "password": "Password123"})
     else:
         res = client.post("/api/auth/login", data={"username": body["id_number"], "password": "x"})
     assert res.status_code == 422, res.text
@@ -496,7 +504,7 @@ def test_logged_out_token_cannot_start_a_big_upload(client, db):
 
 
 def test_login_tells_an_applicant_their_request_status(client, db):
-    body = {"email": "s@b.com", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
+    body = {"email": "s@g.bracu.ac.bd", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
     uid = client.post("/api/auth/register", json=body).json()["id"]
     res = client.post("/api/auth/login", data={"username": "22222222", "password": "Password123"})
     assert res.status_code == 403 and "waiting for coordinator approval" in res.json()["detail"]

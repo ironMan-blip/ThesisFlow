@@ -21,8 +21,8 @@ function Requests({ requests, decide, busy }) {
               {" "}· {r.slot === "supervisor"
                 ? "asks you to be their supervisor (accepting forms the group)"
                 : r.slot === "co_supervisor"
-                  ? `asks you to be co-supervisor of ${r.code} (you join once ${fullName(r.supervisor)} also accepts)`
-                  : `wants ${fullName(r.co_supervisor)} as co-supervisor of ${r.code} (they join once you both accept)`}
+                  ? `asks you to be co-supervisor of ${r.code ?? "their thesis"} (you join once ${fullName(r.supervisor)} also accepts)`
+                  : `wants ${fullName(r.co_supervisor)} as co-supervisor of ${r.code ?? "their thesis"} (they join once you both accept)`}
             </Person>
             <DecideButtons busy={busy === r.id} onReject={() => decide(r, false)} onApprove={() => decide(r, true)}
               reject="Decline" approve="Accept" />
@@ -65,8 +65,8 @@ export default function ThesesPage() {
     await api(`/theses/${t.id}/defer`, { method: "PUT", body: { defer: on } });
     await load();
     return on
-      ? `${t.code} will be deferred at the end of the semester.`
-      : `${t.code} will be completed at the end of the semester.`;
+      ? `${t.code ?? "The thesis"} will be deferred at the end of the semester.`
+      : `${t.code ?? "The thesis"} will be completed at the end of the semester.`;
   });
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
@@ -119,7 +119,7 @@ export default function ThesesPage() {
             <li key={t.id} className="card p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-semibold tabular-nums">{t.code}</h2>
+                  <h2 className="text-lg font-semibold tabular-nums">{t.code ?? "No thesis ID yet"}</h2>
                   <ThesisBadge status={t.status} />
                   {t.deferrals > 0 && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">Deferred {t.deferrals}x</span>}
                   {t.defer_pending && <span className="badge bg-red-50 text-red-800 ring-red-600/20">Deferral at semester end</span>}

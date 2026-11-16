@@ -15,27 +15,27 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import MilestoneTemplate, Phase, Proposal, ProposalVersion, Thesis, ThesisStatus
 from app.models.user import Role
-from app.services import auth_service, progress_service, thesis_service
+from app.services import auth_service, progress_service
 from app.services.proposal_service import _upload_dir
 
 FACULTY = [
-    ("faculty@thesisflow.test", "20000001", "Demo Faculty", "DF"),
-    ("ahasan@thesisflow.test", "20000002", "Ahsan Habib", "AH"),
-    ("nusrat@thesisflow.test", "20000003", "Nusrat Jahan", "NJ"),
-    ("tanvir@thesisflow.test", "20000004", "Tanvir Rahman", "TR"),
-    ("farzana@thesisflow.test", "20000005", "Farzana Akter", "FA"),
+    ("faculty@bracu.ac.bd", "20000001", "Demo Faculty", "DF"),
+    ("ahsan.habib@bracu.ac.bd", "20000002", "Ahsan Habib", "AH"),
+    ("nusrat.jahan@bracu.ac.bd", "20000003", "Nusrat Jahan", "NJ"),
+    ("tanvir.rahman@bracu.ac.bd", "20000004", "Tanvir Rahman", "TR"),
+    ("farzana.akter@bracu.ac.bd", "20000005", "Farzana Akter", "FA"),
 ]
 
 # (email, id, name, approved, state, supervisor initials, co-supervisor initials, versions)
 STUDENTS = [
-    ("student@thesisflow.test", "10000001", "Demo Student", True, None, None, None, 0),
-    ("rafi@thesisflow.test", "10000002", "Rafiul Islam", True, "pending", "AH", None, 0),
-    ("sadia@thesisflow.test", "10000003", "Sadia Karim", True, "active", "DF", None, 2),
-    ("imran@thesisflow.test", "10000004", "Imran Hossain", True, "active", "NJ", "TR", 3),
-    ("mitu@thesisflow.test", "10000005", "Mitu Chowdhury", True, "active", "AH", "FA", 1),
-    ("arif@thesisflow.test", "10000006", "Arif Mahmud", True, "p2", "DF", None, 1),
-    ("lamia@thesisflow.test", "10000007", "Lamia Sultana", True, "frozen", "TR", None, 1),
-    ("zahid@thesisflow.test", "10000008", "Zahid Hasan", False, None, None, None, 0),  # waits in registration requests
+    ("student@g.bracu.ac.bd", "10000001", "Demo Student", True, None, None, None, 0),
+    ("rafiul.islam@g.bracu.ac.bd", "10000002", "Rafiul Islam", True, "pending", "AH", None, 0),
+    ("sadia.karim@g.bracu.ac.bd", "10000003", "Sadia Karim", True, "active", "DF", None, 2),
+    ("imran.hossain@g.bracu.ac.bd", "10000004", "Imran Hossain", True, "active", "NJ", "TR", 3),
+    ("mitu.chowdhury@g.bracu.ac.bd", "10000005", "Mitu Chowdhury", True, "active", "AH", "FA", 1),
+    ("arif.mahmud@g.bracu.ac.bd", "10000006", "Arif Mahmud", True, "p2", "DF", None, 1),
+    ("lamia.sultana@g.bracu.ac.bd", "10000007", "Lamia Sultana", True, "frozen", "TR", None, 1),
+    ("zahid.hasan@g.bracu.ac.bd", "10000008", "Zahid Hasan", False, None, None, None, 0),  # waits in registration requests
 ]
 
 TITLES = [
@@ -76,7 +76,7 @@ def main():
     pw = settings.seed_password
     now = datetime.now(timezone.utc)
     with SessionLocal() as db:
-        if auth_service.get_by_email(db, STUDENTS[-1][0]):
+        if auth_service.get_by_id_number(db, STUDENTS[-1][1]):  # by ID: emails changed over time
             raise SystemExit("Seed data already present")
 
         for phase, days in ((Phase.P1, 14), (Phase.P2, 45), (Phase.P3, 90)):
@@ -105,7 +105,7 @@ def main():
                 student_id=student.id,
                 supervisor_id=fac[sup].id,
                 status=ThesisStatus.pending if state == "pending" else ThesisStatus.active,
-                code=None if state == "pending" else thesis_service.new_code(db),
+                code=None if state == "pending" else progress_service.new_code(db),
                 p1_registered=state != "pending",
             )
             if co:

@@ -18,7 +18,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Each page's rules fold away under a "How this works" toggle; on long pages, success and error messages float at the bottom of the screen and can be dismissed.
 
 **Accounts and login**
-- Sign up as student or faculty with name, email, 8-digit ID number and password (faculty also give unique initials).
+- Sign up as student or faculty with name, email, 8-digit ID number and password (faculty also give unique initials). Students must use a `@g.bracu.ac.bd` email, faculty a `@bracu.ac.bd` one.
 - Strong password rules; case-insensitive unique email; unique ID number.
 - Log in with ID number + password; JWT session (24 h default).
 - Coordinator approves or rejects every new sign-up; unapproved accounts cannot log in.
@@ -145,7 +145,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 ### 1. Accounts and login
 
-- Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
+- Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator. The email must be a BRAC University one: `@g.bracu.ac.bd` for students, `@bracu.ac.bd` for faculty.
 - Faculty must also give their **initials** (1 to 10 capital letters, e.g. `ABK`), unique across faculty.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
@@ -194,7 +194,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 - A student needs a **thesis group** to upload: the student and a **supervisor** (faculty). The student sends the request on the **Thesis group** page.
 - **P1 registration:** students sign up, ask for a group, and faculty accept any time. But an accepted group can only **register for P1** (button on the Thesis group page) in the **first week of each semester** (from the semester rollover; the first one starts when the database is set up). Only a registered group can upload for P1. A P1 group that didn't register has nothing due that semester and stays at P1; registration is cleared at every rollover.
-- The supervisor accepts or declines under **Theses**. Accepting forms the group: the thesis becomes active and gets its **thesis ID** (e.g. `T12345678`: "T" + 8 random digits, unique). A decline, or the student cancelling while it waits, lets the student choose again.
+- The supervisor accepts or declines under **Theses**. Accepting forms the group; groups can be formed at any time. The formed group then registers for P1, which makes it active and gives it its **thesis ID** (e.g. `T12345678`: "T" + 8 random digits, unique), kept from then on. Only then can it upload proposals. A decline, or the student cancelling while it waits, lets the student choose again.
 - A **co-supervisor** (optional, faculty) can only be added once the group is formed, from **Thesis group**. They join only when **both** they and the supervisor accept (in either order, each under **Theses**). If either declines, or the student withdraws it first, the group stays as it is without a co-supervisor and the student can pick someone else. A co-supervisor who joined sees the thesis and its versions, but decides nothing.
 - Every proposal version is stored under the thesis ID, so nothing is lost: deleting an account or restarting keeps the thesis and its versions as an archive. Faculty see the theses they supervise or co-supervise; the coordinator sees none.
 - **One phase per semester.** A new student starts at **P1**. A student who submits their phase (late inside grace counts) moves to the next phase next semester: P1 → P2 → P3.
@@ -246,7 +246,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 | Table | What it holds |
 |-------|---------------|
 | `users` | Every account. Role (`student`, `faculty`, `coordinator`), email, ID number, name, faculty initials, Argon2 password hash, `approved`, `deletion_requested_at`, `deletion_approved_at`, `deletion_reason`, `deletion_requested_by_id`. Students also have: current `thesis_id`, `phase` (P1/P2/P3, empty when completed), `phase_started_at`, `frozen_at`, `restart_requested_at`, `restart_approved`. |
-| `theses` | A thesis group: `student_id`, `supervisor_id`, `co_supervisor_id`, `co_supervisor_accepted` (by them), `co_supervisor_approved` (by the supervisor), `status`, `deferrals`, `defer_pending`, `p1_registered`. `code` is the thesis ID shown to users: `T` + 8 random digits (unique), issued when the supervisor accepts. |
+| `theses` | A thesis group: `student_id`, `supervisor_id`, `co_supervisor_id`, `co_supervisor_accepted` (by them), `co_supervisor_approved` (by the supervisor), `status`, `deferrals`, `defer_pending`, `p1_registered`. `code` is the thesis ID shown to users: `T` + 8 random digits (unique), issued at P1 registration. |
 | `proposals` | One per thesis, made on its first upload. |
 | `proposal_versions` | One per upload: `version_no`, `phase`, title, abstract, original and stored file name, size, SHA-256, uploader, time. |
 | `semesters` | One row per semester; the newest is the current one. Its `started_at` opens the one-week P1 registration. |
@@ -254,7 +254,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 | `group_milestones` | A thesis group's milestone for its phase in one semester: `submitted_at` and an optional `extended_due_at` (for future deadline extensions, F15). |
 | `deliverables` | Links a group milestone to the version that counts: always the latest upload for that phase. |
 
-Thesis status: `pending` (waiting for the supervisor) → `active` (has a thesis ID) → `completed` after P3, or `dropped` (archived after a restart or account deletion). All foreign keys to `users` are `SET NULL`, so deleting a user never deletes a thesis or a version.
+Thesis status: `pending` (waiting for the supervisor) → `formed` (accepted, not registered for P1: no thesis ID, no uploads) → `active` (registered for P1, has a thesis ID) → `completed` after P3, or `dropped` (archived after a restart or account deletion). All foreign keys to `users` are `SET NULL`, so deleting a user never deletes a thesis or a version.
 
 ### A student's path, step by step
 
