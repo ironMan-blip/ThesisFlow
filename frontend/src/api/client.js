@@ -15,8 +15,27 @@ class ApiError extends Error {
 
 const UNAVAILABLE = "ThesisFlow can't reach the server right now. Try again in a moment.";
 
+// Brief outages (backend restarting, database blip) are retried for reads, so pages don't fail on them.
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export const isOutage = (err) => err instanceof ApiError && (err.status === 0 || (err.status >= 502 && err.status <= 504));
+
+async function request(path, options = {}) {
+  // Only reads: retrying a POST/PUT/DELETE could apply it twice.
+  const retries = !options.method || options.method === "GET" ? RETRY_DELAYS_MS : [];
+  for (const delay of retries) {
+    try {
+      return await send(path, options);
+    } catch (err) {
+      if (!isOutage(err)) throw err;
+      await sleep(err.retryAfterMs ? Math.min(err.retryAfterMs, 5000) : delay);
+    }
+  }
+  return send(path, options);
+}
+
 // Sends the request with the JWT; throws ApiError with the backend's detail on non-2xx.
-async function request(path, { body, headers, ...options } = {}) {
+async function send(path, { body, headers, ...options } = {}) {
   const token = getToken();
   const isForm = body instanceof FormData || body instanceof URLSearchParams;
   const res = await fetch(`/api${path}`, {
@@ -34,7 +53,9 @@ async function request(path, { body, headers, ...options } = {}) {
     const data = await res.json().catch(() => null);
     // 502/504 come from the proxy when the backend is down, with no JSON detail.
     const fallback = res.status >= 502 && res.status <= 504 ? UNAVAILABLE : "Something went wrong";
-    throw new ApiError(res.status, typeof data?.detail === "string" ? data.detail : fallback);
+    const err = new ApiError(res.status, typeof data?.detail === "string" ? data.detail : fallback);
+    err.retryAfterMs = Number(res.headers.get("Retry-After")) * 1000 || 0;
+    throw err;
   }
   return res;
 }

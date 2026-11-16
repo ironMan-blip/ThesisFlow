@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { api, clearToken, getToken } from "../api/client";
+import { api, clearToken, getToken, isOutage } from "../api/client";
 import { TOOLS } from "../tools";
 import { Avatar, CountBadge, Icon, ICONS, Logo } from "./ui";
 
@@ -24,16 +24,25 @@ export default function Layout() {
 
   useEffect(() => {
     if (!getToken()) return;
-    api("/auth/me")
-      .then(setUser)
-      .catch((err) => {
-        if (err.status === 401) {
-          clearToken();
-          navigate("/login");
-        } else {
+    let timer;
+    const load = () =>
+      api("/auth/me")
+        .then((me) => {
+          setError(null);
+          setUser(me);
+        })
+        .catch((err) => {
+          if (err.status === 401) {
+            clearToken();
+            navigate("/login");
+            return;
+          }
           setError(err.message);
-        }
-      });
+          // Server or database down: keep checking, so the app comes back by itself when it recovers.
+          if (isOutage(err)) timer = setTimeout(load, 5000);
+        });
+    load();
+    return () => clearTimeout(timer);
   }, [navigate]);
 
   // Badge counts per tool from the API (empty unless the user has requests to decide);
