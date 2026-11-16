@@ -1,3 +1,4 @@
+import inspect
 import logging
 from contextlib import asynccontextmanager
 
@@ -5,12 +6,13 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DataError, OperationalError
+from starlette.concurrency import run_in_threadpool
 
 from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller, thesis_controller
 from app.config import settings
-from app.database import SessionLocal
+from app.database import SessionLocal, get_db
+from app.deps import user_for_token
 from app.rate_limit import rate_limit
-from app.security import decode_access_token
 from app.services import auth_service
 
 # Only uploads are bigger than this, and only signed-in students upload.
@@ -27,6 +29,17 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="ThesisFlow API", lifespan=lifespan)
 app.middleware("http")(rate_limit)
 
+def _signed_in(token: str) -> bool:
+    # Same session source as the routes, so a dependency override of get_db (tests) applies here too.
+    got = app.dependency_overrides.get(get_db, get_db)()
+    if not inspect.isgenerator(got):
+        return user_for_token(got, token) is not None
+    try:
+        return user_for_token(next(got), token) is not None
+    finally:
+        got.close()
+
+
 @app.middleware("http")
 async def limit_body(request: Request, call_next):
     # The server reads the whole body to disk before the upload's own size check runs, so refuse huge ones up front.
@@ -41,7 +54,12 @@ async def limit_body(request: Request, call_next):
     # Auth runs after the body is parsed, so check the token here before anyone can make the server spool a big upload.
     if size.isdigit() and int(size) > ANONYMOUS_BODY_LIMIT:
         auth = request.headers.get("authorization", "")
-        if not (auth.startswith("Bearer ") and decode_access_token(auth[7:])):
+        # Full check (logout, password change, approval), not just the signature: the DB call runs off the event loop.
+        try:
+            signed_in = auth.startswith("Bearer ") and await run_in_threadpool(_signed_in, auth[7:])
+        except OperationalError as exc:  # exception handlers don't cover middleware
+            return await database_unavailable(request, exc)
+        if not signed_in:
             return JSONResponse(status_code=401, content={"detail": "Sign in to upload"})
     return await call_next(request)
 

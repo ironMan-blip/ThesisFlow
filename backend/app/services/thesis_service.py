@@ -163,8 +163,6 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
     out = []
     for t in db.scalars(query):
         row = ThesisDetailOut.model_validate(t)
-        for v in row.versions:
-            v.can_delete = False  # only the student removes versions, from their proposal page
         row.can_defer = user.role == Role.coordinator and (t.defer_pending or progress_service.can_defer(db, t))
         out.append(row)
     return out

@@ -20,7 +20,6 @@ class ProposalVersionOut(BaseModel):
     size_bytes: int
     created_at: datetime
     is_latest: bool = False  # set by ProposalOut
-    can_delete: bool = True  # set by the service: true only while the student could upload it again
 
     @computed_field
     @property

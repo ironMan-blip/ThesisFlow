@@ -2,13 +2,11 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import delete, select
 
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
-from app.models.user import Role, User
+from app.models.user import Role
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
-from app.services import proposal_service
 from tests.helpers import PDF, auth, me, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
@@ -109,33 +107,6 @@ def test_only_students_upload(client, db):
     assert upload(client, faculty).status_code == 403
 
 
-def test_owner_can_remove_a_version(client, db, tmp_path):
-    owner = student(client, db, "s@x.com")
-    other = student(client, db, "o@x.com")
-    upload(client, owner, title="v1")
-    v2, v1 = upload(client, owner, content=PDF + b"v2", title="v2").json()["versions"]
-
-    assert client.delete(f"/api/proposals/versions/{v1['id']}", headers=other).status_code == 404
-    res = client.delete(f"/api/proposals/versions/{v1['id']}", headers=owner)
-    assert res.status_code == 200
-    assert [v["id"] for v in res.json()["versions"]] == [v2["id"]]
-    assert len(list((tmp_path / "proposals").iterdir())) == 1
-    assert client.get(f"/api/proposals/versions/{v1['id']}/file", headers=owner).status_code == 404
-    assert client.delete(f"/api/proposals/versions/{v1['id']}", headers=owner).status_code == 404
-
-
-def test_removing_a_version_renumbers_later_ones(client, db):
-    h = student(client, db, "s@x.com")
-    for t in ("a", "b", "c"):
-        upload(client, h, content=PDF + t.encode(), title=t)
-    c, b, a = client.get("/api/proposals/mine", headers=h).json()["versions"]
-
-    versions = client.delete(f"/api/proposals/versions/{a['id']}", headers=h).json()["versions"]
-    assert [(v["title"], v["version_no"]) for v in versions] == [("c", 2), ("b", 1)]
-    versions = upload(client, h, content=PDF + b"d", title="d").json()["versions"]
-    assert [(v["title"], v["version_no"]) for v in versions] == [("d", 3), ("c", 2), ("b", 1)]
-
-
 def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
     h = student(client, db, "s@x.com")
     for t in ("a", "b", "c"):
@@ -197,16 +168,20 @@ def test_grace_period_warns_and_then_uploads_close(client, db):
     db.flush()
     mine = client.get("/api/proposals/mine", headers=h).json()
     assert mine["upload_block"] == "The P1 deadline and grace period have passed"
-    assert mine["versions"][0]["can_delete"] is False  # a final submission
-    res = client.delete(f"/api/proposals/versions/{v['id']}", headers=h)
-    assert (res.status_code, res.json()["detail"]) == (409, "This version is a final submission, so it can't be removed")
+    assert [x["id"] for x in mine["versions"]] == [v["id"]]  # the submission is kept
 
 
-def test_removing_a_version_after_the_account_is_deleted_is_401(client, db):
+def test_versions_cannot_be_deleted(client, db):
+    # SRS F11: every upload is a new version and old ones are kept.
     h = student(client, db, "s@x.com")
     v = upload(client, h).json()["versions"][0]
-    user = db.scalar(select(User).where(User.email == "s@x.com"))
-    db.execute(delete(User).where(User.id == user.id))  # deleted by the coordinator mid-request
-    with pytest.raises(Exception) as exc:
-        proposal_service.delete_version(db, user, v["id"])
-    assert getattr(exc.value, "status_code", None) == 401
+    assert client.delete(f"/api/proposals/versions/{v['id']}", headers=h).status_code == 404
+    assert client.get(f"/api/proposals/versions/{v['id']}/file", headers=h).status_code == 200
+    assert "can_delete" not in v
+
+
+def test_pdf_needs_its_eof_trailer(client, db):
+    h = student(client, db, "s@x.com")
+    assert upload(client, h, content=b"%PDF-1.4\nnot really a pdf").status_code == 422
+    assert upload(client, h, content=PDF + b"\n" * 100).status_code == 201  # trailing bytes after %%EOF are fine
+    assert upload(client, h, content=PDF + b"x" * 2048).status_code == 422  # %%EOF not near the end

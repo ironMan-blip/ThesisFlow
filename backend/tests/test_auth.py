@@ -13,6 +13,7 @@ from app.main import app
 from app.models.user import Role, User
 from app.security import hash_password
 from app.services import auth_service
+from app.services.auth_service import REGISTER_TAKEN
 from tests.helpers import auth, student as make_student, upload
 
 
@@ -51,11 +52,11 @@ def test_duplicate_email_rejected(client, db):
     auth_service.create_user(db, "a@b.com", "12345678", "A", "Password123", Role.student)
     r = register(client, email="A@B.com", id_number="87654321")
     assert r.status_code == 409
-    assert r.json()["detail"] == "User already exists"
+    assert r.json()["detail"] == REGISTER_TAKEN
     # Same email under the other role is also taken.
     r = register(client, id_number="87654321", role="faculty")
     assert r.status_code == 409
-    assert r.json()["detail"] == "User already exists"
+    assert r.json()["detail"] == REGISTER_TAKEN
 
 
 def test_duplicate_id_number_rejected(client, db):
@@ -63,7 +64,7 @@ def test_duplicate_id_number_rejected(client, db):
     for role in ["student", "faculty"]:
         r = register(client, email="other@b.com", role=role)
         assert r.status_code == 409
-        assert r.json()["detail"] == "ID number already registered"
+        assert r.json()["detail"] == REGISTER_TAKEN
 
 
 def test_login_needs_id_number_not_email(client):
@@ -193,7 +194,7 @@ def test_cannot_reregister_within_48_hours(client, db):
     old_id = client.post("/api/auth/register", json=body).json()["id"]
     r = client.post("/api/auth/register", json=body)
     assert r.status_code == 409
-    assert r.json()["detail"] == "User already applied to register, waiting for approval. If this wasn't you, contact the coordinator"
+    assert r.json()["detail"] == REGISTER_TAKEN
 
     # 48 hours pass without a decision: a new submission replaces the old one.
     user = db.get(User, old_id)
@@ -472,3 +473,10 @@ def test_logout_ends_every_session_of_that_person(client, db):
     assert client.get("/api/auth/me", headers=other).status_code == 200  # other people stay signed in
     fresh = {"Authorization": f"Bearer {login(client, me_id, 'Password123').json()['access_token']}"}
     assert client.get("/api/auth/me", headers=fresh).status_code == 200
+
+
+def test_logged_out_token_cannot_start_a_big_upload(client, db):
+    h = auth(client, db, "s@b.com")
+    assert client.post("/api/auth/logout", headers=h).status_code == 204
+    res = client.post("/api/proposals/mine/versions", content=b"x" * (70 * 1024), headers=h)
+    assert (res.status_code, res.json()["detail"]) == (401, "Sign in to upload")

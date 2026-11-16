@@ -272,16 +272,6 @@ def test_p3_without_deferral_completes_the_thesis(client, db):
     assert client.get("/api/proposals/mine", headers=s).json()["upload_block"] == "Your thesis is complete"
 
 
-def test_removing_the_p3_submission_undoes_a_deferral(client, db):
-    coord = auth(client, db, "c@x.com", Role.coordinator)
-    s = p3_student(client, db, "s@x.com")
-    tid = mine(client, s)["thesis"]["id"]
-    vid = upload(client, s).json()["versions"][0]["id"]
-    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).json()["defer_pending"] is True
-    assert client.delete(f"/api/proposals/versions/{vid}", headers=s).status_code == 200
-    assert [t["defer_pending"] for t in client.get("/api/theses", headers=coord).json()] == [False]
-
-
 def test_deferred_twice_freezes(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     s = p3_student(client, db, "s@x.com")
@@ -295,8 +285,6 @@ def test_deferred_twice_freezes(client, db):
     assert (state["phase"], state["thesis"]["deferrals"], state["frozen_reason"]) == ("P3", 1, None)
     # Last semester's P3 upload doesn't count: it can't be deferred again until they resubmit.
     assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).status_code == 409
-    old = client.get("/api/proposals/mine", headers=s).json()["versions"][0]
-    assert old["can_delete"] is False
     upload(client, s, content=PDF + b"again")
     client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True})
     assert close_all_and_roll(client, db, coord)["frozen"] == 1

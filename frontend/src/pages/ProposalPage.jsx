@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, download } from "../api/client";
-import { Alerts, ConfirmDialog, EmptyState, Icon, ICONS, PageHeader, Skeleton, VersionInfo } from "../components/ui";
+import { Alerts, EmptyState, Icon, ICONS, PageHeader, Skeleton, VersionInfo } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
 export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
-  const [pending, setPending] = useState(null);
   const [fileName, setFileName] = useState("");
   const { busy, error, notice, setError, run } = useAction();
 
@@ -27,20 +26,11 @@ export default function ProposalPage() {
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
-  const confirmRemove = () => {
-    const v = pending;
-    setPending(null);
-    run("remove", async () => {
-      setProposal(await api(`/proposals/versions/${v.id}`, { method: "DELETE" }));
-      return `v${v.version_no} was removed.`;
-    });
-  };
-
   const saving = busy === "upload";
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Proposal" intro="Each upload is saved as a new version of your current phase, under your thesis ID. You can remove a version until the phase closes; after that it is your final submission." />
+      <PageHeader title="Proposal" intro="Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept; your latest upload when the phase closes is your final submission." />
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
@@ -111,10 +101,6 @@ export default function ProposalPage() {
                   <VersionInfo v={v} abstract />
                   <div className="flex shrink-0 gap-2">
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
-                    {v.can_delete && (
-                      <button onClick={() => setPending(v)} aria-label={`Remove v${v.version_no}`}
-                        className="btn-ghost-danger px-3 py-1.5">Remove</button>
-                    )}
                   </div>
                 </li>
               ))}
@@ -123,11 +109,6 @@ export default function ProposalPage() {
         </section>
       </div>
 
-      <ConfirmDialog open={!!pending} title={`Remove v${pending?.version_no}?`} confirm="Yes, remove" danger
-        onCancel={() => setPending(null)} onConfirm={confirmRemove}>
-        This permanently deletes the version and its PDF. It cannot be undone.
-        Later versions will be renumbered to fill the gap.
-      </ConfirmDialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Alerts, ConfirmDialog, PageHeader, Skeleton } from "../components/ui";
 import { fromDhakaInput, toDhakaInput, when } from "../format";
@@ -37,13 +37,14 @@ export default function DeadlinePage() {
   const [now, setNow] = useState(Date.now());
   const { busy: saving, error, notice, setError, run } = useAction(); // busy key is the phase being saved
 
-  const show = (res) => {
+  const show = useCallback((res) => {
     setData(res);
     setOffset(new Date(res.now) - Date.now());
-  };
+  }, []);
+
+  const load = useCallback(() => api("/milestones").then(show).catch((err) => setError(err.message)), [show, setError]);
 
   useEffect(() => {
-    const load = () => api("/milestones").then(show).catch((err) => setError(err.message));
     load();
     // Status and late days come from the server, so refresh them now and then.
     const refresh = setInterval(load, 60000);
@@ -52,7 +53,7 @@ export default function DeadlinePage() {
       clearInterval(refresh);
       clearInterval(tick);
     };
-  }, [setError]);
+  }, [load]);
 
   const save = (e, phase) => {
     e.preventDefault();
@@ -73,6 +74,12 @@ export default function DeadlinePage() {
   };
 
   const serverNow = now + offset;
+
+  // A countdown hit zero: fetch at once so open -> grace -> closed and late days update without waiting a minute.
+  const reachedZero = !!data?.milestones.some((m) => m.countdown_to && new Date(m.countdown_to) <= serverNow);
+  useEffect(() => {
+    if (reachedZero) load();
+  }, [reachedZero, load]);
 
   const nextSemester = () => {
     setConfirming(false);

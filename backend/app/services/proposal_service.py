@@ -17,6 +17,7 @@ from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut
 from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
+PDF_TAIL = 1024
 
 
 def _upload_dir() -> Path:
@@ -53,21 +54,17 @@ def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service
 def get_mine(db: Session, user: User) -> ProposalOut:
     block, s = _upload_block(db, user)
     thesis = user.thesis
-    out = ProposalOut(
+    return ProposalOut(
         versions=thesis.versions if thesis else [],
         thesis_code=thesis and thesis.code,
         phase=user.phase,
         upload_block=block,
         freeze_at=s.closes_at if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.due_at else None,
     )
-    for v in out.versions:
-        # A submission is final once its phase closes, or once it belongs to an earlier phase or semester.
-        v.can_delete = block is None and v.phase == user.phase and v.created_at >= user.phase_started_at
-    return out
 
 
 def _lock_thesis(db: Session, user: User) -> Thesis | None:
-    # Row lock so uploads and deletes on one thesis never race on version numbers.
+    # Row lock so two uploads on one thesis never race on version numbers.
     return db.scalar(select(Thesis).where(Thesis.id == user.thesis_id).with_for_update())
 
 
@@ -89,6 +86,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     path = _upload_dir() / stored
     size = len(head)
     digest = hashlib.sha256(head)
+    tail = head
     try:
         with path.open("wb") as out:
             out.write(head)
@@ -100,6 +98,10 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
                     )
                 out.write(chunk)
                 digest.update(chunk)
+                tail = (tail + chunk)[-PDF_TAIL:]
+        # A real PDF ends with %%EOF; readers allow some trailing bytes after it, so look in the last 1 KB.
+        if b"%%EOF" not in tail:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File must be a PDF")
     except BaseException:
         path.unlink(missing_ok=True)
         raise
@@ -193,35 +195,6 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
     finally:
         if not keep_new_file:
             (_upload_dir() / stored).unlink(missing_ok=True)
-    db.refresh(thesis)
-    return get_mine(db, user)
-
-
-def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
-    thesis = user.thesis_id and _lock_thesis(db, user)
-    _refresh_user(db, user)
-    # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
-    version = thesis and db.scalar(
-        select(ProposalVersion)
-        .join(Proposal)
-        .where(ProposalVersion.id == version_id, Proposal.thesis_id == thesis.id)
-    )
-    if version is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
-    if not next((v.can_delete for v in get_mine(db, user).versions if v.id == version.id), False):
-        # Submissions are final once the phase closes; removing one could also turn it into a missed deadline.
-        raise HTTPException(status.HTTP_409_CONFLICT, "This version is a final submission, so it can't be removed")
-    stored, removed_no = version.stored_filename, version.version_no
-    db.delete(version)
-    db.flush()
-    _close_gap(db, version.proposal_id, removed_no)
-    if gm := progress_service.group_milestone(db, user):
-        progress_service.sync_deliverable(db, gm, user)
-    if progress_service.submitted_at(db, user) is None:
-        thesis.defer_pending = False  # a deferral needs a P3 submission this semester
-    db.commit()
-    # File goes only after the row is gone, so a failed commit never loses a PDF.
-    (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(thesis)
     return get_mine(db, user)
 

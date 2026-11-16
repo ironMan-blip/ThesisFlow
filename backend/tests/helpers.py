@@ -7,7 +7,7 @@ from app.models.semester import Semester
 from app.models.user import Role
 from app.services import auth_service
 
-PDF = b"%PDF-1.4\n% test\n"
+PDF = b"%PDF-1.4\n% test\n%%EOF\n"
 
 
 _id_numbers = count(50000000)

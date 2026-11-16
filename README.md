@@ -46,12 +46,12 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 
 **Proposal submission**
 - Upload title, abstract and PDF to the current phase while its grace period is open.
-- Real PDF check (by content) and size limit (`MAX_UPLOAD_MB`, 20 MB default; oversized requests get `413` early).
+- Real PDF check (by content: starts with `%PDF-`, `%%EOF` in the last 1 KB) and size limit (`MAX_UPLOAD_MB`, 20 MB default; oversized requests get `413` early).
 - Numbered versions (v1, v2, …), newest first, with download links.
 - Identical re-upload reuses the existing version instead of storing a copy.
-- Delete a current-phase version until grace ends; numbers stay in order and the file is removed.
+- Versions can never be deleted: every past version is kept (SRS F11).
 - Group members and coordinator can view and download versions.
-- Uploads and deletes on one thesis are locked so version numbers never clash.
+- Uploads on one thesis are locked so version numbers never clash.
 
 **Security**
 - Rate limits per minute: login 60 per IP, 10 failed tries per account per IP and 100 per account overall except from IPs that logged in to it before (right logins don't count), register 30 per IP, other API paths 300 per user (`429` over limit).
@@ -209,9 +209,9 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Only the student uploads. The coordinator and the group (the student, the supervisor, and the co-supervisor once they accept) can view and download its versions.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
-- Students can delete a version of their current phase (with a confirmation dialog) until its grace period ends; after that it is final and the Remove button is hidden. Later versions shift down so numbers stay in order, and the PDF file is removed.
+- Versions can't be deleted, by anyone: the SRS keeps every old version. The latest upload when the phase closes is the final submission.
 - Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
-- Uploads and deletes on the same thesis are locked against each other, so version numbers never clash.
+- Uploads on the same thesis are locked against each other, so version numbers never clash.
 
 ### 8. Security
 
@@ -226,7 +226,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - `JWT_SECRET` shorter than 32 characters stops the backend from starting.
 - **No CORS**: the browser only talks to the Vite server, which forwards `/api` to the backend.
 - **Outages**: every container restarts itself if it crashes. While Postgres is down the API answers `503` with a clear message (the UI shows it) and recovers on its own when Postgres is back.
-- **Race safety**: group requests, P1 registration, uploads, deletes, deferrals and the semester rollover take row locks (`SELECT … FOR UPDATE`), so two requests at once can't both pass the same check. Parallel sign-ups with the same email, ID or initials get a clean `409`.
+- **Race safety**: group requests, P1 registration, uploads, deferrals and the semester rollover take row locks (`SELECT … FOR UPDATE`), so two requests at once can't both pass the same check. Parallel sign-ups with the same email, ID or initials get a clean `409`.
 
 ### 9. Error responses
 
@@ -350,7 +350,6 @@ frontend/src/
 | PUT | `/api/theses/{id}/defer` | coordinator |
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
-| DELETE | `/api/proposals/versions/{id}` | student (own) |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisors, coordinator |
 
 Full request/response shapes are at http://localhost:5174/docs.
