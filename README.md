@@ -69,7 +69,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 
 ![ThesisFlow class diagram](470_class_diagram_g7.svg)
 
-Member 3's part (auth & accounts, F11–F15), made in draw.io. Open `470_class_diagram_g7.svg` in draw.io to edit it. The other members' parts will be added to this same file.
+Member 3's part (auth & accounts, F11–F15), made in draw.io. Edit `470_class_diagram_g7.drawio` in draw.io, then export the `.svg` and `.png`. The other members' parts will be added to this same file.
 
 ## Architecture
 
