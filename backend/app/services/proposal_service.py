@@ -226,8 +226,9 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
 
 
 def request_delete(db: Session, user: User, version_id: int, reason: str) -> ProposalOut:
-    """Student: ask to delete one of their versions, with a reason. Runs DELETION_DELAY later unless the coordinator
-    cancels it. Same rule as uploads: current phase, still open; once it closes the version is final and kept."""
+    """Student: ask to delete one of their versions, with a reason. The coordinator then approves it, and it runs
+    DELETION_DELAY later unless cancelled. Same rule as uploads: current phase, still open; once it closes the
+    version is final and kept."""
     version = user.thesis_id and db.scalar(
         select(ProposalVersion).join(Proposal).where(ProposalVersion.id == version_id, Proposal.thesis_id == user.thesis_id)
     )
@@ -235,7 +236,7 @@ def request_delete(db: Session, user: User, version_id: int, reason: str) -> Pro
         # Other students' ids give 404, not 403, so ids are not leaked.
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
     if version.delete_requested_at is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "This version's deletion is already scheduled")
+        raise HTTPException(status.HTTP_409_CONFLICT, "This version's deletion is already requested")
     if _deletable(db, version) is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "This version is a final submission, so it can't be deleted")
     version.delete_requested_at, version.delete_reason = datetime.now(timezone.utc), reason
@@ -263,7 +264,7 @@ def pending_delete_requests(db: Session) -> list[DeleteRequestOut]:
 
 
 def count_delete_requests(db: Session) -> int:
-    return len(pending_delete_requests(db))
+    return sum(r.delete_executes_at is None for r in pending_delete_requests(db))  # awaiting a decision
 
 
 def _lock_for(db: Session, version_id: int) -> ProposalVersion | None:
@@ -276,12 +277,23 @@ def _lock_for(db: Session, version_id: int) -> ProposalVersion | None:
     return db.get(ProposalVersion, version_id)
 
 
+def approve_delete(db: Session, version_id: int) -> None:
+    """Coordinator: approve a request. The version is deleted DELETION_DELAY from now unless cancelled."""
+    version = _lock_for(db, version_id)
+    if version is None or version.delete_requested_at is None or version.delete_approved_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No delete request waiting for approval with that id")
+    if _deletable(db, version) is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This version became a final submission when its phase closed, so it is kept")
+    version.delete_approved_at = datetime.now(timezone.utc)
+    db.commit()
+
+
 def cancel_delete(db: Session, version_id: int) -> None:
-    """Coordinator only, any time before the delete runs."""
+    """Coordinator only: rejects a request, or cancels an approved one any time before it runs."""
     version = _lock_for(db, version_id)
     if version is None or version.delete_requested_at is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No scheduled delete with that id")
-    version.delete_requested_at = version.delete_reason = None
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No delete request with that id")
+    version.delete_requested_at = version.delete_approved_at = version.delete_reason = None
     db.commit()
 
 
@@ -303,9 +315,9 @@ def run_due_deletions(db: Session, now: datetime | None = None) -> int:
     """Delete every version whose wait is over. Run by the background job in app.main. Returns how many went."""
     cutoff = (now or datetime.now(timezone.utc)) - DELETION_DELAY
     deleted = 0
-    for version_id in list(db.scalars(select(ProposalVersion.id).where(ProposalVersion.delete_requested_at <= cutoff))):
+    for version_id in list(db.scalars(select(ProposalVersion.id).where(ProposalVersion.delete_approved_at <= cutoff))):
         version = _lock_for(db, version_id)
-        if version is None or version.delete_requested_at is None or version.delete_requested_at > cutoff:
+        if version is None or version.delete_approved_at is None or version.delete_approved_at > cutoff:
             db.rollback()  # cancelled meanwhile
             continue
         stored = None
@@ -314,7 +326,7 @@ def run_due_deletions(db: Session, now: datetime | None = None) -> int:
             deleted += 1
         else:
             # The phase closed during the wait: the version is now a final submission and is kept.
-            version.delete_requested_at = version.delete_reason = None
+            version.delete_requested_at = version.delete_approved_at = version.delete_reason = None
         db.commit()
         if stored:
             # File goes only after the row is gone, so a failed commit never loses a PDF.

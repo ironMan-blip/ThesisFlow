@@ -22,7 +22,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Log in with ID number + password; JWT session (24 h default).
 - Coordinator approves or rejects every new sign-up; unapproved accounts cannot log in.
 - Waiting sign-ups expire after 48 h, so the same email can register again.
-- Every delete (an account or a proposal version) needs a written reason and runs **7 days** after it is asked for; within those 7 days only the coordinator can cancel it.
+- Every delete (an account or a proposal version) needs a written reason and the coordinator's approval. The delete then runs **7 days after the approval**; within those 7 days only the coordinator can cancel it.
 - Coordinator **Accounts** page: list, filter by role, search by ID prefix, schedule an account for deletion (with a reason).
 - Deleting a user keeps their thesis, proposal versions and PDFs as an archive.
 - Coordinator and active supervisors cannot be deleted.
@@ -49,7 +49,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Real PDF check (by content: starts with `%PDF-`, `%%EOF` in the last 1 KB) and size limit (`MAX_UPLOAD_MB`, 20 MB default; oversized requests get `413` early).
 - Numbered versions (v1, v2, …), newest first, with download links.
 - Identical re-upload reuses the existing version instead of storing a copy.
-- Every past version is kept (SRS F11). A student can ask to delete one, with a reason; it runs 7 days later unless the coordinator cancels it. See below.
+- Every past version is kept (SRS F11). A student can ask to delete one, with a reason; if the coordinator approves, it runs 7 days later unless they cancel it. See below.
 - Group members and coordinator can view and download versions.
 - Uploads on one thesis are locked so version numbers never clash.
 
@@ -163,8 +163,8 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 ### 3. Account deletion
 
 - Students and faculty can ask to delete their account under **Account**, and must write a reason (20 to 2000 characters) in a paragraph box. The coordinator can also schedule any account for deletion from **Accounts**, with a reason too.
-- Nothing is deleted straight away: the deletion runs **7 days** after it was asked for. The account keeps working until then and shows the date and the reason.
-- Within those 7 days **only the coordinator** can cancel it, under **Deletion requests** (which lists every scheduled deletion, who asked, the reason and the date). The person who asked cannot take it back. There is no "approve early".
+- Nothing is deleted straight away. The coordinator approves or rejects the request under **Deletion requests**. Approving starts a **7-day** wait, and the deletion runs when it ends. The account keeps working until then and shows the date and the reason. A coordinator-scheduled deletion counts as approved, so its 7 days start at once.
+- **Only the coordinator** can reject a request or cancel an approved deletion within the 7 days (the page lists every request, who asked, the reason and the date). The person who asked cannot take it back. 7 days passing without approval does nothing.
 - A background job in the backend (`app.main`, every 5 minutes) runs deletions whose 7 days are over. It deletes the user. Their thesis, all its proposal versions and the PDF files are kept as an archive. If the account became undeletable during the wait (a faculty member took on a thesis), the deletion is dropped and the account kept.
 - The coordinator account cannot be deleted, and neither can a faculty member who supervises an active or requested thesis.
 
@@ -210,7 +210,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Only the student uploads. The coordinator and the group (the student, the supervisor, and the co-supervisor once they accept) can view and download its versions.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
-- Versions are kept (SRS F11). A student can **ask to delete** a version of their current phase while uploads are open, writing a reason in a dialog. The delete runs **7 days** later: the version and its PDF go and later versions are renumbered. Within those 7 days only the coordinator can cancel it, under **Version delete requests** (with the reason). If the phase closes first, the version is the final submission and is kept. While a delete is pending, uploading the same file again stores a new version instead of reusing the one being deleted.
+- Versions are kept (SRS F11). A student can **ask to delete** a version of their current phase while uploads are open, writing a reason in a dialog. The coordinator approves or rejects it under **Version delete requests** (with the reason). After approval the delete runs **7 days** later: the version and its PDF go and later versions are renumbered. Within those 7 days only the coordinator can cancel it. Approving is refused once the phase has closed, and if the phase closes during the wait, the version is the final submission and is kept. While a delete is pending, uploading the same file again stores a new version instead of reusing the one being deleted.
 - Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
 
@@ -240,7 +240,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 | Table | What it holds |
 |-------|---------------|
-| `users` | Every account. Role (`student`, `faculty`, `coordinator`), email, ID number, name, faculty initials, Argon2 password hash, `approved`, `deletion_requested_at`, `deletion_reason`, `deletion_requested_by_id`. Students also have: current `thesis_id`, `phase` (P1/P2/P3, empty when completed), `phase_started_at`, `frozen_at`, `restart_requested_at`, `restart_approved`. |
+| `users` | Every account. Role (`student`, `faculty`, `coordinator`), email, ID number, name, faculty initials, Argon2 password hash, `approved`, `deletion_requested_at`, `deletion_approved_at`, `deletion_reason`, `deletion_requested_by_id`. Students also have: current `thesis_id`, `phase` (P1/P2/P3, empty when completed), `phase_started_at`, `frozen_at`, `restart_requested_at`, `restart_approved`. |
 | `theses` | A thesis group: `student_id`, `supervisor_id`, `co_supervisor_id`, `co_supervisor_accepted`, `status`, `deferrals`, `defer_pending`, `p1_registered`. `code` is the thesis ID shown to users: `T` + 8 random digits (unique), issued when the supervisor accepts. |
 | `proposals` | One per thesis, made on its first upload. |
 | `proposal_versions` | One per upload: `version_no`, `phase`, title, abstract, original and stored file name, size, SHA-256, uploader, time. |
@@ -295,7 +295,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 
 ### Migrations
 
-`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait.
+`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval.
 
 ## Project layout (MVC)
 
@@ -335,9 +335,9 @@ frontend/src/
 | POST | `/api/auth/me/deletion-request` (`{reason}`) | student, faculty |
 | GET | `/api/auth/me/counts` (pending-request badges per tool) | logged in |
 | GET | `/api/auth/accounts` (`?role=&id_prefix=` filters) | coordinator |
-| POST | `/api/auth/accounts/{id}/deletion` (`{reason}`: schedule in 7 days) | coordinator |
+| POST | `/api/auth/accounts/{id}/deletion` (`{reason}`: approved at once, runs in 7 days) | coordinator |
 | GET / POST / DELETE | `/api/auth/registration-requests[/{id}[/approve]]` | coordinator |
-| GET / DELETE | `/api/auth/deletion-requests[/{id}]` (list, cancel) | coordinator |
+| GET / POST / DELETE | `/api/auth/deletion-requests[/{id}[/approve]]` (list, approve, reject or cancel) | coordinator |
 | POST | `/api/auth/me/restart-request` | frozen student |
 | GET / POST / DELETE | `/api/auth/restart-requests[/{id}[/approve]]` | coordinator |
 | GET | `/api/milestones` | logged in |
@@ -353,7 +353,7 @@ frontend/src/
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
 | POST | `/api/proposals/versions/{id}/delete-request` (`{reason}`) | student (own) |
-| GET / DELETE | `/api/proposals/delete-requests[/{id}]` (list, cancel) | coordinator |
+| GET / POST / DELETE | `/api/proposals/delete-requests[/{id}[/approve]]` (list, approve, reject or cancel) | coordinator |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisors, coordinator |
 
 Full request/response shapes are at http://localhost:5174/docs.

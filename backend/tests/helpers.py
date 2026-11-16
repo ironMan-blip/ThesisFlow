@@ -60,9 +60,9 @@ def close_registration(db):
 
 
 def run_deletions_due(db):
-    """Move every scheduled delete past its 7-day wait, then run the deletion job like the background loop does."""
-    db.execute(update(User).values(deletion_requested_at=User.deletion_requested_at - DELETION_DELAY))
-    db.execute(update(ProposalVersion).values(delete_requested_at=ProposalVersion.delete_requested_at - DELETION_DELAY))
+    """Move every approved delete past its 7-day wait, then run the deletion job like the background loop does."""
+    db.execute(update(User).values(deletion_approved_at=User.deletion_approved_at - DELETION_DELAY))
+    db.execute(update(ProposalVersion).values(delete_approved_at=ProposalVersion.delete_approved_at - DELETION_DELAY))
     db.flush()
     db.expire_all()
     return account_service.run_due_deletions(db), proposal_service.run_due_deletions(db)

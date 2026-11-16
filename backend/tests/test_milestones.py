@@ -160,6 +160,8 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
 
     # Deleting the deliverable (asked for, then run after the wait) falls back to the other upload.
     client.post(f"/api/proposals/versions/{v1['id']}/delete-request", headers=s, json=REASON)
+    assert run_deletions_due(db) == (0, 0)  # nothing runs until the coordinator approves
+    assert client.post(f"/api/proposals/delete-requests/{v1['id']}/approve", headers=coord).status_code == 204
     assert run_deletions_due(db) == (0, 1)
     db.refresh(gm)
     assert gm.deliverable.proposal_version_id == v2["id"]

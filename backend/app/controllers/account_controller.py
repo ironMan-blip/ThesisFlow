@@ -41,7 +41,13 @@ def deletion_requests(db: Session = Depends(get_db)):
     return account_service.pending_deletions(db)
 
 
-# No approve route: a deletion runs by itself once its wait is over (account_service.run_due_deletions).
+@router.post("/deletion-requests/{user_id}/approve", response_model=UserOut, dependencies=[Depends(coordinator)])
+def approve_deletion(user_id: int, db: Session = Depends(get_db)):
+    return account_service.approve_deletion(db, user_id)
+
+
+# Approved deletions run by themselves once their wait is over (account_service.run_due_deletions).
+# DELETE rejects a request waiting for approval, or cancels an approved one.
 @router.delete("/deletion-requests/{user_id}", response_model=UserOut, dependencies=[Depends(coordinator)])
 def cancel_deletion(user_id: int, db: Session = Depends(get_db)):
     return account_service.cancel_deletion(db, user_id)

@@ -43,17 +43,18 @@ export default function AccountPage() {
       <section className="card max-w-2xl space-y-3 p-6 ring-red-200" aria-labelledby="delete-heading">
         <h2 id="delete-heading" className="font-semibold text-red-800">Delete account</h2>
         <p className="text-sm text-zinc-600">
-          Tell us why, and your account is deleted for good {user.deletion_days} days later. You can't take the request
-          back: only the coordinator can cancel it in that time. Your thesis and proposal versions stay archived.
+          Tell us why. The coordinator decides; if they approve, your account is deleted for good {user.deletion_days} days
+          later. You can't take the request back: only the coordinator can reject or cancel it. Your thesis and proposal versions stay archived.
         </p>
 
         {me.deletion_pending ? (
           <div role="status" className="space-y-1 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900 ring-1 ring-amber-600/20 ring-inset">
             <p className="font-medium">
-              {me.deletion_by_coordinator ? "The coordinator scheduled your account for deletion" : "Your account is scheduled for deletion"}{" "}
-              on {when(me.deletion_executes_at)}.
+              {me.deletion_executes_at
+                ? `${me.deletion_by_coordinator ? "The coordinator scheduled your account for deletion" : "Approved: your account will be deleted"} on ${when(me.deletion_executes_at)}.`
+                : "Deletion requested. Waiting for the coordinator to decide."}
             </p>
-            <p>Only the coordinator can cancel it before then.</p>
+            <p>Only the coordinator can {me.deletion_executes_at ? "cancel it before then" : "reject it"}.</p>
             <p className="whitespace-pre-line text-amber-800">Reason: {me.deletion_reason}</p>
           </div>
         ) : (
@@ -65,8 +66,8 @@ export default function AccountPage() {
 
       <ReasonDialog open={asking} title="Delete your account?" confirm="Request deletion" busy={busy === "delete"} error={error}
         min={user.min_reason_chars} max={user.max_reason_chars} onCancel={() => setAsking(false)} onSubmit={requestDeletion}>
-        <strong className="text-red-800">This can't be undone once it runs.</strong> Your account is deleted {user.deletion_days} days
-        from now unless the coordinator cancels it. You can keep using it until then.
+        <strong className="text-red-800">This can't be undone once it runs.</strong> If the coordinator approves, your account is
+        deleted {user.deletion_days} days after that, unless they cancel it. You can keep using it until then.
       </ReasonDialog>
     </div>
   );

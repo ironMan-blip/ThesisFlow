@@ -71,7 +71,7 @@ class UserOut(BaseModel):
     restart_pending: bool
     review_hours: int = REVIEW_HOURS  # coordinator's decision window, for page text
     # The account's own scheduled deletion, if any, and the limits every delete form uses.
-    deletion_executes_at: datetime | None
+    deletion_executes_at: datetime | None  # None until the coordinator approves
     deletion_reason: str | None
     deletion_by_coordinator: bool
     deletion_days: int = DELETION_DAYS

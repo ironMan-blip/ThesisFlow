@@ -49,8 +49,10 @@ class User(Base):
     # Sign-ups start unapproved and cannot log in until the coordinator approves them.
     approved: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    # Set when the account's deletion is asked for (by the user or the coordinator); it runs DELETION_DELAY later.
+    # Set when the account's deletion is asked for (by the user or the coordinator).
     deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the coordinator approves (or schedules it themselves): only then does the DELETION_DELAY clock start.
+    deletion_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deletion_reason: Mapped[str | None] = mapped_column(Text)
     deletion_requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
@@ -95,7 +97,7 @@ class User(Base):
 
     @property
     def deletion_executes_at(self) -> datetime | None:
-        return self.deletion_requested_at and self.deletion_requested_at + DELETION_DELAY
+        return self.deletion_approved_at and self.deletion_approved_at + DELETION_DELAY
 
     @property
     def deletion_by_coordinator(self) -> bool:

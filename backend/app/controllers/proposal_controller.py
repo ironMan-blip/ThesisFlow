@@ -40,7 +40,8 @@ def download(version_id: int, user: User = Depends(get_current_user), db: Sessio
 def request_delete(
     version_id: int, data: DeletionReasonIn, user: User = Depends(require_roles(Role.student)), db: Session = Depends(get_db)
 ):
-    # Versions are kept (SRS F11): a delete needs a reason, waits 7 days, and only the coordinator can cancel it.
+    # Versions are kept (SRS F11): a delete needs a reason and the coordinator's approval, then waits 7 days, and
+    # only the coordinator can cancel it.
     return proposal_service.request_delete(db, user, version_id, data.reason)
 
 
@@ -49,7 +50,13 @@ def delete_requests(db: Session = Depends(get_db)):
     return proposal_service.pending_delete_requests(db)
 
 
-# No approve route: a delete runs by itself once its wait is over (proposal_service.run_due_deletions).
+@router.post("/delete-requests/{version_id}/approve", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)])
+def approve_delete(version_id: int, db: Session = Depends(get_db)):
+    proposal_service.approve_delete(db, version_id)
+
+
+# Approved deletes run by themselves once their wait is over (proposal_service.run_due_deletions).
+# DELETE rejects a request waiting for approval, or cancels an approved one.
 @router.delete("/delete-requests/{version_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)])
 def cancel_delete(version_id: int, db: Session = Depends(get_db)):
     proposal_service.cancel_delete(db, version_id)

@@ -51,13 +51,15 @@ class ProposalVersion(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
     )
 
-    # Set when the student asks to delete this version (SRS F11 keeps old versions otherwise). It runs DELETION_DELAY
-    # later unless the coordinator cancels it, or the phase closes first and the version becomes a final submission.
+    # Set when the student asks to delete this version (SRS F11 keeps old versions otherwise). The coordinator approves
+    # it; it then runs DELETION_DELAY later unless the coordinator cancels it or the phase closes first.
     delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delete_reason: Mapped[str | None] = mapped_column(Text)
+    # Set when the coordinator approves the request: only then does the DELETION_DELAY clock start.
+    delete_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     proposal: Mapped[Proposal] = relationship(back_populates="versions")
 
     @property
     def delete_executes_at(self) -> datetime | None:
-        return self.delete_requested_at and self.delete_requested_at + DELETION_DELAY
+        return self.delete_approved_at and self.delete_approved_at + DELETION_DELAY

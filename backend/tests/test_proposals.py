@@ -192,7 +192,7 @@ def _ask(client, h, v, body=REASON):
     return client.post(f"/api/proposals/versions/{v['id']}/delete-request", headers=h, json=body)
 
 
-def test_a_version_delete_needs_a_reason_and_runs_after_7_days(client, db, tmp_path):
+def test_a_version_delete_needs_a_reason_approval_and_7_days(client, db, tmp_path):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     h, other = student(client, db, "s@x.com"), student(client, db, "o@x.com")
     for t in ("a", "b", "c"):
@@ -205,14 +205,22 @@ def test_a_version_delete_needs_a_reason_and_runs_after_7_days(client, db, tmp_p
     mine = _ask(client, h, a).json()
     row = mine["versions"][-1]
     assert (row["title"], row["delete_pending"], row["can_request_delete"]) == ("a", True, False)
-    assert row["delete_executes_at"] is not None
-    assert _ask(client, h, a).status_code == 409  # already scheduled
+    assert row["delete_executes_at"] is None  # waiting for the coordinator: no clock yet
+    assert _ask(client, h, a).status_code == 409  # already requested
     assert client.get("/api/proposals/delete-requests", headers=h).status_code == 403  # coordinator only
     assert client.get("/api/auth/me/counts", headers=coord).json()["version_delete_requests"] == 1
     [req] = client.get("/api/proposals/delete-requests", headers=coord).json()
     assert (req["id"], req["title"], req["student"]["email"], req["delete_reason"]) == (a["id"], "a", "s@x.com", REASON["reason"])
-    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 404  # no early delete
-    assert proposal_service.run_due_deletions(db) == 0
+    assert req["delete_executes_at"] is None
+    assert run_deletions_due(db) == (0, 0)  # 7 days alone do nothing without approval
+    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=h).status_code == 403
+    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 204
+    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 404  # once
+    assert client.get("/api/auth/me/counts", headers=coord).json()["version_delete_requests"] == 0  # decided
+    [req] = client.get("/api/proposals/delete-requests", headers=coord).json()
+    assert req["delete_executes_at"] is not None  # still listed, so it can be cancelled
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"][-1]["delete_executes_at"] is not None
+    assert proposal_service.run_due_deletions(db) == 0  # approved, but the 7 days aren't over
 
     assert run_deletions_due(db) == (0, 1)
     versions = client.get("/api/proposals/mine", headers=h).json()["versions"]
@@ -230,6 +238,7 @@ def test_only_the_coordinator_cancels_a_version_delete(client, db):
     v = upload(client, h).json()["versions"][0]
     _ask(client, h, v)
     assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=h).status_code == 403
+    client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord)
     # Uploading the same file again doesn't stop the delete either: it is stored as a new version.
     versions = upload(client, h).json()["versions"]
     assert [(x["version_no"], x["delete_pending"]) for x in versions] == [(2, False), (1, True)]
@@ -240,12 +249,22 @@ def test_only_the_coordinator_cancels_a_version_delete(client, db):
     assert run_deletions_due(db) == (0, 0)
     assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 2
 
+    # A request can be rejected before approval too, and approving after the phase closed is refused.
+    _ask(client, h, v)
+    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 204
+    _ask(client, h, v)
+    p1 = db.get(MilestoneTemplate, Phase.P1)
+    p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0
+    db.flush()
+    assert client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord).status_code == 409
+
 
 def test_a_version_delete_lapses_when_the_phase_closes_first(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     h = student(client, db, "s@x.com")
     v = upload(client, h).json()["versions"][0]
     _ask(client, h, v)
+    client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord)  # approved, then the phase closes
     p1 = db.get(MilestoneTemplate, Phase.P1)
     p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0  # closed: v is the final submission
     db.flush()
