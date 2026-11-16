@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.thesis import ThesisStatus
 from app.models.user import REVIEW_WINDOW, Role, User
-from app.services import progress_service, thesis_service
+from app.services import progress_service, proposal_service, thesis_service
 
 
 def _registrations() -> Select:
@@ -93,6 +93,7 @@ def pending_counts(db: Session, user: User) -> dict[str, int]:
         "registration_requests": count(_registrations()),
         "deletion_requests": count(_deletions()),
         "restart_requests": progress_service.count_restarts(db),
+        "version_delete_requests": proposal_service.count_delete_requests(db),
     }
 
 

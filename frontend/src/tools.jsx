@@ -33,6 +33,10 @@ export const TOOLS = {
     to: "/restart-requests", title: "Restart requests", text: "Frozen students who asked to start again at P1.",
     icon: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></>,
   },
+  version_delete_requests: {
+    to: "/version-delete-requests", title: "Version delete requests", text: "Students who asked to delete a proposal version.",
+    icon: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5" /></>,
+  },
   account: {
     to: "/account", title: "Account", text: "Your account details, and asking to delete your account.",
     icon: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,

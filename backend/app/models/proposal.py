@@ -50,4 +50,7 @@ class ProposalVersion(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
     )
 
+    # Set when the student asks to delete this version; only the coordinator can approve it (SRS F11 keeps old versions).
+    delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     proposal: Mapped[Proposal] = relationship(back_populates="versions")

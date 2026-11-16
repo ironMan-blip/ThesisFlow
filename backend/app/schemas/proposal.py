@@ -20,6 +20,9 @@ class ProposalVersionOut(BaseModel):
     size_bytes: int
     created_at: datetime
     is_latest: bool = False  # set by ProposalOut
+    # Set by the service, student page only: they can ask the coordinator to delete it / they asked and it still can be.
+    can_request_delete: bool = False
+    delete_pending: bool = False
 
     @computed_field
     @property

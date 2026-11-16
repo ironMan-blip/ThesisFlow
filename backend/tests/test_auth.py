@@ -313,6 +313,7 @@ def test_pending_counts_and_name_fields(client, db):
         "registration_requests": 1,
         "deletion_requests": 1,
         "restart_requests": 0,
+        "version_delete_requests": 0,
     }
 
     user = User(full_name="ada byron king")
@@ -480,3 +481,16 @@ def test_logged_out_token_cannot_start_a_big_upload(client, db):
     assert client.post("/api/auth/logout", headers=h).status_code == 204
     res = client.post("/api/proposals/mine/versions", content=b"x" * (70 * 1024), headers=h)
     assert (res.status_code, res.json()["detail"]) == (401, "Sign in to upload")
+
+
+def test_login_tells_an_applicant_their_request_status(client, db):
+    body = {"email": "s@b.com", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
+    uid = client.post("/api/auth/register", json=body).json()["id"]
+    res = client.post("/api/auth/login", data={"username": "22222222", "password": "Password123"})
+    assert res.status_code == 403 and "waiting for coordinator approval" in res.json()["detail"]
+    db.get(User, uid).created_at -= timedelta(hours=48, minutes=1)
+    db.flush()
+    res = client.post("/api/auth/login", data={"username": "22222222", "password": "Password123"})
+    assert (res.status_code, res.json()["detail"]) == (403, "Your registration request expired without a decision. Register again")
+    # Without the password nobody learns anything.
+    assert client.post("/api/auth/login", data={"username": "22222222", "password": "Wrong1234"}).status_code == 401

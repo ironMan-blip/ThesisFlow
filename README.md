@@ -49,7 +49,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Real PDF check (by content: starts with `%PDF-`, `%%EOF` in the last 1 KB) and size limit (`MAX_UPLOAD_MB`, 20 MB default; oversized requests get `413` early).
 - Numbered versions (v1, v2, …), newest first, with download links.
 - Identical re-upload reuses the existing version instead of storing a copy.
-- Versions can never be deleted: every past version is kept (SRS F11).
+- Every past version is kept (SRS F11). A student can only ask the coordinator to delete one; see below.
 - Group members and coordinator can view and download versions.
 - Uploads on one thesis are locked so version numbers never clash.
 
@@ -154,7 +154,8 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 ### 2. Registration approval
 
-- Every new account (student or faculty) starts **unapproved** and cannot log in. Login shows "waiting for coordinator approval".
+- Every new account (student or faculty) starts **unapproved** and cannot log in. Login with the right password shows "waiting for coordinator approval", or that the request expired after 48 hours with no decision (register again).
+- Registering with an ID number or email that is taken or still waiting gives one shared message, so sign-up can't reveal who has an account. The real applicant learns the status by logging in.
 - The coordinator sees all waiting sign-ups under **Registration requests** and approves or rejects each one.
 - Rejecting deletes the request, so that email can register again.
 - Registering again with the same email while the request is still waiting is refused. If the coordinator has not decided within **48 hours**, a new sign-up replaces the old request.
@@ -209,7 +210,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Only the student uploads. The coordinator and the group (the student, the supervisor, and the co-supervisor once they accept) can view and download its versions.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
-- Versions can't be deleted, by anyone: the SRS keeps every old version. The latest upload when the phase closes is the final submission.
+- Versions are kept (SRS F11). A student can **ask** the coordinator to delete a version of their current phase while uploads are open ("Ask to delete", with a confirmation dialog). The coordinator approves or rejects it under **Version delete requests**. Approving deletes the version and its PDF and renumbers later versions. A request lapses when the phase closes, because the version is then the final submission. Re-uploading the same file, title and abstract cancels the request.
 - Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
 
@@ -350,6 +351,8 @@ frontend/src/
 | PUT | `/api/theses/{id}/defer` | coordinator |
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
+| POST | `/api/proposals/versions/{id}/delete-request` | student (own) |
+| GET / POST / DELETE | `/api/proposals/delete-requests[/{id}[/approve]]` | coordinator |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisors, coordinator |
 
 Full request/response shapes are at http://localhost:5174/docs.

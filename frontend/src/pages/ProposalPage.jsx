@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { api, download } from "../api/client";
-import { Alerts, EmptyState, Icon, ICONS, PageHeader, Skeleton, VersionInfo } from "../components/ui";
+import { Alerts, ConfirmDialog, EmptyState, Icon, ICONS, PageHeader, Skeleton, VersionInfo } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
 export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
   const [fileName, setFileName] = useState("");
+  const [asking, setAsking] = useState(null); // version the student is asking to delete
   const { busy, error, notice, setError, run } = useAction();
 
   useEffect(() => {
@@ -26,11 +27,20 @@ export default function ProposalPage() {
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
+  const askDelete = () => {
+    const v = asking;
+    setAsking(null);
+    run("ask", async () => {
+      setProposal(await api(`/proposals/versions/${v.id}/delete-request`, { method: "POST" }));
+      return `Asked the coordinator to delete v${v.version_no}.`;
+    });
+  };
+
   const saving = busy === "upload";
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Proposal" intro="Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept; your latest upload when the phase closes is your final submission." />
+      <PageHeader title="Proposal" intro="Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept: to remove one, ask the coordinator before the phase closes. Your latest upload when the phase closes is your final submission." />
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
@@ -99,8 +109,13 @@ export default function ProposalPage() {
               {proposal.versions.map((v) => (
                 <li key={v.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <VersionInfo v={v} abstract />
-                  <div className="flex shrink-0 gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {v.delete_pending && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">Delete requested</span>}
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
+                    {v.can_request_delete && (
+                      <button onClick={() => setAsking(v)} disabled={busy === "ask"} aria-label={`Ask to delete v${v.version_no}`}
+                        className="btn-ghost-danger px-3 py-1.5">Ask to delete</button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -108,6 +123,12 @@ export default function ProposalPage() {
           )}
         </section>
       </div>
+
+      <ConfirmDialog open={!!asking} title={`Ask to delete v${asking?.version_no}?`} confirm="Send request" danger
+        onCancel={() => setAsking(null)} onConfirm={askDelete}>
+        The coordinator decides. If they approve before the phase closes, the version and its PDF are deleted and later
+        versions are renumbered. Uploading the same file, title and abstract again cancels the request.
+      </ConfirmDialog>
 
     </div>
   );

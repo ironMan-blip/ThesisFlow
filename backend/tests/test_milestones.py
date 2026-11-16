@@ -158,6 +158,12 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     db.refresh(gm)
     assert gm.deliverable.proposal_version_id == v1["id"] and gm.submitted_at > before
 
+    # The coordinator deleting the deliverable (on request) falls back to the other upload.
+    client.post(f"/api/proposals/versions/{v1['id']}/delete-request", headers=s)
+    assert client.post(f"/api/proposals/delete-requests/{v1['id']}/approve", headers=coord).status_code == 204
+    db.refresh(gm)
+    assert gm.deliverable.proposal_version_id == v2["id"]
+
     # An extension moves only this group's due date: no late days for them, the other group is still late.
     gm.extended_due_at = now + timedelta(days=2)
     db.flush()

@@ -68,3 +68,11 @@ class ThesisRequestIn(BaseModel):
 
 class DeferIn(BaseModel):
     defer: bool
+
+
+class DeleteRequestOut(ProposalVersionOut):
+    """A version its student asked to delete, for the coordinator's inbox. id is the version's id."""
+
+    delete_requested_at: datetime
+    student: PersonOut
+    thesis_code: str | None

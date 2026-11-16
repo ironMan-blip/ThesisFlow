@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,8 @@ from app.models.milestone import Phase
 from app.models.proposal import Proposal, ProposalVersion
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import User
-from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut
+from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut, ProposalVersionOut
+from app.schemas.thesis import DeleteRequestOut, PersonOut
 from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
@@ -54,13 +55,34 @@ def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service
 def get_mine(db: Session, user: User) -> ProposalOut:
     block, s = _upload_block(db, user)
     thesis = user.thesis
-    return ProposalOut(
+    out = ProposalOut(
         versions=thesis.versions if thesis else [],
         thesis_code=thesis and thesis.code,
         phase=user.phase,
         upload_block=block,
         freeze_at=s.closes_at if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.due_at else None,
     )
+    requested = {v.id for v in thesis.versions if v.delete_requested_at} if thesis else set()
+    for v in out.versions:
+        deletable = block is None and _in_current_phase(user, v)
+        v.can_request_delete, v.delete_pending = deletable and v.id not in requested, deletable and v.id in requested
+    return out
+
+
+def _in_current_phase(user: User, v) -> bool:
+    # Only this phase's uploads since it started; earlier phases and semesters are final submissions.
+    return v.phase == user.phase and v.created_at >= user.phase_started_at
+
+
+def _deletable(db: Session, version: ProposalVersion) -> User | None:
+    """The version's student while it can still be deleted (their current thesis and phase, uploads still open), else None.
+
+    A submission is final once its phase closes, so a request that isn't approved by then lapses.
+    """
+    student = version.proposal.thesis.student
+    if student is None or student.thesis_id != version.proposal.thesis_id or not _in_current_phase(student, version):
+        return None
+    return student if _upload_block(db, student)[0] is None else None
 
 
 def _lock_thesis(db: Session, user: User) -> Thesis | None:
@@ -173,7 +195,8 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             )
             db.add(version)
         else:
-            # Identical submission already stored: reuse its file and move that version to the top.
+            # Identical submission already stored: reuse its file and move that version to the top. Uploading it
+            # again means the student wants it, so a pending delete request for it is dropped.
             keep_new_file = False
             moved_from = same.version_no
             same.version_no = 0
@@ -182,7 +205,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             db.execute(
                 update(ProposalVersion)
                 .where(ProposalVersion.id == same.id)
-                .values(version_no=last, created_at=datetime.now(timezone.utc), **fields)
+                .values(version_no=last, created_at=datetime.now(timezone.utc), delete_requested_at=None, **fields)
             )
         progress_service.sync_deliverable(db, gm, user)
         db.commit()
@@ -197,6 +220,82 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(thesis)
     return get_mine(db, user)
+
+
+def request_delete(db: Session, user: User, version_id: int) -> ProposalOut:
+    """Student: ask the coordinator to delete one of their versions. Same rule as before: current phase, still open."""
+    version = user.thesis_id and db.scalar(
+        select(ProposalVersion).join(Proposal).where(ProposalVersion.id == version_id, Proposal.thesis_id == user.thesis_id)
+    )
+    if not version:
+        # Other students' ids give 404, not 403, so ids are not leaked.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
+    if version.delete_requested_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Deletion already requested, waiting for the coordinator")
+    if _deletable(db, version) is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This version is a final submission, so it can't be deleted")
+    version.delete_requested_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user.thesis)
+    return get_mine(db, user)
+
+
+def _requested() -> Select:
+    return select(ProposalVersion).where(ProposalVersion.delete_requested_at.is_not(None))
+
+
+def pending_delete_requests(db: Session) -> list[DeleteRequestOut]:
+    # Lapsed requests (the phase closed first) are left out. Few rows, so the rule is checked in Python.
+    out = []
+    for v in db.scalars(_requested().order_by(ProposalVersion.delete_requested_at)):
+        if student := _deletable(db, v):
+            row = DeleteRequestOut.model_validate(
+                {**ProposalVersionOut.model_validate(v).model_dump(), "delete_requested_at": v.delete_requested_at,
+                 "student": PersonOut.model_validate(student), "thesis_code": v.proposal.thesis.code}
+            )
+            out.append(row)
+    return out
+
+
+def count_delete_requests(db: Session) -> int:
+    return len(pending_delete_requests(db))
+
+
+def _pending_request(db: Session, version_id: int) -> ProposalVersion:
+    version = db.get(ProposalVersion, version_id)
+    if version is None or version.delete_requested_at is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending delete request with that id")
+    return version
+
+
+def approve_delete(db: Session, version_id: int) -> None:
+    """Coordinator: delete the version and its PDF. Later versions move down so numbers stay in order."""
+    thesis_id = _pending_request(db, version_id).proposal.thesis_id
+    # Row lock so an upload on the same thesis can't race on version numbers; re-read everything after it.
+    thesis = db.scalar(select(Thesis).where(Thesis.id == thesis_id).with_for_update())
+    db.expire_all()
+    version = _pending_request(db, version_id)
+    student = _deletable(db, version)
+    if student is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "This version became a final submission when its phase closed, so it can't be deleted"
+        )
+    stored, removed_no = version.stored_filename, version.version_no
+    db.delete(version)
+    db.flush()
+    _close_gap(db, thesis.proposal.id, removed_no)
+    if gm := progress_service.group_milestone(db, student):
+        progress_service.sync_deliverable(db, gm, student)
+    if progress_service.submitted_at(db, student) is None:
+        thesis.defer_pending = False  # a deferral needs a P3 submission this semester
+    db.commit()
+    # File goes only after the row is gone, so a failed commit never loses a PDF.
+    (_upload_dir() / stored).unlink(missing_ok=True)
+
+
+def reject_delete(db: Session, version_id: int) -> None:
+    _pending_request(db, version_id).delete_requested_at = None
+    db.commit()
 
 
 def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, str]:

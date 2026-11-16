@@ -185,3 +185,65 @@ def test_pdf_needs_its_eof_trailer(client, db):
     assert upload(client, h, content=b"%PDF-1.4\nnot really a pdf").status_code == 422
     assert upload(client, h, content=PDF + b"\n" * 100).status_code == 201  # trailing bytes after %%EOF are fine
     assert upload(client, h, content=PDF + b"x" * 2048).status_code == 422  # %%EOF not near the end
+
+
+def _ask(client, h, v):
+    return client.post(f"/api/proposals/versions/{v['id']}/delete-request", headers=h)
+
+
+def test_coordinator_approves_a_version_delete_request(client, db, tmp_path):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    h, other = student(client, db, "s@x.com"), student(client, db, "o@x.com")
+    for t in ("a", "b", "c"):
+        upload(client, h, content=PDF + t.encode(), title=t)
+    c, b, a = client.get("/api/proposals/mine", headers=h).json()["versions"]
+    assert a["can_request_delete"] and not a["delete_pending"]
+
+    assert _ask(client, other, a).status_code == 404  # not their version
+    mine = _ask(client, h, a).json()
+    assert [(v["title"], v["delete_pending"], v["can_request_delete"]) for v in mine["versions"]][-1] == ("a", True, False)
+    assert _ask(client, h, a).status_code == 409  # already asked
+    assert client.get("/api/proposals/delete-requests", headers=h).status_code == 403  # coordinator only
+    assert client.get("/api/auth/me/counts", headers=coord).json()["version_delete_requests"] == 1
+    [req] = client.get("/api/proposals/delete-requests", headers=coord).json()
+    assert (req["id"], req["title"], req["student"]["email"]) == (a["id"], "a", "s@x.com")
+
+    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 204
+    versions = client.get("/api/proposals/mine", headers=h).json()["versions"]
+    assert [(v["title"], v["version_no"]) for v in versions] == [("c", 2), ("b", 1)]
+    assert len(list((tmp_path / "proposals").iterdir())) == 2  # the PDF is gone too
+    assert client.get(f"/api/proposals/versions/{a['id']}/file", headers=h).status_code == 404
+    assert client.get("/api/proposals/delete-requests", headers=coord).json() == []
+    versions = upload(client, h, content=PDF + b"d", title="d").json()["versions"]
+    assert [(v["title"], v["version_no"]) for v in versions] == [("d", 3), ("c", 2), ("b", 1)]
+
+
+def test_rejected_or_reuploaded_requests_keep_the_version(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    h = student(client, db, "s@x.com")
+    v = upload(client, h).json()["versions"][0]
+    _ask(client, h, v)
+    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 204
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"][0]["can_request_delete"] is True
+    assert client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord).status_code == 404
+
+    _ask(client, h, v)
+    upload(client, h)  # the same upload again: they want it, so the request is dropped
+    assert client.get("/api/proposals/delete-requests", headers=coord).json() == []
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"][0]["delete_pending"] is False
+
+
+def test_delete_requests_lapse_when_the_phase_closes(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    h = student(client, db, "s@x.com")
+    v = upload(client, h).json()["versions"][0]
+    _ask(client, h, v)
+    p1 = db.get(MilestoneTemplate, Phase.P1)
+    p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0  # closed: v is the final submission
+    db.flush()
+    assert client.get("/api/proposals/delete-requests", headers=coord).json() == []
+    res = client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord)
+    assert res.status_code == 409
+    mine = client.get("/api/proposals/mine", headers=h).json()["versions"][0]
+    assert (mine["delete_pending"], mine["can_request_delete"]) == (False, False)
+    assert _ask(client, h, v).status_code == 409

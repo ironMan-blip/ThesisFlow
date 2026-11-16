@@ -13,8 +13,11 @@ from app.schemas.user import MAX_PASSWORD, UserCreate
 from app.security import create_access_token, hash_password, verify_password
 
 _DUMMY_HASH = hash_password("timing-equaliser")
+# Same text for every clash, so sign-up can't reveal which IDs or emails have accounts. Someone who really applied
+# logs in with their password: login (which needs that password) then says whether the request is waiting or expired.
 REGISTER_TAKEN = (
-    "This ID number or email can't be registered. If you already have an account or applied, log in or contact the coordinator"
+    "This ID number or email can't be registered. If you already applied, log in with your password to see "
+    "your request's status. If you didn't, contact the coordinator"
 )
 
 
@@ -122,8 +125,14 @@ def login(db: Session, id_number: str, password: str, ip: str) -> str:
     for key, _ in keys:
         rate_limit.unhit(key)
     if not user.approved:
+        if datetime.now(timezone.utc) >= user.created_at + REVIEW_WINDOW:
+            # register() replaces a request nobody decided in time.
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Your registration request expired without a decision. Register again"
+            )
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
+            status.HTTP_403_FORBIDDEN,
+            f"Your registration request is waiting for coordinator approval (within {REVIEW_HOURS} hours of applying)",
         )
     rate_limit.remember_ip(account, ip)
     return create_access_token(user.id, user.password_hash, user.session_epoch)
