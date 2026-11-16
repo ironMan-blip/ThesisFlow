@@ -143,14 +143,14 @@ async def validation_error(_: Request, exc: RequestValidationError):
 @app.exception_handler(DataError)
 async def bad_value(_: Request, exc: DataError):
     # Postgres refused a value no schema catches: a NUL character in text, or an id past the integer range.
-    logging.getLogger(__name__).info("Database refused a value: %s", exc.orig)
+    log.info("Database refused a value: %s", exc.orig)
     return JSONResponse(status_code=422, content={"detail": "request: contains a value the server can't store"})
 
 
 @app.exception_handler(OperationalError)
 async def database_unavailable(_: Request, exc: OperationalError):
     # Postgres down or restarting: say so (503) instead of a bare 500, so the UI shows a clear message.
-    logging.getLogger(__name__).error("Database unavailable: %s", exc.orig)
+    log.error("Database unavailable: %s", exc.orig)
     return JSONResponse(
         status_code=503,
         content={"detail": "ThesisFlow can't reach its database right now. Try again in a moment."},

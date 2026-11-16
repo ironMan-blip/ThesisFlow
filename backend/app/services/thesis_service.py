@@ -25,8 +25,6 @@ from app.models.user import Role, User
 from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
 from app.services import progress_service, proposal_service  # proposal_service imports us too; used at call time only
 
-LIVE = (ThesisStatus.pending, ThesisStatus.active)
-
 
 def new_code(db: Session) -> str:
     # "T" + 8 random digits; retry on the rare clash. The unique column guards concurrent accepts.

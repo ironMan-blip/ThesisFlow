@@ -2,7 +2,7 @@
 
 A web platform for running undergraduate theses, built for CSE470 (Software Engineering) at BRAC University.
 
-ThesisFlow brings the thesis process into one place: students submit their proposals and track deadlines, faculty sign up and review work, and a single coordinator runs the course (approves sign-ups, sets phase deadlines, cancels scheduled deletions). The full requirements are in `470_srs_g7.pdf`.
+ThesisFlow brings the thesis process into one place: students submit their proposals and track deadlines, faculty sign up and review work, and a single coordinator runs the course (approves sign-ups, sets phase deadlines, cancels scheduled deletions). The full requirements are in `docs/470_srs_g7.pdf`.
 
 **Stack:** FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + Tailwind, all run with Docker Compose.
 
@@ -67,9 +67,9 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 
 ## Class Diagram
 
-![ThesisFlow class diagram](470_class_diagram_g7.svg)
+![ThesisFlow class diagram](docs/470_class_diagram_g7.svg)
 
-Member 3's part (auth & accounts, F11–F15), made in draw.io. Edit `470_class_diagram_g7.drawio` in draw.io, then export the `.svg` and `.png`. The other members' parts will be added to this same file.
+Member 3's part (auth & accounts, F11–F15), made in draw.io. Edit `docs/470_class_diagram_g7.drawio` in draw.io, then export the `.svg` and `.png`. The other members' parts will be added to this same file.
 
 ## Architecture
 
@@ -313,6 +313,8 @@ backend/app/
   deps.py       get_current_user, require_roles(...)
   rate_limit.py request limits (middleware)
   security.py   password hashing and JWTs
+  passwords.py  password strength rules (sign-up and ADMIN_PASSWORD)
+  virus_scan.py ClamAV scan of uploads
   config.py     settings from .env
   seed.py       dev student + faculty
 backend/alembic/versions/   DB migrations
@@ -325,6 +327,7 @@ frontend/src/
   useAction.js  busy / error / success state for a page's API calls
   tools.jsx     nav + dashboard entry for each tool key the API returns in user.tools
   format.js     shared display formatting
+docs/           SRS, class diagram (draw.io source + exports), contribution tracker
 ```
 
 **Rule: logic lives in the backend.** The frontend only shows what the API returns and sends what the user typed. Validation, permissions, status changes, calculations, filtering, sorting, and "can this user do X" checks all go in `services/`. If a page needs a derived value or a flag (e.g. `can_edit`), the API returns it. The frontend never decides it.

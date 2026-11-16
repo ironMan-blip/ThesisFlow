@@ -141,7 +141,6 @@ def test_student_late_days_and_penalty(client, db):
 def test_each_group_gets_its_own_milestone_and_extension(client, db):
     # MilestoneTemplate is the coordinator's deadline; GroupMilestone is one group's copy; its Deliverable is the
     # version that counts (the latest upload).
-    coord = auth(client, db, "c@x.com", Role.coordinator)
     (s, sup), other = supervised_student(client, db, "s@x.com"), student(client, db, "o@x.com")
     close_registration(db)
     now = datetime.now(timezone.utc)
