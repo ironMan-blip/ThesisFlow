@@ -8,7 +8,7 @@ from app.database import Base
 
 
 class ThesisStatus(str, enum.Enum):
-    pending = "pending"  # waiting for the supervisor to accept; no thesis ID yet
+    pending = "pending"  # waiting for the supervisor to accept
     active = "active"
     completed = "completed"
     dropped = "dropped"  # archived: the student restarted at P1 or left; versions are kept
@@ -20,7 +20,7 @@ class Thesis(Base):
     __tablename__ = "theses"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # The thesis ID people see, e.g. T12345678; issued when the supervisor accepts and the group is formed.
+    # The thesis ID people see, e.g. T12345678; issued when the group registers for P1.
     code: Mapped[str | None] = mapped_column(String(9), unique=True)
     # SET NULL everywhere: deleting an account never deletes a thesis or its versions.
     student_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)

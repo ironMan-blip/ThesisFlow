@@ -82,7 +82,7 @@ def test_group_forms_when_the_supervisor_accepts(client, db):
     assert answer(client, sup, t["id"]) == 204
     flags = mine(client, s)
     t = flags["thesis"]
-    assert t["status"] == "active" and re.fullmatch(r"T\d{8}", t["code"])
+    assert (t["status"], t["code"]) == ("active", None)  # the thesis ID comes at P1 registration
     assert (flags["can_cancel"], flags["show_p1_registration"], flags["can_add_co_supervisor"]) == (False, True, True)
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
     assert [x["id"] for x in client.get("/api/theses", headers=sup).json()] == [t["id"]]
@@ -95,6 +95,7 @@ def test_co_supervisor_joins_a_formed_group_once_both_accept(client, db):
     sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
     form_group(client, db, s, sup)
     assert client.post("/api/theses/mine/register", headers=s).status_code == 200
+    assert re.fullmatch(r"T\d{8}", mine(client, s)["thesis"]["code"])
     tid = mine(client, s)["thesis"]["id"]
     vid = upload(client, s).json()["versions"][0]["id"]
     file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code

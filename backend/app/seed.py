@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import MilestoneTemplate, Phase, Proposal, ProposalVersion, Thesis, ThesisStatus
 from app.models.user import Role
-from app.services import auth_service, progress_service, thesis_service
+from app.services import auth_service, progress_service
 from app.services.proposal_service import _upload_dir
 
 FACULTY = [
@@ -105,7 +105,7 @@ def main():
                 student_id=student.id,
                 supervisor_id=fac[sup].id,
                 status=ThesisStatus.pending if state == "pending" else ThesisStatus.active,
-                code=None if state == "pending" else thesis_service.new_code(db),
+                code=None if state == "pending" else progress_service.new_code(db),
                 p1_registered=state != "pending",
             )
             if co:

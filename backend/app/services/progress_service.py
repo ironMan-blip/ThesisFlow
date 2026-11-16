@@ -9,6 +9,7 @@
 - The semester rollover moves everyone on and clears the deadlines for the next semester.
 """
 
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -257,6 +258,14 @@ def can_register(db: Session, user: User) -> bool:
     )
 
 
+def new_code(db: Session) -> str:
+    # "T" + 8 random digits; retry on the rare clash. The unique column guards concurrent registrations.
+    while True:
+        code = f"T{secrets.randbelow(10**8):08d}"
+        if not db.scalar(select(Thesis.id).where(Thesis.code == code)):
+            return code
+
+
 def register_p1(db: Session, user: User) -> None:
     """Student: register their accepted group for P1 this semester. Only in the first week of the semester."""
     user = db.scalar(select(User).where(User.id == user.id).with_for_update())
@@ -265,6 +274,7 @@ def register_p1(db: Session, user: User) -> None:
             raise HTTPException(status.HTTP_409_CONFLICT, "P1 registration is closed, register in the first week of next semester")
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a P1 student with an accepted thesis group can register, once per semester")
     user.thesis.p1_registered = True
+    user.thesis.code = user.thesis.code or new_code(db)  # kept if the group registers again in a later semester
     db.commit()
 
 

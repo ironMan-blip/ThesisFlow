@@ -1,4 +1,5 @@
-"""Thesis groups: a student asks a supervisor; the group is formed (thesis active, thesis ID issued) when they accept.
+"""Thesis groups: a student asks a supervisor; the group is formed (thesis active) when they accept. The thesis ID is
+issued when the group registers for P1 (progress_service.register_p1).
 
 A co-supervisor is optional and can only be added to a formed group. They join once both they and the supervisor
 accept; either declining just leaves the group without a co-supervisor, and the student can pick someone else.
@@ -12,8 +13,6 @@ Every proposal version is stored under the thesis, so it is never lost when acco
 semesters and accounts and never sees individual theses.
 """
 
-import secrets
-
 from fastapi import HTTPException, status
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -24,14 +23,6 @@ from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
 from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
 from app.services import progress_service, proposal_service  # proposal_service imports us too; used at call time only
-
-
-def new_code(db: Session) -> str:
-    # "T" + 8 random digits; retry on the rare clash. The unique column guards concurrent accepts.
-    while True:
-        code = f"T{secrets.randbelow(10**8):08d}"
-        if not db.scalar(select(Thesis.id).where(Thesis.code == code)):
-            return code
 
 
 def faculty(db: Session) -> list[User]:
@@ -187,7 +178,7 @@ def decide(db: Session, member: User, thesis_id: int, accept: bool, co_superviso
         raise HTTPException(status.HTTP_409_CONFLICT, "The student's account is frozen, so no co-supervisor can join now")
     if slot == "supervisor":
         if accept:
-            thesis.status, thesis.code = ThesisStatus.active, new_code(db)
+            thesis.status = ThesisStatus.active  # the thesis ID comes at P1 registration
             # A co-supervisor named on an older request was part of what the supervisor just accepted.
             thesis.co_supervisor_approved = thesis.co_supervisor_id is not None
         else:
