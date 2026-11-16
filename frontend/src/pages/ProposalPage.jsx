@@ -45,7 +45,11 @@ export default function ProposalPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Proposal" intro={`Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept. To delete one, give a reason: if your supervisor approves, it is deleted ${user.deletion_days} days later unless they cancel it, and only if the phase is still open then. Your latest upload when the phase closes is your final submission.`} />
+      <PageHeader title="Proposal" intro="Upload a new version of your proposal and see everything you have handed in." help={[
+        "Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept.",
+        "Your latest upload when the phase closes is your final submission.",
+        `To delete a version, give a reason. If your supervisor approves, it is deleted ${user.deletion_days} days later, unless they cancel it or the phase has closed by then.`,
+      ]} />
 
       {proposal?.versions.filter((v) => v.delete_by_staff && v.delete_pending).map((v) => (
         // The supervisor scheduled this: the student must get the chance to object in time.

@@ -9,10 +9,10 @@ import { useAction } from "../useAction";
 // person(r): who asked (the row itself for account requests); details(r): extra content under the person.
 // executesAt(r): for deletions only. Null means waiting for approval (approve or reject); a date means approved, so
 // it runs by itself then and the coordinator can only cancel it.
-function RequestsPage({ path, title, intro, approved, rejected, dateField, person = (r) => r, details, executesAt }) {
+function RequestsPage({ path, title, intro, help, approved, rejected, dateField, person = (r) => r, details, executesAt }) {
   const [requests, setRequests] = useState(null);
   const { user, refreshCounts } = useOutletContext();
-  const { busy, error, notice, setError, run } = useAction(); // busy key is the request id being decided
+  const { busy, error, notice, setError, run, clear } = useAction(); // busy key is the request id being decided
 
   useEffect(() => {
     api(path).then(setRequests).catch((err) => setError(err.message));
@@ -30,9 +30,9 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField, perso
 
   return (
     <div className="space-y-8">
-      <PageHeader title={title} intro={intro(user)} />
+      <PageHeader title={title} intro={intro(user)} help={help?.(user)} />
 
-      <Alerts error={error} notice={notice} />
+      <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
       <section className="card overflow-hidden">
         {!requests ? (
@@ -95,7 +95,13 @@ export const DeletionRequestsPage = () => (
   <RequestsPage
     path="/auth/deletion-requests"
     title="Deletion requests"
-    intro={(u) => `Account deletions, each with its reason. Approve or reject a request. An approved account is deleted ${u.deletion_days} days after you approve it, unless you cancel it here before then; nobody else can. The thesis and every proposal version are kept as an archive. If a faculty member takes on a thesis meanwhile, their deletion is dropped.`}
+    intro={() => "Account deletions waiting for your decision, each with its reason."}
+    help={(u) => [
+      `An approved account is deleted ${u.deletion_days} days after you approve it.`,
+      "Until then you can cancel it here. Nobody else can.",
+      "The thesis and every proposal version are kept as an archive.",
+      "If a faculty member takes on a thesis meanwhile, their deletion is dropped.",
+    ]}
     approved="will be deleted after the waiting period"
     rejected="keeps their account"
     dateField="deletion_requested_at"
@@ -110,7 +116,12 @@ export const RestartRequestsPage = () => (
   <RequestsPage
     path="/auth/restart-requests"
     title="Restart requests"
-    intro={() => "Students whose account froze after a missed deadline or a second deferral. Approving moves them back to P1 at the next semester rollover, fully fresh: their old thesis is archived with all its versions, and their next group gets a new thesis ID."}
+    intro={() => "Students whose account froze after a missed deadline or a second deferral."}
+    help={() => [
+      "Approving moves the student back to P1 at the next semester rollover.",
+      "Their old thesis is archived with all its versions.",
+      "Their next group gets a new thesis ID.",
+    ]}
     approved="restarts at P1 next semester"
     rejected="stays frozen"
     dateField="restart_requested_at"

@@ -37,7 +37,7 @@ export default function ThesesPage() {
   const { user, refreshCounts } = useOutletContext();
   const [theses, setTheses] = useState(null);
   const [requests, setRequests] = useState([]);
-  const { busy, error, notice, setError, run } = useAction();
+  const { busy, error, notice, setError, run, clear } = useAction();
   const [deleting, setDeleting] = useState(null); // version whose delete reason is being written
 
   const load = useCallback(async () => {
@@ -96,10 +96,16 @@ export default function ThesesPage() {
     <div className="space-y-8">
       <PageHeader
         title="Theses"
-        intro={`Supervision requests, and the theses you supervise or co-supervise with every proposal version. As the supervisor you decide: students' delete requests (approve or reject), deleting a version yourself with a reason (never a phase's final one), cancelling any delete in its ${user.deletion_days} days, and deferring a thesis after its P3 submission (once means P3 again next semester, twice freezes the student).`}
+        intro="Supervision requests, and every thesis you supervise or co-supervise."
+        help={[
+          "As the supervisor, you approve or reject a student's request to delete a proposal version.",
+          "You can also delete a version yourself, with a reason. A phase's final version can't be deleted.",
+          `Any delete runs ${user.deletion_days} days later. Until then you can cancel it.`,
+          "After the P3 submission you can defer a thesis: once means P3 again next semester, twice freezes the student.",
+        ]}
       />
 
-      <Alerts error={error} notice={notice} />
+      <Alerts error={deleting ? null : error} notice={notice} floating onDismiss={clear} />
 
       <Requests requests={requests} decide={decide} busy={busy} />
 

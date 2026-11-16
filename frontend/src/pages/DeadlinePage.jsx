@@ -35,7 +35,7 @@ export default function DeadlinePage() {
   const [confirming, setConfirming] = useState(false);
   const [offset, setOffset] = useState(0); // server clock minus browser clock
   const [now, setNow] = useState(Date.now());
-  const { busy: saving, error, notice, setError, run } = useAction(); // busy key is the phase being saved
+  const { busy: saving, error, notice, setError, run, clear } = useAction(); // busy key is the phase being saved
 
   const show = useCallback((res) => {
     setData(res);
@@ -113,7 +113,7 @@ export default function DeadlinePage() {
         </section>
       )}
 
-      <Alerts error={error} notice={notice} />
+      <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
       {data?.registration_closes_at && (
         <p className="text-sm text-zinc-600">

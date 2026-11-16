@@ -13,7 +13,7 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState(null);
   const [query, setQuery] = useState("");
   const [deleting, setDeleting] = useState(null); // account whose deletion reason is being written
-  const { busy, error, notice, setError, run } = useAction(); // busy key is the account id being scheduled
+  const { busy, error, notice, setError, run, clear } = useAction(); // busy key is the account id being scheduled
 
   const [role, setRole] = useState("student");
   const tab = TABS[role];
@@ -39,9 +39,13 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Accounts" intro={`Every approved account. A deletion needs a reason and runs ${user.deletion_days} days later; until then you can cancel it under Deletion requests. Its thesis and proposal versions are kept as an archive.`} />
+      <PageHeader title="Accounts" intro="Every approved account. Filter by role or search by ID." help={[
+        "Deleting an account needs a written reason.",
+        `The deletion runs ${user.deletion_days} days later. Until then you can cancel it under Deletion requests.`,
+        "The account's thesis and proposal versions are kept as an archive.",
+      ]} />
 
-      <Alerts error={error} notice={notice} />
+      <Alerts error={deleting ? null : error} notice={notice} floating onDismiss={clear} />
 
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 sm:px-6">

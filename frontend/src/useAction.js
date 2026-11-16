@@ -1,7 +1,8 @@
 import { useState } from "react";
 
 // Runs a page's API calls: tracks which one is busy and keeps its error or success message.
-// run(key, fn): fn may return the success message to show.
+// run(key, fn): fn may return the success message to show. Messages stay until the next action or clear():
+// some (semester rollover, registration) are too long to vanish on a timer.
 export function useAction() {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
@@ -20,5 +21,10 @@ export function useAction() {
     }
   };
 
-  return { busy, error, notice, setError, setNotice, run };
+  const clear = () => {
+    setError(null);
+    setNotice(null);
+  };
+
+  return { busy, error, notice, setError, setNotice, run, clear };
 }

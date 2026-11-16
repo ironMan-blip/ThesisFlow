@@ -8,7 +8,7 @@ export default function ThesisPage() {
   const [state, setState] = useState(null);
   const [faculty, setFaculty] = useState([]);
   const [supervisor, setSupervisor] = useState("");
-  const { busy, error, notice, setError, run } = useAction();
+  const { busy, error, notice, setError, run, clear } = useAction();
 
   useEffect(() => {
     api("/theses/mine").then(setState).catch((err) => setError(err.message));
@@ -60,10 +60,15 @@ export default function ThesisPage() {
     <div className="space-y-8">
       <PageHeader
         title="Thesis group"
-        intro="You need a thesis group to upload proposals: you and a supervisor. Once your supervisor accepts, you can add a co-supervisor if you like; they join when both they and your supervisor accept. Every proposal version is kept under your thesis ID."
+        intro="You need a thesis group, you and a supervisor, before you can upload proposals."
+        help={[
+          "Choose a supervisor and send a request. The group forms when they accept.",
+          "After that you can add a co-supervisor if you like. They join when both they and your supervisor accept.",
+          "Every proposal version is kept under your thesis ID.",
+        ]}
       />
 
-      <Alerts error={error} notice={notice} />
+      <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
       {!state ? (
         <Skeleton rows={2} row="h-28 rounded-xl" className="space-y-4" />
