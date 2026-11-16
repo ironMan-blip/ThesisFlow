@@ -2,11 +2,13 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import delete, select
 
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
-from app.models.user import Role
+from app.models.user import Role, User
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
+from app.services import proposal_service
 from tests.helpers import PDF, auth, me, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
@@ -198,3 +200,13 @@ def test_grace_period_warns_and_then_uploads_close(client, db):
     assert mine["versions"][0]["can_delete"] is False  # a final submission
     res = client.delete(f"/api/proposals/versions/{v['id']}", headers=h)
     assert (res.status_code, res.json()["detail"]) == (409, "This version is a final submission, so it can't be removed")
+
+
+def test_removing_a_version_after_the_account_is_deleted_is_401(client, db):
+    h = student(client, db, "s@x.com")
+    v = upload(client, h).json()["versions"][0]
+    user = db.scalar(select(User).where(User.email == "s@x.com"))
+    db.execute(delete(User).where(User.id == user.id))  # deleted by the coordinator mid-request
+    with pytest.raises(Exception) as exc:
+        proposal_service.delete_version(db, user, v["id"])
+    assert getattr(exc.value, "status_code", None) == 401

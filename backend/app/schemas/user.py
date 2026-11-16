@@ -5,8 +5,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, fie
 
 from app.models.milestone import Phase
 from app.models.user import REVIEW_HOURS, Role
-
-MAX_PASSWORD = 128
+from app.passwords import MAX_PASSWORD, MIN_PASSWORD, check_strength
 
 
 class UserCreate(BaseModel):
@@ -16,7 +15,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     id_number: str
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=8, max_length=MAX_PASSWORD)
+    password: str = Field(min_length=MIN_PASSWORD, max_length=MAX_PASSWORD)
     # Coordinator is the single admin account from settings; nobody can sign up as one.
     role: Literal[Role.student, Role.faculty] = Role.student
     initials: str | None = None  # faculty only
@@ -31,11 +30,7 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def strong_password(cls, v: str) -> str:
-        if not (any(c.isupper() for c in v) and any(c.islower() for c in v) and any(c.isdigit() for c in v)):
-            raise ValueError("Password must contain an uppercase letter, a lowercase letter and a number")
-        if any(c.isspace() for c in v):
-            raise ValueError("Password must not contain spaces")
-        return v
+        return check_strength(v)
 
     @field_validator("initials")
     @classmethod

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -71,12 +71,20 @@ def _lock_thesis(db: Session, user: User) -> Thesis | None:
     return db.scalar(select(Thesis).where(Thesis.id == user.thesis_id).with_for_update())
 
 
+def _refresh_user(db: Session, user: User) -> None:
+    # Re-read under the thesis lock: the semester may have moved on, or the account been deleted, since the request began.
+    try:
+        db.refresh(user)
+    except InvalidRequestError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account no longer exists") from None
+
+
 def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     """Stream the upload to disk. Rejects non-PDF and oversized files. Returns name, size and sha256."""
     max_bytes = settings.max_upload_mb * 1024 * 1024
     head = file.file.read(5)
     if head != b"%PDF-":
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "File must be a PDF")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File must be a PDF")
     stored = f"{uuid.uuid4().hex}.pdf"
     path = _upload_dir() / stored
     size = len(head)
@@ -88,7 +96,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
                 size += len(chunk)
                 if size > max_bytes:
                     raise HTTPException(
-                        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File is larger than {settings.max_upload_mb} MB"
+                        status.HTTP_413_CONTENT_TOO_LARGE, f"File is larger than {settings.max_upload_mb} MB"
                     )
                 out.write(chunk)
                 digest.update(chunk)
@@ -116,16 +124,16 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title must be 1 to 255 characters")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Title must be 1 to 255 characters")
     if not abstract or len(abstract) > MAX_ABSTRACT_CHARS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Abstract must be 1 to {MAX_ABSTRACT_CHARS} characters")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Abstract must be 1 to {MAX_ABSTRACT_CHARS} characters")
 
     stored, size, sha256 = _save_pdf(file)
     keep_new_file = True
     try:
         thesis = _lock_thesis(db, user)
         # Checked again under the lock: grace may have ended, or the semester moved on, while the file was saved.
-        db.refresh(user)
+        _refresh_user(db, user)
         if block := _upload_block(db, user)[0]:
             raise HTTPException(status.HTTP_409_CONFLICT, block)
         proposal = thesis.proposal
@@ -191,6 +199,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
 
 def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     thesis = user.thesis_id and _lock_thesis(db, user)
+    _refresh_user(db, user)
     # Read after the lock so version_no is current. Other users' ids give 404, not 403, so ids are not leaked.
     version = thesis and db.scalar(
         select(ProposalVersion)
@@ -199,7 +208,7 @@ def delete_version(db: Session, user: User, version_id: int) -> ProposalOut:
     )
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
-    if not next(v.can_delete for v in get_mine(db, user).versions if v.id == version.id):
+    if not next((v.can_delete for v in get_mine(db, user).versions if v.id == version.id), False):
         # Submissions are final once the phase closes; removing one could also turn it into a missed deadline.
         raise HTTPException(status.HTTP_409_CONFLICT, "This version is a final submission, so it can't be removed")
     stored, removed_no = version.stored_filename, version.version_no

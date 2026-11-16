@@ -54,14 +54,14 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Uploads and deletes on one thesis are locked so version numbers never clash.
 
 **Security**
-- Rate limits per minute: login 60 per IP and 10 per account, register 30 per IP, other API paths 300 per user (`429` over limit).
+- Rate limits per minute: login 60 per IP, 10 failed tries per account per IP and 100 per account overall except from IPs that logged in to it before (right logins don't count), register 30 per IP, other API paths 300 per user (`429` over limit).
 - Constant-time password check so IDs cannot be guessed by timing.
 - Changing a password logs out every older session.
 - Required secrets with no defaults; `JWT_SECRET` must be at least 32 characters.
 - All rules, permissions and derived values live in the backend; the frontend only displays them.
 
 **Dev and ops**
-- One command start: `docker compose up` (frontend, backend, db).
+- One command start: `docker compose up` (frontend, backend, db, redis).
 - Auto migrations and coordinator account sync on backend start.
 - Seed script for a dev student and faculty; Swagger API docs; pytest suite; CI on PRs.
 
@@ -81,7 +81,7 @@ Member 3's part (auth & accounts, F11–F15), made in draw.io. Open `470_class_d
 4. **Service** checks PDF + size, saves the file, adds a version row.
 5. Server replies with JSON; the page shows the new version list.
 
-Run everything with `docker compose up` — it starts 3 containers: **frontend**, **backend**, **db**. Secrets + coordinator account come from `.env` (no defaults). Tests: `pytest` in `backend/tests/`.
+Run everything with `docker compose up` — it starts 4 containers: **frontend**, **backend**, **db**, **redis**. Secrets + coordinator account come from `.env` (no defaults). Tests: `pytest` in `backend/tests/`.
 
 ## Getting started
 
@@ -99,7 +99,7 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 | What | Where |
 |------|-------|
 | Web app | http://localhost:5174 |
-| API docs (Swagger) | http://localhost:8000/docs |
+| API docs (Swagger) | http://localhost:5174/docs (proxied; the backend has no host port) |
 | Tests | `docker compose exec backend pytest` |
 | Database shell | `docker compose exec db psql -U thesisflow` |
 
@@ -216,15 +216,16 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 ### 8. Security
 
 - **Rate limiting** over a 60-second window (`backend/app/rate_limit.py`):
-  - `/api/auth/login`: 60 per IP, plus 10 tries per ID number (so one password can't be guessed from many IPs).
+  - `/api/auth/login`: 60 per IP, plus 10 failed tries per ID number from one IP and 100 across all IPs (so one password can't be guessed from many IPs). IPs the account logged in from before skip the all-IPs cap, so guessing can't lock the owner out of their usual devices.
   - `/api/auth/register`: 30 per IP.
   - Any other `/api/` path: 300 per logged-in user (per IP when not logged in), so users behind one shared IP don't block each other.
-  - Over the limit returns `429` with a `Retry-After` header. The counter is in memory, per backend process.
+  - Over the limit returns `429` with a `Retry-After` header. Counters live in Redis, so they are shared by every backend process and survive restarts. Each process also counts in memory, so if Redis is down the app keeps working and limits still apply, and guesses made during the outage still count once Redis is back (Redis is retried every 10 seconds).
   - The Vite proxy overwrites `X-Forwarded-For` with the real client IP, so a client cannot dodge the limit by sending its own header. The backend port is bound to `127.0.0.1` only, because it trusts that header.
 - **Passwords** are hashed with Argon2 (`pwdlib`). Login takes the same time whether the ID exists or not (a dummy hash is checked for unknown IDs), so IDs cannot be guessed from response time. Passwords longer than 128 characters are refused without hashing.
 - **Tokens** are HS256 JWTs holding the user ID, an expiry and a short stamp of the password hash. Every request re-checks the stamp, so changing a password (for example `ADMIN_PASSWORD`) logs out all older sessions. Unapproved accounts are refused even with a token.
 - `JWT_SECRET` shorter than 32 characters stops the backend from starting.
 - **No CORS**: the browser only talks to the Vite server, which forwards `/api` to the backend.
+- **Outages**: every container restarts itself if it crashes. While Postgres is down the API answers `503` with a clear message (the UI shows it) and recovers on its own when Postgres is back.
 - **Race safety**: group requests, P1 registration, uploads, deletes, deferrals and the semester rollover take row locks (`SELECT … FOR UPDATE`), so two requests at once can't both pass the same check. Parallel sign-ups with the same email, ID or initials get a clean `409`.
 
 ### 9. Error responses
@@ -328,6 +329,7 @@ frontend/src/
 |--------|------|-----|
 | POST | `/api/auth/register` | anyone |
 | POST | `/api/auth/login` | anyone |
+| POST | `/api/auth/logout` (ends all of this person's sessions) | logged in |
 | GET | `/api/auth/me` | logged in |
 | POST | `/api/auth/me/deletion-request` | student, faculty |
 | GET | `/api/auth/me/counts` (pending-request badges per tool) | logged in |
@@ -351,7 +353,7 @@ frontend/src/
 | DELETE | `/api/proposals/versions/{id}` | student (own) |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisors, coordinator |
 
-Full request/response shapes are at http://localhost:8000/docs.
+Full request/response shapes are at http://localhost:5174/docs.
 
 ## Adding a feature
 

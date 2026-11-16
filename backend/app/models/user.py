@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, false, func, true
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -40,6 +40,8 @@ class User(Base):
     # Faculty only, e.g. "MMR"; uppercase letters, unique among faculty.
     initials: Mapped[str | None] = mapped_column(String(10), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    # Part of every token's stamp (security.session_stamp); logging out bumps it, ending all of this person's sessions.
+    session_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"))
     # Sign-ups start unapproved and cannot log in until the coordinator approves them.
     approved: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())

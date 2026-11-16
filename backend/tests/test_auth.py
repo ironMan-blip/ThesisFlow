@@ -1,9 +1,15 @@
 from datetime import timedelta
 
+import pytest
+from fastapi import HTTPException
+from redis import Redis
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from app import rate_limit
 from app.config import settings
+from app.database import get_db
+from app.main import app
 from app.models.user import Role, User
 from app.security import hash_password
 from app.services import auth_service
@@ -320,6 +326,36 @@ def test_login_is_rate_limited_per_account(client):
     assert login(client, id_number="87654321", password="Wrong1234").status_code == 401
 
 
+def test_failed_logins_from_one_ip_do_not_lock_out_the_owner(client, db):
+    register(client)
+    db.scalar(select(User).where(User.id_number == "12345678")).approved = True
+    db.flush()
+    for _ in range(rate_limit.LOGIN_PER_ACCOUNT):
+        with pytest.raises(HTTPException) as exc:
+            auth_service.login(db, "12345678", "Wrong1234", ip="10.0.0.9")
+        assert exc.value.status_code == 401
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db, "12345678", "Wrong1234", ip="10.0.0.9")
+    assert exc.value.status_code == 429
+    # The owner, from another IP, still gets in; right logins don't use up the budget.
+    assert all(login(client).status_code == 200 for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1))
+
+
+def test_guessing_from_many_ips_does_not_lock_out_a_known_ip(client, db, monkeypatch):
+    monkeypatch.setattr(rate_limit, "LOGIN_PER_ACCOUNT_ALL_IPS", 3)
+    register(client)
+    db.scalar(select(User).where(User.id_number == "12345678")).approved = True
+    db.flush()
+    assert login(client).status_code == 200  # the owner's usual IP is now known
+    for i in range(3):
+        with pytest.raises(HTTPException):
+            auth_service.login(db, "12345678", "Wrong1234", ip=f"10.0.0.{i}")
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db, "12345678", "Wrong1234", ip="10.0.0.99")
+    assert exc.value.status_code == 429  # new IPs hit the account-wide cap
+    assert login(client).status_code == 200
+
+
 def test_login_is_rate_limited_per_ip(client):
     body = {"email": "nobody@example.com", "password": "wrong"}
     codes = [client.post("/api/auth/login", json=body).status_code for _ in range(rate_limit.LIMITS["/api/auth/login"] + 1)]
@@ -352,3 +388,87 @@ def test_chunked_body_is_refused_before_auth(client):
         yield b"x" * 1024
 
     assert client.post("/api/proposals/mine/versions", content=body()).status_code == 411
+
+
+def test_login_still_works_and_is_limited_when_redis_is_down(client, monkeypatch):
+    # Nothing listens on port 1, so every Redis call fails at once.
+    monkeypatch.setattr(rate_limit, "redis", Redis.from_url("redis://localhost:1", socket_connect_timeout=0.5))
+    assert register(client).status_code < 300  # requests go through instead of failing on Redis
+    codes = [login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1)]
+    assert codes == [401] * rate_limit.LOGIN_PER_ACCOUNT + [429]  # memory fallback still limits guessing
+
+
+def test_guesses_during_a_redis_outage_still_count_after_it(client, monkeypatch):
+    real = rate_limit.redis
+    monkeypatch.setattr(rate_limit, "redis", Redis.from_url("redis://localhost:1", socket_connect_timeout=0.5))
+    register(client)
+    assert {login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT)} == {401}
+    monkeypatch.setattr(rate_limit, "redis", real)
+    monkeypatch.setattr(rate_limit, "_redis_down_until", 0.0)  # Redis is back
+    assert login(client, password="Wrong1234").status_code == 429
+
+
+def test_counts_from_other_processes_come_from_redis(client):
+    register(client)
+    assert {login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT)} == {401}
+    rate_limit._hits.clear()  # as if the next login reached a different backend process
+    assert login(client, password="Wrong1234").status_code == 429
+
+
+def test_database_outage_is_a_clear_503(client):
+    def down():
+        raise OperationalError("SELECT 1", {}, Exception("connection refused"))
+
+    app.dependency_overrides[get_db] = down
+    res = login(client)
+    assert (res.status_code, res.headers["retry-after"]) == (503, "5")
+    assert "database" in res.json()["detail"]
+
+
+@pytest.mark.parametrize("body", [{"full_name": "a\x00b"}, {"id_number": "1234\x00"}])
+def test_nul_characters_are_a_422_not_a_500(client, body):
+    if "full_name" in body:
+        res = client.post("/api/auth/register", json={**body, "email": "n@b.com", "id_number": "12345670", "password": "Password123"})
+    else:
+        res = client.post("/api/auth/login", data={"username": body["id_number"], "password": "x"})
+    assert res.status_code == 422, res.text
+
+
+def test_id_past_integer_range_is_a_422(client, db):
+    h = auth(client, db, "c@b.com", Role.coordinator)
+    assert client.delete(f"/api/auth/accounts/{2**40}", headers=h).status_code == 422
+
+
+def test_big_bodies_need_a_signed_in_user(client):
+    res = client.post("/api/proposals/mine/versions", content=b"x" * (70 * 1024), headers={"content-type": "application/pdf"})
+    assert res.status_code == 401
+    forged = client.post(
+        "/api/proposals/mine/versions", content=b"x" * (70 * 1024), headers={"authorization": "Bearer nope"}
+    )
+    assert forged.status_code == 401
+
+
+def test_responses_carry_security_headers(client):
+    res = client.get("/api/auth/me")
+    assert res.headers["x-content-type-options"] == "nosniff"
+    assert res.headers["x-frame-options"] == "DENY"
+    assert "default-src 'none'" in res.headers["content-security-policy"]
+
+
+@pytest.mark.parametrize("password", ["short1A", "alllowercase1", "NoDigitsHere", "Has Space1"])
+def test_weak_admin_password_refuses_to_start(password):
+    with pytest.raises(ValueError):
+        type(settings)(admin_password=password)
+
+
+def test_logout_ends_every_session_of_that_person(client, db):
+    laptop = auth(client, db, "l@b.com")
+    me_id = client.get("/api/auth/me", headers=laptop).json()["id_number"]
+    phone = {"Authorization": f"Bearer {login(client, me_id, 'Password123').json()['access_token']}"}
+    other = auth(client, db, "o@b.com")
+    assert client.post("/api/auth/logout", headers=laptop).status_code == 204
+    assert client.get("/api/auth/me", headers=laptop).status_code == 401
+    assert client.get("/api/auth/me", headers=phone).status_code == 401  # a copied token dies too
+    assert client.get("/api/auth/me", headers=other).status_code == 200  # other people stay signed in
+    fresh = {"Authorization": f"Bearer {login(client, me_id, 'Password123').json()['access_token']}"}
+    assert client.get("/api/auth/me", headers=fresh).status_code == 200

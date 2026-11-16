@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -102,17 +102,34 @@ def ensure_admin(db: Session) -> User:
     return user
 
 
-def login(db: Session, id_number: str, password: str) -> str:
-    # Per account, not per IP: stops guessing one password even from many IPs or behind one shared IP.
-    if retry := rate_limit.hit(("login", id_number[:32]), rate_limit.LOGIN_PER_ACCOUNT):
-        raise rate_limit.too_many(retry)
+def login(db: Session, id_number: str, password: str, ip: str) -> str:
+    # Per account, not just per IP: stops guessing one password from many IPs or behind one shared IP.
+    # Only failed logins count (a right one is taken back), and recorded before hashing so parallel guesses can't slip past.
+    account = id_number[:32]
+    keys = [(("login", account, ip), rate_limit.LOGIN_PER_ACCOUNT)]
+    if not rate_limit.is_known_ip(account, ip):
+        keys.append((("login", account), rate_limit.LOGIN_PER_ACCOUNT_ALL_IPS))
+    for i, (key, limit) in enumerate(keys):
+        if retry := rate_limit.hit(key, limit):
+            for done, _ in keys[:i]:
+                rate_limit.unhit(done)
+            raise rate_limit.too_many(retry)
     # Sign-up caps passwords at MAX_PASSWORD, so a longer one can't be right; skip hashing a huge input.
     user = get_by_id_number(db, id_number) if len(password) <= MAX_PASSWORD else None
     # Hash even for unknown IDs so response time doesn't reveal which IDs exist.
     if not verify_password(password[:MAX_PASSWORD], user.password_hash if user else _DUMMY_HASH) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong ID number or password")
+    for key, _ in keys:
+        rate_limit.unhit(key)
     if not user.approved:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
         )
-    return create_access_token(user.id, user.password_hash)
+    rate_limit.remember_ip(account, ip)
+    return create_access_token(user.id, user.password_hash, user.session_epoch)
+
+
+def logout_everywhere(db: Session, user: User) -> None:
+    # Bumped in SQL, so two logouts at once both count; every token issued before this stops working.
+    db.execute(update(User).where(User.id == user.id).values(session_epoch=User.session_epoch + 1))
+    db.commit()
