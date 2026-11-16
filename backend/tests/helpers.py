@@ -1,6 +1,8 @@
+import io
 from datetime import datetime, timedelta, timezone
 from itertools import count
 
+from pypdf import PdfWriter
 from sqlalchemy import update
 
 from app.models.proposal import ProposalVersion
@@ -8,7 +10,20 @@ from app.models.semester import Semester
 from app.models.user import DELETION_DELAY, Role, User
 from app.services import account_service, auth_service, proposal_service
 
-PDF = b"%PDF-1.4\n% test\n%%EOF\n"
+
+
+def make_pdf(change=None) -> bytes:
+    """A real one-page PDF; change(writer) can add to it first."""
+    writer = PdfWriter()
+    writer.add_blank_page(72, 72)
+    if change:
+        change(writer)
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+PDF = make_pdf()
 REASON = {"reason": "I uploaded the wrong file by mistake and it holds private data."}
 
 

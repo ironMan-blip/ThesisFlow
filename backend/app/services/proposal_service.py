@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
+from pypdf import PdfReader
+from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.orm import Session
@@ -17,7 +19,11 @@ from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut, ProposalVersio
 from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
-PDF_TAIL = 1024
+# Content a PDF viewer could run or hand to the OS: scripts, launch actions, attached files, XFA forms.
+ACTIVE_KEYS = {"/JS", "/JavaScript", "/EmbeddedFiles", "/EmbeddedFile", "/XFA", "/RichMedia"}
+ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToE", "/RichMediaExecute", "/SubmitForm"}
+# Bounds the object walk, so a crafted file with millions of tiny objects can't tie up a worker.
+MAX_PDF_OBJECTS = 200_000
 # Each new version is a stored PDF, so without a cap one student could fill the disk.
 MAX_VERSIONS_PER_PHASE = 20
 
@@ -125,6 +131,40 @@ def _refresh_user(db: Session, user: User) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account no longer exists") from None
 
 
+def _check_pdf(path: Path) -> None:
+    """Refuse anything a PDF reader can't open, an encrypted file (it can't be checked), or one with active content."""
+    try:
+        reader = PdfReader(path, strict=False)
+        if reader.is_encrypted:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "PDF must not be password-protected")
+        if len(reader.pages) == 0:
+            raise ValueError("no pages")
+        # Walk everything reachable from the trailer, as a viewer would; escaped and compressed names come out decoded.
+        stack, seen = [reader.trailer], set()
+        while stack:
+            obj = stack.pop()
+            if isinstance(obj, IndirectObject):
+                if (obj.idnum, obj.generation) in seen:
+                    continue
+                seen.add((obj.idnum, obj.generation))
+                if len(seen) > MAX_PDF_OBJECTS:
+                    raise ValueError("too many objects")
+                stack.append(obj.get_object())
+            elif isinstance(obj, DictionaryObject):
+                if ACTIVE_KEYS.intersection(obj) or obj.get("/S") in ACTIVE_ACTIONS:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        "PDF must not contain scripts, attached files or interactive forms",
+                    )
+                stack.extend(dict.values(obj))  # raw values, so references are walked once via `seen`
+            elif isinstance(obj, ArrayObject):
+                stack.extend(list.__iter__(obj))
+    except HTTPException:
+        raise
+    except Exception:  # pypdf raises many kinds of errors on broken files
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File must be a PDF") from None
+
+
 def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     """Stream the upload to disk. Rejects non-PDF and oversized files. Returns name, size and sha256."""
     max_bytes = settings.max_upload_mb * 1024 * 1024
@@ -135,7 +175,6 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     path = _upload_dir() / stored
     size = len(head)
     digest = hashlib.sha256(head)
-    tail = head
     try:
         with path.open("wb") as out:
             out.write(head)
@@ -147,10 +186,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
                     )
                 out.write(chunk)
                 digest.update(chunk)
-                tail = (tail + chunk)[-PDF_TAIL:]
-        # A real PDF ends with %%EOF; readers allow some trailing bytes after it, so look in the last 1 KB.
-        if b"%%EOF" not in tail:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File must be a PDF")
+        _check_pdf(path)
     except BaseException:
         path.unlink(missing_ok=True)
         raise

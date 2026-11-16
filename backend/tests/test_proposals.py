@@ -2,13 +2,14 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from pypdf.generic import DictionaryObject, NameObject, TextStringObject
 
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from app.services import proposal_service
-from tests.helpers import PDF, REASON, auth, me, run_deletions_due, student, supervised_student, upload
+from tests.helpers import PDF, REASON, make_pdf, auth, me, run_deletions_due, student, supervised_student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -177,11 +178,26 @@ def test_versions_cannot_be_deleted(client, db):
     assert "can_delete" not in v
 
 
-def test_pdf_needs_its_eof_trailer(client, db):
+def _open_action(writer, action):
+    writer._root_object[NameObject("/OpenAction")] = DictionaryObject(
+        {NameObject(k): NameObject(v) if v.startswith("/") else TextStringObject(v) for k, v in action.items()}
+    )
+
+
+def test_only_real_pdfs_without_active_content_are_stored(client, db, tmp_path):
     h = student(client, db, "s@x.com")
-    assert upload(client, h, content=b"%PDF-1.4\nnot really a pdf").status_code == 422
+    assert upload(client, h, content=b"%PDF-1.4\nnot really a pdf\n%%EOF\n").status_code == 422
     assert upload(client, h, content=PDF + b"\n" * 100).status_code == 201  # trailing bytes after %%EOF are fine
-    assert upload(client, h, content=PDF + b"x" * 2048).status_code == 422  # %%EOF not near the end
+    for bad in (
+        make_pdf(lambda w: _open_action(w, {"/S": "/JavaScript", "/JS": "app.alert('hi')"})),
+        make_pdf(lambda w: _open_action(w, {"/S": "/Launch", "/F": "calc.exe"})),
+        make_pdf(lambda w: w.add_attachment("run.exe", b"MZ")),
+        make_pdf(lambda w: w.encrypt("secret")),
+    ):
+        res = upload(client, h, content=bad)
+        assert res.status_code == 422, res.json()
+    assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 1
+    assert len(list((tmp_path / "proposals").iterdir())) == 1  # refused files are not kept
 
 
 def _ask(client, h, v, body=REASON):
