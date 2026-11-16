@@ -137,8 +137,31 @@ def _missed(user: User, s: Standing, now: datetime) -> bool:
 
 
 def standing(db: Session, user: User, now: datetime | None = None) -> Standing:
-    now = now or _now()
-    s = Standing(db.get(MilestoneTemplate, user.phase) if user.phase else None, group_milestone(db, user))
+    template = db.get(MilestoneTemplate, user.phase) if user.phase else None
+    return _standing(user, template, group_milestone(db, user), now or _now())
+
+
+def standings(db: Session, students: list[User]) -> dict[int, Standing]:
+    """standing() for many students in three queries, not three per student. For pages that list or count many."""
+    templates = {t.phase: t for t in db.scalars(select(MilestoneTemplate))}
+    live = [u for u in students if u.thesis_id is not None and u.phase is not None]
+    milestones = {
+        (g.thesis_id, g.phase): g
+        for g in db.scalars(
+            select(GroupMilestone).where(
+                GroupMilestone.semester_id == current_semester_id(db),
+                GroupMilestone.thesis_id.in_({u.thesis_id for u in live}),
+            )
+        )
+    } if live else {}
+    now = _now()
+    return {
+        u.id: _standing(u, templates.get(u.phase), milestones.get((u.thesis_id, u.phase)), now) for u in students
+    }
+
+
+def _standing(user: User, template: MilestoneTemplate | None, gm: GroupMilestone | None, now: datetime) -> Standing:
+    s = Standing(template, gm)
     reason = None
     if user.frozen_at is not None:
         thesis = user.thesis
@@ -245,15 +268,13 @@ def register_p1(db: Session, user: User) -> None:
     db.commit()
 
 
-def can_defer(db: Session, thesis: Thesis) -> bool:
+def can_defer(db: Session, thesis: Thesis, s: Standing | None = None) -> bool:
+    """s: the student's standing, if the caller already has it (see standings)."""
     student = thesis.student
-    return (
-        thesis.status == ThesisStatus.active
-        and student is not None
-        and student.phase == Phase.P3
-        and not standing(db, student).frozen
-        and submitted_at(db, student) is not None
-    )
+    if thesis.status != ThesisStatus.active or student is None or student.phase != Phase.P3:
+        return False
+    s = s or standing(db, student)
+    return not s.frozen and s.submitted_at is not None
 
 
 def set_defer(db: Session, supervisor: User, thesis_id: int, defer: bool) -> Thesis:

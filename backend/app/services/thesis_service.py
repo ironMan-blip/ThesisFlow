@@ -207,7 +207,13 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
         select(Thesis)
         .where(Thesis.status != ThesisStatus.pending)
         .order_by(Thesis.id.desc())
-        .options(selectinload(Thesis.proposal).selectinload(Proposal.versions))  # one query, not one per thesis
+        # One query each, not one per thesis.
+        .options(
+            selectinload(Thesis.proposal).selectinload(Proposal.versions),
+            selectinload(Thesis.student),
+            selectinload(Thesis.supervisor),
+            selectinload(Thesis.co_supervisor),
+        )
     )
     query = query.where(
         or_(
@@ -215,13 +221,16 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
             (Thesis.co_supervisor_id == user.id) & Thesis.co_supervisor_accepted.is_(True) & Thesis.co_supervisor_approved.is_(True),
         )
     )
+    theses = list(db.scalars(query))
+    finals = proposal_service.final_ids(db, [v.id for t in theses for v in t.versions])
+    standings = progress_service.standings(db, list({t.student for t in theses} - {None}))
     out = []
-    for t in db.scalars(query):
+    for t in theses:
         row = ThesisDetailOut.model_validate(t)
-        proposal_service.staff_view(db, user, t, row.versions)
+        proposal_service.staff_view(db, user, t, row.versions, finals, standings)
         row.is_supervisor = t.supervisor_id == user.id
         # Deferral is the supervisor's call for now (panel members later).
-        row.can_defer = row.is_supervisor and (t.defer_pending or progress_service.can_defer(db, t))
+        row.can_defer = row.is_supervisor and (t.defer_pending or progress_service.can_defer(db, t, t.student and standings.get(t.student.id)))
         out.append(row)
     return out
 

@@ -1,12 +1,14 @@
+import itertools
 import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 
 from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
+from tests.conftest import engine
 from tests.helpers import PDF, REASON, auth, close_registration, form_group, me, run_deletions_due, student, supervised_student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
@@ -437,3 +439,38 @@ def test_a_frozen_group_takes_no_new_co_supervisor(client, db):
     assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
     assert answer(client, co, tid) == 409
     assert answer(client, co, tid, yes=False) == 204  # declining still works
+
+
+def test_faculty_pages_use_the_same_queries_for_any_number_of_theses(client, db, timelines):
+    # The Theses page and the badge poll once ran several queries per thesis and per version.
+    sup = auth(client, db, "many@x.com", Role.faculty)
+    queries = [0]
+    event.listen(engine, "before_cursor_execute", count := lambda *a: queries.__setitem__(0, queries[0] + 1))
+
+    def add_students(n):
+        for _ in range(n):
+            h = auth(client, db, f"s{next(_ids)}@x.com")
+            form_group(client, db, h, sup)
+            assert client.post("/api/theses/mine/register", headers=h).status_code == 200
+            upload(client, h, content=PDF + b"a", title="a")
+            v = upload(client, h, content=PDF + b"b", title="b").json()["versions"][1]["id"]
+            assert client.post(f"/api/proposals/versions/{v}/delete-request", headers=h, json=REASON).status_code == 200
+
+    def cost():
+        out = []
+        for path in ("/api/theses", "/api/auth/me/counts"):
+            queries[0] = 0
+            assert client.get(path, headers=sup).status_code == 200
+            out.append(queries[0])
+        return out
+
+    try:
+        add_students(2)
+        few = cost()
+        add_students(4)
+        assert cost() == few
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+
+
+_ids = itertools.count()

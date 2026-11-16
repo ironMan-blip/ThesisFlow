@@ -9,7 +9,7 @@ from pypdf import PdfReader
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app import virus_scan
 from app.config import settings
@@ -37,9 +37,11 @@ def _upload_dir() -> Path:
     return path
 
 
-def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service.Standing]:
-    """Why this student can't upload right now (None means they can), and their standing."""
-    s = progress_service.standing(db, user)
+def _upload_block(
+    db: Session, user: User, s: progress_service.Standing | None = None
+) -> tuple[str | None, progress_service.Standing]:
+    """Why this student can't upload right now (None means they can), and their standing (pass it if known)."""
+    s = s or progress_service.standing(db, user)
     thesis = user.thesis
     if user.phase is None:
         return "Your thesis is complete", s
@@ -94,12 +96,22 @@ def _is_final(db: Session, version: ProposalVersion) -> bool:
     return db.scalar(select(Deliverable.id).where(Deliverable.proposal_version_id == version.id)) is not None
 
 
-def staff_view(db: Session, staff: User, thesis: Thesis, versions: list[ProposalVersionOut]) -> None:
-    """Fill in the delete fields a supervisor / co-supervisor sees for one thesis's versions."""
+def final_ids(db: Session, version_ids: list[int]) -> set[int]:
+    """Which of these versions are final (see _is_final), in one query instead of one per version."""
+    return set(db.scalars(select(Deliverable.proposal_version_id).where(Deliverable.proposal_version_id.in_(version_ids))))
+
+
+def staff_view(
+    db: Session, staff: User, thesis: Thesis, versions: list[ProposalVersionOut], finals: set[int],
+    standings: dict[int, progress_service.Standing],
+) -> None:
+    """Fill in the delete fields a supervisor / co-supervisor sees for one thesis's versions.
+
+    finals: from final_ids; standings: from progress_service.standings, for the theses' students."""
     for v in versions:
         row = db.get(ProposalVersion, v.id)
-        final = _is_final(db, row)
-        v.delete_pending = row.delete_requested_at is not None and (row.delete_by_staff and not final or _deletable(db, row) is not None)
+        final = v.id in finals
+        v.delete_pending = row.delete_requested_at is not None and (row.delete_by_staff and not final or _deletable(db, row, standings) is not None)
         v.can_schedule_delete = thesis.supervisor_id == staff.id and not final and row.delete_requested_at is None
         if not v.delete_pending:
             v.delete_executes_at = v.delete_reason = None
@@ -110,15 +122,18 @@ def _in_current_phase(user: User, v) -> bool:
     return v.phase == user.phase and v.created_at >= user.phase_started_at
 
 
-def _deletable(db: Session, version: ProposalVersion) -> User | None:
+def _deletable(
+    db: Session, version: ProposalVersion, standings: dict[int, progress_service.Standing] | None = None
+) -> User | None:
     """The version's student while it can still be deleted (their current thesis and phase, uploads still open), else None.
 
     A submission is final once its phase closes, so a request that isn't approved by then lapses.
+    standings: from progress_service.standings, when checking many versions at once.
     """
     student = version.proposal.thesis.student
     if student is None or student.thesis_id != version.proposal.thesis_id or not _in_current_phase(student, version):
         return None
-    return student if _upload_block(db, student)[0] is None else None
+    return student if _upload_block(db, student, standings and standings.get(student.id))[0] is None else None
 
 
 def _lock_thesis(db: Session, user: User) -> Thesis | None:
@@ -373,10 +388,17 @@ def count_delete_requests(db: Session, supervisor: User) -> int:
     """Supervisor badge: students' delete requests on their theses that wait for their decision."""
     rows = db.scalars(
         _requested().join(Proposal).join(Thesis).where(
-            Thesis.supervisor_id == supervisor.id, ProposalVersion.delete_approved_at.is_(None)
+            Thesis.supervisor_id == supervisor.id,
+            ProposalVersion.delete_approved_at.is_(None),
         )
+        # Polled every 10s: load each version's thesis and student here, not one query per version.
+        .options(joinedload(ProposalVersion.proposal).joinedload(Proposal.thesis).joinedload(Thesis.student))
     )
-    return sum(not v.delete_by_staff and _deletable(db, v) is not None for v in rows)
+    rows = [v for v in rows if not v.delete_by_staff]
+    if not rows:
+        return 0
+    standings = progress_service.standings(db, list({v.proposal.thesis.student for v in rows} - {None}))
+    return sum(_deletable(db, v, standings) is not None for v in rows)
 
 
 def _supervised(db: Session, supervisor: User, version_id: int) -> ProposalVersion | None:
