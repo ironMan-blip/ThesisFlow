@@ -172,6 +172,21 @@ export default function Layout() {
               </div>
             </div>
           )}
+          {user.leaving?.map((l) => (
+            // Someone in one of your groups is leaving: shown on every page until their deletion runs or is cancelled.
+            <div key={`${l.thesis_code}-${l.member}`} role="status" className="alert mb-6 border-amber-200 bg-amber-50 text-amber-900">
+              <Icon className="mt-px size-4">{ICONS.alert}</Icon>
+              <p>
+                <span className="font-medium">{l.full_name}</span> ({l.member.replace("_", "-")}
+                {l.thesis_code ? ` of ${l.thesis_code}` : ", your group request"}) is leaving: their account will be
+                deleted on {when(l.executes_at)}, and they leave the group then.
+                {l.member === "supervisor" && user.role === "student" &&
+                  (l.thesis_code
+                    ? " Your group keeps its thesis ID and versions; you'll choose a new supervisor on the Thesis page."
+                    : " Your request is cancelled then; you can cancel it now and choose someone else.")}
+              </p>
+            </div>
+          ))}
           <Outlet context={{ user, counts, refreshCounts }} />
         </div>
       </main>

@@ -14,7 +14,7 @@ from app.models.user import Role, User
 from app.security import hash_password
 from app.services import account_service, auth_service
 from app.services.auth_service import REGISTER_TAKEN
-from tests.helpers import REASON, auth, form_group, run_deletions_due, student as make_student, supervised_student, upload
+from tests.helpers import REASON, auth, run_deletions_due, student as make_student, supervised_student, upload
 
 
 def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
@@ -298,8 +298,6 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     assert schedule(by_email["s@b.com"], headers=student).status_code == 403
     assert schedule(coord_id).status_code == 403
     assert schedule(by_email["s@b.com"], body={}).status_code == 422  # the coordinator gives a reason too
-    # A supervisor of an active thesis is kept; once the thesis is archived they can go.
-    assert schedule(by_email[supervisor_email]).status_code == 409
     r = schedule(by_email["s@b.com"])
     assert r.status_code == 200 and r.json()["deletion_by_coordinator"] is True
     # The owner sees it on their next page load: the date, the reason and who to contact before it runs.
@@ -313,18 +311,6 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     assert len(list(tmp_path.rglob("*.pdf"))) == 1  # versions are never lost
     assert schedule(by_email[supervisor_email]).status_code == 200
     assert schedule(by_email["s@b.com"]).status_code == 404
-
-
-def test_a_deletion_that_became_unsafe_during_the_wait_is_dropped(client, db):
-    coord = auth(client, db, "coord@b.com", Role.coordinator)
-    faculty = auth(client, db, "f@b.com", Role.faculty)
-    fid = client.get("/api/auth/me", headers=faculty).json()["id"]
-    assert client.post("/api/auth/me/deletion-request", headers=faculty, json=REASON).status_code == 200
-    assert client.post(f"/api/auth/deletion-requests/{fid}/approve", headers=coord).status_code == 200
-    form_group(client, db, auth(client, db, "s@b.com"), faculty)  # now supervises an active thesis
-    assert run_deletions_due(db) == (0, 0)
-    assert db.get(User, fid).deletion_pending is False
-    assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
 
 
 def test_pending_counts_and_name_fields(client, db):

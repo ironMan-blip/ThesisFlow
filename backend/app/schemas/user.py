@@ -53,6 +53,15 @@ class UserCreate(BaseModel):
         return v
 
 
+class LeavingOut(BaseModel):
+    """Someone in one of the viewer's groups whose account deletion is approved: they leave the group when it runs."""
+
+    full_name: str
+    member: Literal["student", "supervisor", "co_supervisor"]  # their place in that group
+    thesis_code: str | None  # None for a request no supervisor has accepted yet
+    executes_at: datetime
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -78,6 +87,7 @@ class UserOut(BaseModel):
     deletion_days: int = DELETION_DAYS
     min_reason_chars: int = MIN_REASON_CHARS
     max_reason_chars: int = MAX_REASON_CHARS
+    leaving: list[LeavingOut] = []  # filled in by /me only
 
     @computed_field
     @property

@@ -19,7 +19,9 @@ function Requests({ requests, decide, busy }) {
           <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <Person user={r.student}>
               {" "}· {r.slot === "supervisor"
-                ? "asks you to be their supervisor (accepting forms the group)"
+                ? r.code
+                  ? `asks you to take over as supervisor of ${r.code}${r.co_supervisor ? ` with co-supervisor ${fullName(r.co_supervisor)}` : ""} (their supervisor's account was deleted)`
+                  : "asks you to be their supervisor (accepting forms the group)"
                 : r.slot === "co_supervisor"
                   ? `asks you to be co-supervisor of ${r.code} (you join once ${fullName(r.supervisor)} also accepts)`
                   : `wants ${fullName(r.co_supervisor)} as co-supervisor of ${r.code} (they join once you both accept)`}
@@ -52,8 +54,11 @@ export default function ThesesPage() {
   const decide = (r, accept) => run(r.id, async () => {
     // Names the co-supervisor shown here, so a swap made meanwhile is refused instead of approved unseen.
     const co = r.co_supervisor ? `?co_supervisor_id=${r.co_supervisor.id}` : "";
-    await api(`/theses/requests/${r.id}/${accept ? "accept" : "decline"}${co}`, { method: "POST" });
-    await load();
+    try {
+      await api(`/theses/requests/${r.id}/${accept ? "accept" : "decline"}${co}`, { method: "POST" });
+    } finally {
+      await load(); // a refused, stale request shows its current state
+    }
     refreshCounts();
     return `${r.student.full_name}: request ${accept ? "accepted" : "declined"}.`;
   });

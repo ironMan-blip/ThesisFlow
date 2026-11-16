@@ -379,3 +379,71 @@ def test_deferred_twice_freezes(client, db):
     assert close_all_and_roll(client, db, coord)["restarted"] == 1
     state = mine(client, s)
     assert (state["phase"], state["thesis"], state["frozen_reason"]) == ("P1", None, None)
+
+
+def leave(client, db, faculty, coord):
+    """The faculty member asks to delete their account and the coordinator approves: the 7-day wait starts."""
+    fid = me(client, faculty)["id"]
+    assert client.post("/api/auth/me/deletion-request", headers=faculty, json=REASON).status_code == 200
+    assert client.post(f"/api/auth/deletion-requests/{fid}/approve", headers=coord).status_code == 200
+    return fid
+
+
+def test_a_leaving_faculty_member_is_announced_then_removed_from_every_group(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    f, co, sup2 = (auth(client, db, f"{n}@x.com", Role.faculty) for n in ("f", "co", "sup2"))
+    s1, s2, s3 = (auth(client, db, f"{n}@x.com") for n in ("s1", "s2", "s3"))
+    form_group(client, db, s1, f)  # f supervises s1's formed group, co has joined it
+    assert client.post("/api/theses/mine/register", headers=s1).status_code == 200
+    assert upload(client, s1).status_code == 201
+    t1 = mine(client, s1)["thesis"]
+    add_co(client, s1, co)
+    assert answer(client, co, t1["id"]) == answer(client, f, t1["id"]) == 204
+    form_group(client, db, s2, sup2)  # f is only invited as s2's co-supervisor
+    add_co(client, s2, f)
+    ask(client, s3, f)  # s3 asked f, who hasn't answered
+
+    assert me(client, s1)["leaving"] == []  # nothing until the coordinator approves
+    fid = leave(client, db, f, coord)
+    notice = lambda h: [(l["member"], l["thesis_code"]) for l in me(client, h)["leaving"]]
+    assert notice(s1) == notice(co) == [("supervisor", t1["code"])]
+    assert notice(s2) == notice(sup2) == [("co_supervisor", mine(client, s2)["thesis"]["code"])]
+    assert notice(s3) == [("supervisor", None)]
+    assert notice(f) == []
+    assert fid not in [p["id"] for p in client.get("/api/theses/faculty", headers=s1).json()]
+    assert add_co(client, s2, f).status_code == 409 and ask(client, auth(client, db, "s4@x.com"), f).status_code == 422
+
+    assert run_deletions_due(db) == (1, 0)
+    state = mine(client, s1)
+    t = state["thesis"]
+    # Back to picking a supervisor: same thesis ID and versions, the joined co-supervisor stays and still sees it.
+    assert (t["status"], t["code"], t["supervisor"], t["co_supervisor"]["id"]) == ("pending", t1["code"], None, me(client, co)["id"])
+    assert (state["can_form_group"], state["can_cancel"]) == (True, False)
+    assert "no supervisor" in upload(client, s1).json()["detail"]
+    assert [(x["id"], len(x["versions"])) for x in client.get("/api/theses", headers=co).json()] == [(t1["id"], 1)]
+    assert mine(client, s2)["thesis"]["co_supervisor"] is None
+    assert (mine(client, s3)["thesis"], mine(client, s3)["can_form_group"]) == (None, True)
+    assert me(client, s1)["leaving"] == []
+
+    assert ask(client, s1, co).status_code == 422  # already the co-supervisor
+    assert ask(client, s1, sup2).status_code == 201
+    assert client.delete("/api/theses/mine", headers=s1).json()["thesis"]["code"] == t1["code"]  # cancel keeps the thesis
+    assert client.get("/api/theses", headers=sup2).json()[0]["id"] != t1["id"]  # not theirs before accepting
+    ask(client, s1, sup2)
+    assert [r["slot"] for r in client.get("/api/theses/requests", headers=sup2).json()] == ["supervisor"]
+    assert answer(client, sup2, t1["id"]) == 204
+    t = mine(client, s1)["thesis"]
+    assert (t["status"], t["code"], t["co_supervisor_approved"]) == ("active", t1["code"], True)
+    assert upload(client, s1, title="Again").status_code == 201
+
+
+def test_a_frozen_group_takes_no_new_co_supervisor(client, db):
+    s, sup = supervised_student(client, db, "s@x.com")
+    co = auth(client, db, "co@x.com", Role.faculty)
+    tid = mine(client, s)["thesis"]["id"]
+    add_co(client, s, co)
+    started_yesterday(client, db, s)
+    close(db, Phase.P1)
+    assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
+    assert answer(client, co, tid) == 409
+    assert answer(client, co, tid, yes=False) == 204  # declining still works

@@ -160,6 +160,12 @@ def _students(db: Session):
     )
 
 
+def _withdraw_co_supervisor(thesis: Thesis | None) -> None:
+    # A frozen group takes no new co-supervisor, so an invite not yet answered by both is withdrawn.
+    if thesis is not None and not thesis.co_supervisor_joined:
+        thesis.clear_co_supervisor()
+
+
 def next_semester(db: Session) -> dict[str, int]:
     """Coordinator: end the semester. Moves students on, applies P3 deferrals, saves freezes and clears the deadlines."""
     now = _now()
@@ -189,6 +195,7 @@ def next_semester(db: Session) -> dict[str, int]:
         thesis = user.thesis
         if s.frozen:
             user.frozen_at = now
+            _withdraw_co_supervisor(thesis)
             result["frozen"] += 1
         elif s.submitted_at is None or thesis is None or thesis.status != ThesisStatus.active:
             continue  # nothing due for them this semester (no deadline, or they started late): same phase again
@@ -200,6 +207,7 @@ def next_semester(db: Session) -> dict[str, int]:
             thesis.deferrals += 1
             if thesis.deferrals >= MAX_DEFERRALS:
                 user.frozen_at = now
+                _withdraw_co_supervisor(thesis)
                 result["frozen"] += 1
             else:
                 user.phase_started_at = now  # P3 again; last semester's upload no longer counts
@@ -307,7 +315,7 @@ def approve_restart(db: Session, user_id: int) -> User:
 def _restart(db: Session, user: User, now: datetime) -> None:
     """Fresh start at P1 with no thesis. The old thesis is archived with all its versions; the next group gets a new thesis ID."""
     thesis, user.thesis = user.thesis, None
-    if thesis is not None and thesis.status == ThesisStatus.pending:
+    if thesis is not None and thesis.never_formed:
         db.delete(thesis)  # never accepted, so it has no thesis ID and no versions
     elif thesis is not None:
         thesis.status, thesis.defer_pending = ThesisStatus.dropped, False

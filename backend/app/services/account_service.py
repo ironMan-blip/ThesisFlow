@@ -3,6 +3,9 @@
 Deleting an account: the user asks with a reason and the coordinator approves or rejects. Approval starts a
 DELETION_DELAY wait (the account stays usable, only the coordinator can cancel), then run_due_deletions deletes it.
 The coordinator's own deletes count as approved at once.
+
+A faculty member's groups are told once the deletion is approved (thesis_service.leaving); when it runs they leave
+every group (thesis_service.remove_faculty).
 """
 
 import logging
@@ -102,10 +105,6 @@ def _locked(db: Session, user_id: int) -> User | None:
 def _check_deletable(db: Session, user: User) -> None:
     if user.role == Role.coordinator:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "The coordinator account cannot be deleted")
-    if user.role == Role.faculty and thesis_service.supervises_live(db, user):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "This faculty member supervises an active or requested thesis, so the account is kept"
-        )
 
 
 def pending_counts(db: Session, user: User) -> dict[str, int]:
@@ -139,10 +138,12 @@ def list_accounts(db: Session, role: Role | None = None, id_prefix: str = "") ->
 def _delete(db: Session, user: User) -> None:
     # The thesis and every proposal version stay as an archive; the foreign keys only clear the user.
     thesis, user.thesis = user.thesis, None
-    if thesis is not None and thesis.status == ThesisStatus.pending:
+    if thesis is not None and thesis.never_formed:
         db.delete(thesis)  # never accepted, so no thesis ID and no versions
-    elif thesis is not None and thesis.status == ThesisStatus.active:
+    elif thesis is not None and thesis.status in thesis_service.LIVE:
         thesis.status = ThesisStatus.dropped
+    if user.role == Role.faculty:
+        thesis_service.remove_faculty(db, user)
     db.delete(user)
 
 
