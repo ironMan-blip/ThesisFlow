@@ -63,7 +63,7 @@ export default function DeadlinePage() {
         await api(`/milestones/${phase}`, {
           method: "PUT",
           body: {
-            due_at: `${f.get("due_date")}T${f.get("due_time")}`, // the server reads it as Dhaka time
+            due_local: `${f.get("due_date")}T${f.get("due_time")}`, // Dhaka time; the server converts it
             grace_days: Number(f.get("grace_days")),
             penalty_per_day: Number(f.get("penalty_per_day")),
           },

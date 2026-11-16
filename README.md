@@ -288,7 +288,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 - `Layout` loads `/api/auth/me` and shows only the tools in `user.tools`. The API refuses calls for tools a role doesn't have.
 - Request badges refresh every 10 seconds while the tab is visible (`/api/auth/me/counts`).
 - The Deadlines page ticks its countdowns every second and reloads from the API every minute.
-- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC. A deadline sent without a zone is read as Dhaka time.
+- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC. `PUT /api/milestones/{phase}` takes `due_local` (Dhaka wall-clock time, no zone) and refuses anything else.
 - Business rules live in the backend; the frontend only shows what the API returns (flags like `can_*`, statuses, choices).
 - Files are downloaded with `fetch` + a blob link, because a normal link can't send the JWT.
 - Delete actions ask for confirmation in a dialog first.

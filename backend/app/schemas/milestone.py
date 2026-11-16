@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, NaiveDatetime, computed_field
 
 from app.models.milestone import Phase
 
@@ -12,14 +12,16 @@ DHAKA = timezone(timedelta(hours=6))
 
 
 class MilestoneIn(BaseModel):
-    due_at: datetime  # without a zone (as typed in the form) it is read as Dhaka time
+    # Unknown fields are refused, so a client still sending due_at gets a 422 instead of a silently wrong deadline.
+    model_config = ConfigDict(extra="forbid")
+
+    due_local: NaiveDatetime  # Dhaka wall-clock time as typed in the form, "YYYY-MM-DDTHH:MM"; no zone allowed
     grace_days: int = Field(ge=0, le=MAX_GRACE_DAYS)
     penalty_per_day: int = Field(ge=0, le=MAX_PENALTY_PER_DAY)
 
-    @field_validator("due_at")
-    @classmethod
-    def in_dhaka(cls, v: datetime) -> datetime:
-        return v if v.tzinfo else v.replace(tzinfo=DHAKA)
+    @property
+    def due_at(self) -> datetime:
+        return self.due_local.replace(tzinfo=DHAKA)
 
 
 class MilestoneOut(BaseModel):

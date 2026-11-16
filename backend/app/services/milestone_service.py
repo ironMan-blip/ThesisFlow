@@ -74,19 +74,20 @@ def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
     # No cross-phase order check: students in different phases have separate deadlines each semester.
     now = datetime.now(timezone.utc)
     current = db.get(MilestoneTemplate, phase)
-    if current and current.due_at.replace(second=0, microsecond=0) == data.due_at.replace(second=0, microsecond=0):
+    due_at = data.due_at
+    if current and current.due_at.replace(second=0, microsecond=0) == due_at.replace(second=0, microsecond=0):
         # The form only sends whole minutes, so the same minute means "keep this due date", even one set with seconds.
-        data.due_at = current.due_at
-    if data.due_at + timedelta(days=data.grace_days) <= now:
+        due_at = current.due_at
+    if due_at + timedelta(days=data.grace_days) <= now:
         # A deadline that is already over would count everyone in the phase as missing it.
         raise HTTPException(422, "The deadline and grace period must end in the future")
-    if data.due_at <= now and (current is None or current.due_at != data.due_at):
+    if due_at <= now and (current is None or current.due_at != due_at):
         # A new due date in the past makes everyone late at once. Keeping a passed due date (to change grace or
         # penalty during grace) is fine.
         raise HTTPException(422, "The due date must be in the future")
     registration_closes = progress_service.registration_closes_at(db)
-    if phase == Phase.P1 and registration_closes and data.due_at <= registration_closes:
+    if phase == Phase.P1 and registration_closes and due_at <= registration_closes:
         # Groups can still register until then, so an earlier P1 deadline would catch them mid-registration.
         raise HTTPException(422, "P1 can't be due before P1 registration closes")
-    db.merge(MilestoneTemplate(phase=phase, **data.model_dump()))
+    db.merge(MilestoneTemplate(phase=phase, due_at=due_at, grace_days=data.grace_days, penalty_per_day=data.penalty_per_day))
     db.commit()
