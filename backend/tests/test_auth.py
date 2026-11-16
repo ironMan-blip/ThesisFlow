@@ -506,3 +506,23 @@ def test_login_tells_an_applicant_their_request_status(client, db):
     assert (res.status_code, res.json()["detail"]) == (403, "Your registration request expired without a decision. Register again")
     # Without the password nobody learns anything.
     assert client.post("/api/auth/login", data={"username": "22222222", "password": "Wrong1234"}).status_code == 401
+
+
+def test_an_expired_registration_request_cannot_be_approved(client, db):
+    uid = register(client).json()["id"]
+    db.get(User, uid).created_at -= timedelta(hours=48, minutes=1)
+    db.commit()
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    assert client.get("/api/auth/registration-requests", headers=coord).json() == []
+    assert client.get("/api/auth/me/counts", headers=coord).json()["registration_requests"] == 0
+    assert client.post(f"/api/auth/registration-requests/{uid}/approve", headers=coord).status_code == 404
+    assert login(client).status_code == 403
+
+
+def test_deletion_request_for_a_vanished_account_is_a_401(client, db):
+    h = auth(client, db, "gone@b.com")
+    db.delete(db.get(User, me_id := client.get("/api/auth/me", headers=h).json()["id"]))
+    db.flush()
+    with pytest.raises(HTTPException) as exc:
+        account_service.request_deletion(db, User(id=me_id), REASON["reason"])
+    assert exc.value.status_code == 401

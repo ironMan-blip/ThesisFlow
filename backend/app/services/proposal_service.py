@@ -18,6 +18,8 @@ from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
 PDF_TAIL = 1024
+# Each new version is a stored PDF, so without a cap one student could fill the disk.
+MAX_VERSIONS_PER_PHASE = 20
 
 
 def _upload_dir() -> Path:
@@ -210,6 +212,13 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             )
         )
         if same is None:
+            # Counted under the thesis lock, so parallel uploads can't both slip under the cap.
+            if db.scalar(select(func.count()).where(progress_service.phase_uploads(user))) >= MAX_VERSIONS_PER_PHASE:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    f"You've uploaded {MAX_VERSIONS_PER_PHASE} versions this phase, the most allowed. "
+                    "Ask to delete a version you don't need",
+                )
             version = ProposalVersion(
                 proposal_id=proposal.id,
                 version_no=(last or 0) + 1,

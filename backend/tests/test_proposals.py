@@ -337,3 +337,14 @@ def test_student_sees_a_rejected_request(client, db):
     assert (row["delete_rejected"], row["can_request_delete"]) == (True, True)
     row = _ask(client, h, v).json()["versions"][0]  # asking again clears the old answer
     assert (row["delete_rejected"], row["delete_pending"]) == (False, True)
+
+
+def test_uploads_per_phase_are_capped(client, db, monkeypatch):
+    monkeypatch.setattr(proposal_service, "MAX_VERSIONS_PER_PHASE", 2)
+    h = student(client, db, "cap@b.com")
+    assert upload(client, h, title="one").status_code == 201
+    assert upload(client, h, title="two").status_code == 201
+    r = upload(client, h, title="three")
+    assert r.status_code == 409 and "2 versions" in r.json()["detail"]
+    # Re-sending a stored version adds nothing, so it still works at the cap.
+    assert upload(client, h, title="one").status_code == 201
