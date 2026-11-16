@@ -73,7 +73,7 @@ def _lock_user(db: Session, user: User) -> User:
 def _faculty(db: Session, user_id: int, what: str) -> User:
     member = db.get(User, user_id)
     if member is None or member.role != Role.faculty or not member.approved:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"{what} must be a faculty member")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{what} must be a faculty member")
     return member
 
 
@@ -84,7 +84,7 @@ def request_group(db: Session, user: User, data: ThesisRequestIn) -> MyThesisOut
     supervisor = _faculty(db, data.supervisor_id, "Supervisor")
     co = data.co_supervisor_id and _faculty(db, data.co_supervisor_id, "Co-supervisor")
     if co and co.id == supervisor.id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Co-supervisor must be a different faculty member")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Co-supervisor must be a different faculty member")
     user.thesis = Thesis(student=user, supervisor=supervisor, co_supervisor=co or None)
     db.commit()
     return mine(db, user)

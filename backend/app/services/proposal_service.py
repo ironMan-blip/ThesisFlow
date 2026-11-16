@@ -84,7 +84,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     max_bytes = settings.max_upload_mb * 1024 * 1024
     head = file.file.read(5)
     if head != b"%PDF-":
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "File must be a PDF")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File must be a PDF")
     stored = f"{uuid.uuid4().hex}.pdf"
     path = _upload_dir() / stored
     size = len(head)
@@ -96,7 +96,7 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
                 size += len(chunk)
                 if size > max_bytes:
                     raise HTTPException(
-                        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File is larger than {settings.max_upload_mb} MB"
+                        status.HTTP_413_CONTENT_TOO_LARGE, f"File is larger than {settings.max_upload_mb} MB"
                     )
                 out.write(chunk)
                 digest.update(chunk)
@@ -124,9 +124,9 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = title.strip(), abstract.strip()
     if not title or len(title) > 255:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title must be 1 to 255 characters")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Title must be 1 to 255 characters")
     if not abstract or len(abstract) > MAX_ABSTRACT_CHARS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Abstract must be 1 to {MAX_ABSTRACT_CHARS} characters")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Abstract must be 1 to {MAX_ABSTRACT_CHARS} characters")
 
     stored, size, sha256 = _save_pdf(file)
     keep_new_file = True

@@ -423,3 +423,39 @@ def test_database_outage_is_a_clear_503(client):
     res = login(client)
     assert (res.status_code, res.headers["retry-after"]) == (503, "5")
     assert "database" in res.json()["detail"]
+
+
+@pytest.mark.parametrize("body", [{"full_name": "a\x00b"}, {"id_number": "1234\x00"}])
+def test_nul_characters_are_a_422_not_a_500(client, body):
+    if "full_name" in body:
+        res = client.post("/api/auth/register", json={**body, "email": "n@b.com", "id_number": "12345670", "password": "Password123"})
+    else:
+        res = client.post("/api/auth/login", data={"username": body["id_number"], "password": "x"})
+    assert res.status_code == 422, res.text
+
+
+def test_id_past_integer_range_is_a_422(client, db):
+    h = auth(client, db, "c@b.com", Role.coordinator)
+    assert client.delete(f"/api/auth/accounts/{2**40}", headers=h).status_code == 422
+
+
+def test_big_bodies_need_a_signed_in_user(client):
+    res = client.post("/api/proposals/mine/versions", content=b"x" * (70 * 1024), headers={"content-type": "application/pdf"})
+    assert res.status_code == 401
+    forged = client.post(
+        "/api/proposals/mine/versions", content=b"x" * (70 * 1024), headers={"authorization": "Bearer nope"}
+    )
+    assert forged.status_code == 401
+
+
+def test_responses_carry_security_headers(client):
+    res = client.get("/api/auth/me")
+    assert res.headers["x-content-type-options"] == "nosniff"
+    assert res.headers["x-frame-options"] == "DENY"
+    assert "default-src 'none'" in res.headers["content-security-policy"]
+
+
+@pytest.mark.parametrize("password", ["short1A", "alllowercase1", "NoDigitsHere", "Has Space1"])
+def test_weak_admin_password_refuses_to_start(password):
+    with pytest.raises(ValueError):
+        type(settings)(admin_password=password)

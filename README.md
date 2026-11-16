@@ -99,7 +99,7 @@ On start, the backend runs the database migrations (`alembic upgrade head`) and 
 | What | Where |
 |------|-------|
 | Web app | http://localhost:5174 |
-| API docs (Swagger) | http://localhost:8000/docs |
+| API docs (Swagger) | http://localhost:5174/docs (proxied; the backend has no host port) |
 | Tests | `docker compose exec backend pytest` |
 | Database shell | `docker compose exec db psql -U thesisflow` |
 
@@ -352,7 +352,7 @@ frontend/src/
 | DELETE | `/api/proposals/versions/{id}` | student (own) |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisors, coordinator |
 
-Full request/response shapes are at http://localhost:8000/docs.
+Full request/response shapes are at http://localhost:5174/docs.
 
 ## Adding a feature
 
