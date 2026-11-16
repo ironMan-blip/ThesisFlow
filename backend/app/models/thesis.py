@@ -8,7 +8,7 @@ from app.database import Base
 
 
 class ThesisStatus(str, enum.Enum):
-    pending = "pending"  # waiting for the supervisor (and the co-supervisor, if named) to accept; no thesis ID yet
+    pending = "pending"  # waiting for the supervisor to accept; no thesis ID yet
     active = "active"
     completed = "completed"
     dropped = "dropped"  # archived: the student restarted at P1 or left; versions are kept
@@ -20,15 +20,16 @@ class Thesis(Base):
     __tablename__ = "theses"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # The thesis ID people see, e.g. T12345678; issued when the group is formed (thesis_service.decide).
+    # The thesis ID people see, e.g. T12345678; issued when the supervisor accepts and the group is formed.
     code: Mapped[str | None] = mapped_column(String(9), unique=True)
     # SET NULL everywhere: deleting an account never deletes a thesis or its versions.
     student_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     # Null only on archived rows made from proposals that existed before thesis groups.
     supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     co_supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    supervisor_accepted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # A co-supervisor is only added to a formed group, and joins once both they (accepted) and the supervisor (approved) agree.
     co_supervisor_accepted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    co_supervisor_approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     status: Mapped[ThesisStatus] = mapped_column(
         Enum(ThesisStatus, name="thesis_status"), default=ThesisStatus.pending
     )
@@ -44,6 +45,10 @@ class Thesis(Base):
     supervisor = relationship("User", foreign_keys=[supervisor_id])
     co_supervisor = relationship("User", foreign_keys=[co_supervisor_id])
     proposal = relationship("Proposal", back_populates="thesis", uselist=False)
+
+    @property
+    def co_supervisor_joined(self) -> bool:
+        return self.co_supervisor_id is not None and self.co_supervisor_accepted and self.co_supervisor_approved
 
     @property
     def versions(self) -> list:

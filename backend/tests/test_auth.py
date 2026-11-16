@@ -14,7 +14,7 @@ from app.models.user import Role, User
 from app.security import hash_password
 from app.services import account_service, auth_service
 from app.services.auth_service import REGISTER_TAKEN
-from tests.helpers import REASON, auth, form_group, run_deletions_due, student as make_student, upload
+from tests.helpers import REASON, auth, form_group, run_deletions_due, student as make_student, supervised_student, upload
 
 
 def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
@@ -220,7 +220,7 @@ def test_register_rejects_bad_email_and_weak_password(client):
 
 
 def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_path, timelines):
-    student = make_student(client, db, "s@b.com")
+    student, sup = supervised_student(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
     pdfs = list(tmp_path.rglob("*.pdf"))
@@ -255,7 +255,7 @@ def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     assert db.get(User, uid) is None
     assert pdfs[0].exists()  # the thesis and its versions are kept as an archive
     assert client.get("/api/auth/me", headers=student).status_code == 401
-    theses = client.get("/api/theses", headers=coord).json()
+    theses = client.get("/api/theses", headers=sup).json()
     assert [(t["status"], t["student"], len(t["versions"])) for t in theses] == [("dropped", None, 1)]
 
 
@@ -338,7 +338,6 @@ def test_pending_counts_and_name_fields(client, db):
         "registration_requests": 1,
         "deletion_requests": 1,
         "restart_requests": 0,
-        "version_delete_requests": 0,
     }
 
     user = User(full_name="ada byron king")

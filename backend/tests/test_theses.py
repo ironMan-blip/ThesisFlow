@@ -6,7 +6,7 @@ from sqlalchemy import delete
 
 from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.user import Role, User
-from tests.helpers import PDF, REASON, auth, close_registration, form_group, me, run_deletions_due, student, upload
+from tests.helpers import PDF, REASON, auth, close_registration, form_group, me, run_deletions_due, student, supervised_student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -15,9 +15,16 @@ def mine(client, h):
     return client.get("/api/theses/mine", headers=h).json()
 
 
-def ask(client, h, supervisor, co=None):
-    body = {"supervisor_id": me(client, supervisor)["id"], "co_supervisor_id": co and me(client, co)["id"]}
-    return client.post("/api/theses/mine", headers=h, json=body)
+def ask(client, h, supervisor):
+    return client.post("/api/theses/mine", headers=h, json={"supervisor_id": me(client, supervisor)["id"]})
+
+
+def add_co(client, h, co):
+    return client.post("/api/theses/mine/co-supervisor", headers=h, json={"co_supervisor_id": me(client, co)["id"]})
+
+
+def answer(client, faculty, tid, yes=True):
+    return client.post(f"/api/theses/requests/{tid}/{'accept' if yes else 'decline'}", headers=faculty).status_code
 
 
 def user_of(client, db, h) -> User:
@@ -51,75 +58,92 @@ def close_all_and_roll(client, db, coord):
     return res.json()
 
 
-def test_group_forms_only_when_supervisor_and_co_supervisor_both_accept(client, db):
+def test_group_forms_when_the_supervisor_accepts(client, db):
     s = auth(client, db, "s@x.com")
-    sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    coord = auth(client, db, "c@x.com", Role.coordinator)
     other_student = auth(client, db, "o@x.com")
 
     assert ask(client, s, other_student).status_code == 422  # supervisor must be faculty
-    assert ask(client, s, sup, co=sup).status_code == 422  # co-supervisor must be someone else
-    assert {f["email"] for f in client.get("/api/theses/faculty", headers=s).json()} == {"co@x.com", "sup@x.com"}
-
-    res = ask(client, s, sup, co=co)
+    res = ask(client, s, sup)
     assert res.status_code == 201
     t = res.json()["thesis"]
-    assert (t["status"], t["code"], t["co_supervisor_accepted"]) == ("pending", None, False)
+    assert (t["status"], t["code"], t["co_supervisor"]) == ("pending", None, None)
     flags = mine(client, s)
-    assert (flags["can_cancel"], flags["show_p1_registration"]) == (True, False)
+    assert (flags["can_cancel"], flags["show_p1_registration"], flags["can_add_co_supervisor"]) == (True, False, False)
+    assert add_co(client, s, auth(client, db, "co@x.com", Role.faculty)).status_code == 409  # only after forming
     assert ask(client, s, sup).status_code == 409  # one group at a time
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 1}
-    assert [r["slot"] for r in client.get("/api/theses/requests", headers=co).json()] == ["co_supervisor"]
-    assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=other_student).status_code == 403
+    assert answer(client, other_student, t["id"]) == 403
 
-    assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=sup).status_code == 204
-    # The supervisor alone isn't enough when a co-supervisor is named: still no group and no thesis ID.
-    t = mine(client, s)["thesis"]
-    assert (t["status"], t["code"], t["supervisor_accepted"], t["co_supervisor_accepted"]) == ("pending", None, True, False)
-    assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=sup).status_code == 404  # answered already
-    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
-    assert client.get("/api/theses", headers=sup).json() == []  # not a group yet
-
-    assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=co).status_code == 204
+    assert answer(client, sup, t["id"]) == 204
     flags = mine(client, s)
     t = flags["thesis"]
-    assert t["status"] == "active" and re.fullmatch(r"T\d{8}", t["code"]) and t["co_supervisor_accepted"]
-    assert (flags["can_cancel"], flags["show_p1_registration"], flags["show_deferral_warning"]) == (False, True, False)
-    assert [x["id"] for x in client.get("/api/theses", headers=co).json()] == [t["id"]]
+    assert t["status"] == "active" and re.fullmatch(r"T\d{8}", t["code"])
+    assert (flags["can_cancel"], flags["show_p1_registration"], flags["can_add_co_supervisor"]) == (False, True, True)
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
+    assert [x["id"] for x in client.get("/api/theses", headers=sup).json()] == [t["id"]]
     assert client.get("/api/theses", headers=s).status_code == 403
+    assert client.get("/api/theses", headers=coord).status_code == 403  # the coordinator never sees theses
 
 
-def test_co_supervisor_accepting_first_still_waits_for_the_supervisor(client, db):
+def test_co_supervisor_joins_a_formed_group_once_both_accept(client, db):
     s = auth(client, db, "s@x.com")
     sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
-    tid = ask(client, s, sup, co=co).json()["thesis"]["id"]
-    assert client.post(f"/api/theses/requests/{tid}/accept", headers=co).status_code == 204
-    assert mine(client, s)["thesis"]["status"] == "pending"
-    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
-    assert mine(client, s)["thesis"]["status"] == "active"
+    form_group(client, db, s, sup)
+    assert client.post("/api/theses/mine/register", headers=s).status_code == 200
+    tid = mine(client, s)["thesis"]["id"]
+    vid = upload(client, s).json()["versions"][0]["id"]
+    file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
+
+    assert add_co(client, s, sup).status_code == 422  # someone else than the supervisor
+    state = add_co(client, s, co).json()
+    assert (state["can_add_co_supervisor"], state["can_cancel_co_supervisor"]) == (False, True)
+    assert add_co(client, s, co).status_code == 409  # one at a time
+    assert [r["slot"] for r in client.get("/api/theses/requests", headers=co).json()] == ["co_supervisor"]
+    assert [r["slot"] for r in client.get("/api/theses/requests", headers=sup).json()] == ["co_supervisor_approval"]
+
+    assert answer(client, co, tid) == 204
+    t = mine(client, s)["thesis"]
+    assert (t["co_supervisor_accepted"], t["co_supervisor_approved"]) == (True, False)
+    assert file(co) == 404 and client.get("/api/theses", headers=co).json() == []  # not in until the supervisor agrees
+    assert answer(client, sup, tid) == 204
+    t = mine(client, s)["thesis"]
+    assert (t["status"], t["co_supervisor_accepted"], t["co_supervisor_approved"]) == ("active", True, True)
+    assert file(co) == 200 and [x["id"] for x in client.get("/api/theses", headers=co).json()] == [tid]
+    assert mine(client, s)["can_cancel_co_supervisor"] is False
+    assert client.delete("/api/theses/mine/co-supervisor", headers=s).status_code == 409  # joined: stays
 
 
-def test_without_a_co_supervisor_the_supervisor_alone_forms_the_group(client, db):
+def test_either_declining_the_co_supervisor_keeps_the_group(client, db):
     s = auth(client, db, "s@x.com")
-    sup = auth(client, db, "sup@x.com", Role.faculty)
-    tid = ask(client, s, sup).json()["thesis"]["id"]
-    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
-    assert mine(client, s)["thesis"]["status"] == "active"
+    sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
+    form_group(client, db, s, sup)
+    tid = mine(client, s)["thesis"]["id"]
+
+    add_co(client, s, co)
+    assert answer(client, sup, tid) == 204
+    assert answer(client, co, tid, yes=False) == 204
+    state = mine(client, s)
+    assert (state["thesis"]["status"], state["thesis"]["co_supervisor"], state["can_add_co_supervisor"]) == ("active", None, True)
+
+    add_co(client, s, co)
+    assert answer(client, co, tid) == 204
+    assert answer(client, sup, tid, yes=False) == 204
+    assert mine(client, s)["thesis"]["co_supervisor"] is None
+    assert client.get("/api/theses/requests", headers=co).json() == []
+
+    add_co(client, s, co)
+    assert client.delete("/api/theses/mine/co-supervisor", headers=s).json()["thesis"]["co_supervisor"] is None
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
 
 
 def test_declines_and_cancel(client, db):
     s = auth(client, db, "s@x.com")
-    sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
-    tid = ask(client, s, sup, co=co).json()["thesis"]["id"]
-
-    # Both must accept, so either one declining ends the request, even after the other accepted.
-    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
-    assert client.post(f"/api/theses/requests/{tid}/decline", headers=co).status_code == 204
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    tid = ask(client, s, sup).json()["thesis"]["id"]
+    assert answer(client, sup, tid, yes=False) == 204
     assert mine(client, s)["thesis"] is None and mine(client, s)["can_form_group"] is True
-    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
-    tid = ask(client, s, sup, co=co).json()["thesis"]["id"]
-    assert client.post(f"/api/theses/requests/{tid}/decline", headers=sup).status_code == 204
-    assert mine(client, s)["thesis"] is None
-    assert client.get("/api/theses/requests", headers=co).json() == []
 
     ask(client, s, sup)
     assert client.delete("/api/theses/mine", headers=s).json()["thesis"] is None
@@ -128,7 +152,7 @@ def test_declines_and_cancel(client, db):
 
 
 def test_missed_deadline_freezes_until_restart_at_p1(client, db):
-    s = student(client, db, "s@x.com")
+    s, sup = supervised_student(client, db, "s@x.com")
     coord = auth(client, db, "c@x.com", Role.coordinator)
     old_thesis = mine(client, s)["thesis"]
     upload(client, s)
@@ -178,7 +202,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     form_group(client, db, s)
     new_thesis = mine(client, s)["thesis"]
     assert new_thesis["code"] != old_thesis["code"]  # a new thesis ID
-    archived = {t["id"]: t for t in client.get("/api/theses", headers=coord).json()}
+    archived = {t["id"]: t for t in client.get("/api/theses", headers=sup).json()}
     assert archived[old_thesis["id"]]["status"] == "dropped"
     assert len(archived[old_thesis["id"]]["versions"]) == 1  # nothing is lost
 
@@ -277,21 +301,24 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
 
 
 def p3_student(client, db, email):
-    s = student(client, db, email)
+    """A P3 student and their supervisor, who decides deferrals (panel members later)."""
+    s, sup = supervised_student(client, db, email)
     user_of(client, db, s).phase = Phase.P3
     db.flush()
-    return s
+    return s, sup
 
 
 def test_p3_without_deferral_completes_the_thesis(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
-    s = p3_student(client, db, "s@x.com")
+    s, sup = p3_student(client, db, "s@x.com")
     tid = mine(client, s)["thesis"]["id"]
-    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).status_code == 409  # nothing submitted
+    assert client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True}).status_code == 409  # nothing submitted
     upload(client, s)
-    assert [t["can_defer"] for t in client.get("/api/theses", headers=coord).json()] == [True]
-    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).json()["defer_pending"] is True
-    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": False}).json()["defer_pending"] is False
+    assert [t["can_defer"] for t in client.get("/api/theses", headers=sup).json()] == [True]
+    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).status_code == 403  # supervisor's call
+    assert client.put(f"/api/theses/{tid}/defer", headers=auth(client, db, "f@x.com", Role.faculty), json={"defer": True}).status_code == 404
+    assert client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True}).json()["defer_pending"] is True
+    assert client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": False}).json()["defer_pending"] is False
 
     assert close_all_and_roll(client, db, coord)["completed"] == 1
     state = mine(client, s)
@@ -301,32 +328,31 @@ def test_p3_without_deferral_completes_the_thesis(client, db):
 
 
 def test_deleting_the_p3_submission_undoes_a_deferral(client, db):
-    coord = auth(client, db, "c@x.com", Role.coordinator)
-    s = p3_student(client, db, "s@x.com")
+    s, sup = p3_student(client, db, "s@x.com")
     tid = mine(client, s)["thesis"]["id"]
     vid = upload(client, s).json()["versions"][0]["id"]
-    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).json()["defer_pending"] is True
+    assert client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True}).json()["defer_pending"] is True
     client.post(f"/api/proposals/versions/{vid}/delete-request", headers=s, json=REASON)
-    assert client.post(f"/api/proposals/delete-requests/{vid}/approve", headers=coord).status_code == 204
+    assert client.post(f"/api/proposals/delete-requests/{vid}/approve", headers=sup).status_code == 204
     assert run_deletions_due(db) == (0, 1)
-    assert [t["defer_pending"] for t in client.get("/api/theses", headers=coord).json()] == [False]
+    assert [t["defer_pending"] for t in client.get("/api/theses", headers=sup).json()] == [False]
 
 
 def test_deferred_twice_freezes(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
-    s = p3_student(client, db, "s@x.com")
+    s, sup = p3_student(client, db, "s@x.com")
     tid = mine(client, s)["thesis"]["id"]
     upload(client, s)
-    client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True})
+    client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True})
     assert close_all_and_roll(client, db, coord)["deferred"] == 1
 
     reopen(db)
     state = mine(client, s)
     assert (state["phase"], state["thesis"]["deferrals"], state["frozen_reason"]) == ("P3", 1, None)
     # Last semester's P3 upload doesn't count: it can't be deferred again until they resubmit.
-    assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).status_code == 409
+    assert client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True}).status_code == 409
     upload(client, s, content=PDF + b"again")
-    client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True})
+    client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True})
     assert close_all_and_roll(client, db, coord)["frozen"] == 1
     assert mine(client, s)["frozen_reason"] == "Your thesis was deferred twice"
 

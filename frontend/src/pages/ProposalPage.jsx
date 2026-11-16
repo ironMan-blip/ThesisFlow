@@ -35,7 +35,7 @@ export default function ProposalPage() {
       const res = await api(`/proposals/versions/${v.id}/delete-request`, { method: "POST", body: { reason } });
       setProposal(res);
       setAsking(null);
-      return `Delete requested for v${v.version_no}. The coordinator decides; if approved it is deleted ${user.deletion_days} days later.`;
+      return `Delete requested for v${v.version_no}. Your supervisor decides; if approved it is deleted ${user.deletion_days} days later.`;
     });
   };
 
@@ -43,19 +43,19 @@ export default function ProposalPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Proposal" intro={`Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept. To delete one, give a reason: if the coordinator approves, it is deleted ${user.deletion_days} days later unless they cancel it, and only if the phase is still open then. Your latest upload when the phase closes is your final submission.`} />
+      <PageHeader title="Proposal" intro={`Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept. To delete one, give a reason: if your supervisor approves, it is deleted ${user.deletion_days} days later unless they cancel it, and only if the phase is still open then. Your latest upload when the phase closes is your final submission.`} />
 
       {proposal?.versions.filter((v) => v.delete_by_staff && v.delete_pending).map((v) => (
-        // A supervisor or the coordinator scheduled this: the student must get the chance to object in time.
+        // The supervisor scheduled this: the student must get the chance to object in time.
         <div key={v.id} role="alert" className="alert-error">
           <Icon className="mt-px size-4">{ICONS.alert}</Icon>
           <div className="space-y-1">
             <p className="font-medium">v{v.version_no} ("{v.title}") is scheduled for deletion on {when(v.delete_executes_at)}.</p>
             <p className="whitespace-pre-line break-words">Reason: {v.delete_reason}</p>
             <p>
-              If this is a mistake or you have a problem with it, contact the coordinator at{" "}
-              <a href={`mailto:${proposal.coordinator_contact}`} className="font-medium underline">{proposal.coordinator_contact}</a>{" "}
-              before then. Only the coordinator can cancel it.
+              Your supervisor scheduled it. If this is a mistake or you have a problem with it, contact them
+              {proposal.supervisor_contact && <> at <a href={`mailto:${proposal.supervisor_contact}`} className="font-medium underline">{proposal.supervisor_contact}</a></>}{" "}
+              before then: they can cancel it.
             </p>
           </div>
         </div>
@@ -146,8 +146,8 @@ export default function ProposalPage() {
 
       <ReasonDialog open={!!asking} title={`Delete v${asking?.version_no}?`} confirm="Schedule delete" busy={busy === "ask"} error={error}
         min={user.min_reason_chars} max={user.max_reason_chars} onCancel={() => setAsking(null)} onSubmit={askDelete}>
-        If the coordinator approves, the version and its PDF are deleted {user.deletion_days} days after that, and later versions are
-        renumbered. You can't take this back: only the coordinator can reject or cancel it. If the phase closes first, the version is kept as a final submission.
+        If your supervisor approves, the version and its PDF are deleted {user.deletion_days} days after that, and later versions are
+        renumbered. You can't take this back: only your supervisor can reject or cancel it. If the phase closes first, the version is kept as a final submission.
       </ReasonDialog>
 
     </div>

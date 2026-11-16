@@ -5,7 +5,7 @@
 - Uploading for the current phase before its grace period ends counts as submitted (late or not).
 - Grace ends with no upload: the student is frozen and can ask the coordinator to restart at P1 at any time.
   An approved restart starts fresh at P1 at the next semester rollover.
-- After P3 the coordinator may defer the thesis: once means P3 again next semester, twice freezes the student.
+- After P3 the supervisor may defer the thesis: once means P3 again next semester, twice freezes the student.
 - The semester rollover moves everyone on and clears the deadlines for the next semester.
 """
 
@@ -248,10 +248,11 @@ def can_defer(db: Session, thesis: Thesis) -> bool:
     )
 
 
-def set_defer(db: Session, thesis_id: int, defer: bool) -> Thesis:
-    """Coordinator: defer (or undo deferring) a thesis whose P3 is submitted. Takes effect at the rollover."""
+def set_defer(db: Session, supervisor: User, thesis_id: int, defer: bool) -> Thesis:
+    """The thesis's supervisor (panel members later): defer, or undo deferring, a thesis whose P3 is submitted.
+    Takes effect at the coordinator's semester rollover."""
     thesis = db.scalar(select(Thesis).where(Thesis.id == thesis_id).with_for_update())
-    if thesis is None:
+    if thesis is None or thesis.supervisor_id != supervisor.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No thesis with that id")
     if defer and not can_defer(db, thesis):
         raise HTTPException(status.HTTP_409_CONFLICT, "Only an active thesis with P3 submitted this semester can be deferred")

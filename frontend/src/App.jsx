@@ -7,7 +7,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import ProposalPage from "./pages/ProposalPage";
-import { DeletionRequestsPage, RegistrationRequestsPage, RestartRequestsPage, VersionDeleteRequestsPage } from "./pages/RequestsPage";
+import { DeletionRequestsPage, RegistrationRequestsPage, RestartRequestsPage } from "./pages/RequestsPage";
 import ThesesPage from "./pages/ThesesPage";
 import ThesisPage from "./pages/ThesisPage";
 
@@ -26,7 +26,6 @@ export default function App() {
         <Route path="/registration-requests" element={<RegistrationRequestsPage />} />
         <Route path="/deletion-requests" element={<DeletionRequestsPage />} />
         <Route path="/restart-requests" element={<RestartRequestsPage />} />
-        <Route path="/version-delete-requests" element={<VersionDeleteRequestsPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

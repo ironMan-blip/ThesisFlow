@@ -109,9 +109,10 @@ def _check_deletable(db: Session, user: User) -> None:
 
 
 def pending_counts(db: Session, user: User) -> dict[str, int]:
-    # Badge counts keyed by tool: the coordinator decides requests, faculty answer supervision requests.
+    # Badge counts keyed by tool: the coordinator decides account requests, faculty answer supervision and delete requests.
     if user.role == Role.faculty:
-        return {"theses": thesis_service.count_requests(db, user)}
+        # Supervision requests plus students' version delete requests waiting for this supervisor.
+        return {"theses": thesis_service.count_requests(db, user) + proposal_service.count_delete_requests(db, user)}
     if user.role == Role.student:
         n = proposal_service.count_staff_deletes(db, user)
         return {"proposal": n} if n else {}
@@ -121,7 +122,6 @@ def pending_counts(db: Session, user: User) -> dict[str, int]:
         "registration_requests": count(_registrations()),
         "deletion_requests": count(_deletions().where(User.deletion_approved_at.is_(None))),  # awaiting a decision
         "restart_requests": progress_service.count_restarts(db),
-        "version_delete_requests": proposal_service.count_delete_requests(db),
     }
 
 

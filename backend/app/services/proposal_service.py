@@ -14,7 +14,6 @@ from app.models.proposal import Proposal, ProposalVersion
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import DELETION_DELAY, User
 from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut, ProposalVersionOut
-from app.schemas.thesis import DeleteRequestOut, PersonOut
 from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
@@ -61,6 +60,7 @@ def get_mine(db: Session, user: User) -> ProposalOut:
         phase=user.phase,
         upload_block=block,
         freeze_at=s.closes_at if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.due_at else None,
+        supervisor_contact=thesis and thesis.supervisor and thesis.supervisor.email,
     )
     rows = {v.id: v for v in thesis.versions} if thesis else {}
     for v in out.versions:
@@ -84,7 +84,7 @@ def _is_final(db: Session, version: ProposalVersion) -> bool:
 
 
 def staff_view(db: Session, staff: User, thesis: Thesis, versions: list[ProposalVersionOut]) -> None:
-    """Fill in the delete fields a supervisor / the coordinator sees for one thesis's versions."""
+    """Fill in the delete fields a supervisor / co-supervisor sees for one thesis's versions."""
     for v in versions:
         row = db.get(ProposalVersion, v.id)
         final = _is_final(db, row)
@@ -205,7 +205,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
                 ProposalVersion.sha256 == sha256,
                 ProposalVersion.title == title,
                 ProposalVersion.abstract == abstract,
-                # A version waiting to be deleted is never reused: only the coordinator may stop that delete.
+                # A version waiting to be deleted is never reused: only the supervisor may stop that delete.
                 ProposalVersion.delete_requested_at.is_(None),
             )
         )
@@ -249,7 +249,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
 
 
 def request_delete(db: Session, user: User, version_id: int, reason: str) -> ProposalOut:
-    """Student: ask to delete one of their versions, with a reason. The coordinator then approves it, and it runs
+    """Student: ask to delete one of their versions, with a reason. Their supervisor then approves it, and it runs
     DELETION_DELAY later unless cancelled. Same rule as uploads: current phase, still open; once it closes the
     version is final and kept."""
     version = user.thesis_id and db.scalar(
@@ -270,8 +270,8 @@ def request_delete(db: Session, user: User, version_id: int, reason: str) -> Pro
 
 
 def schedule_delete(db: Session, staff: User, version_id: int, reason: str) -> None:
-    """The thesis's supervisor (only them, not the co-supervisor or the coordinator): delete a version directly. Counts
-    as approved, so it runs DELETION_DELAY from now; only the coordinator can cancel it. Never a phase's final version."""
+    """The thesis's supervisor (not the co-supervisor): delete a version directly. Counts as approved, so it runs
+    DELETION_DELAY from now; the supervisor can still cancel it. Never a phase's final version."""
     version = _lock_for(db, version_id)
     if version is None or not thesis_service.can_view(staff, version.proposal.thesis):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
@@ -296,29 +296,26 @@ def _requested() -> Select:
     return select(ProposalVersion).where(ProposalVersion.delete_requested_at.is_not(None))
 
 
-def pending_delete_requests(db: Session) -> list[DeleteRequestOut]:
-    # Lapsed requests (the phase closed first) are left out. Few rows, so the rule is checked in Python.
-    out = []
-    for v in db.scalars(_requested().order_by(ProposalVersion.delete_requested_at)):
-        if _runnable(db, v):
-            student, by = v.proposal.thesis.student, v.delete_requested_by_id and db.get(User, v.delete_requested_by_id)
-            row = DeleteRequestOut.model_validate(
-                {**ProposalVersionOut.model_validate(v).model_dump(), "delete_requested_at": v.delete_requested_at,
-                 "delete_reason": v.delete_reason, "student": student and PersonOut.model_validate(student),
-                 "requested_by": by and PersonOut.model_validate(by), "thesis_code": v.proposal.thesis.code}
-            )
-            out.append(row)
-    return out
-
-
 def count_staff_deletes(db: Session, student: User) -> int:
     """Student badge: their versions the supervisor scheduled for deletion."""
     rows = db.scalars(_requested().join(Proposal).where(Proposal.thesis_id == student.thesis_id)) if student.thesis_id else []
     return sum(v.delete_by_staff and not _is_final(db, v) for v in rows)
 
 
-def count_delete_requests(db: Session) -> int:
-    return sum(r.delete_executes_at is None for r in pending_delete_requests(db))  # awaiting a decision
+def count_delete_requests(db: Session, supervisor: User) -> int:
+    """Supervisor badge: students' delete requests on their theses that wait for their decision."""
+    rows = db.scalars(
+        _requested().join(Proposal).join(Thesis).where(
+            Thesis.supervisor_id == supervisor.id, ProposalVersion.delete_approved_at.is_(None)
+        )
+    )
+    return sum(not v.delete_by_staff and _deletable(db, v) is not None for v in rows)
+
+
+def _supervised(db: Session, supervisor: User, version_id: int) -> ProposalVersion | None:
+    """The version, locked, if it belongs to a thesis this faculty member supervises (not co-supervises)."""
+    version = _lock_for(db, version_id)
+    return version if version is not None and version.proposal.thesis.supervisor_id == supervisor.id else None
 
 
 def _lock_for(db: Session, version_id: int) -> ProposalVersion | None:
@@ -331,9 +328,10 @@ def _lock_for(db: Session, version_id: int) -> ProposalVersion | None:
     return db.get(ProposalVersion, version_id)
 
 
-def approve_delete(db: Session, version_id: int) -> None:
-    """Coordinator: approve a request. The version is deleted DELETION_DELAY from now unless cancelled."""
-    version = _lock_for(db, version_id)
+def approve_delete(db: Session, supervisor: User, version_id: int) -> None:
+    """The thesis's supervisor: approve a student's request. The version is deleted DELETION_DELAY from now unless
+    cancelled."""
+    version = _supervised(db, supervisor, version_id)
     if version is None or version.delete_requested_at is None or version.delete_approved_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No delete request waiting for approval with that id")
     if _deletable(db, version) is None:
@@ -342,12 +340,12 @@ def approve_delete(db: Session, version_id: int) -> None:
     db.commit()
 
 
-def cancel_delete(db: Session, version_id: int) -> None:
-    """Coordinator only: rejects a request, or cancels an approved one any time before it runs."""
-    version = _lock_for(db, version_id)
+def cancel_delete(db: Session, supervisor: User, version_id: int) -> None:
+    """The thesis's supervisor only: rejects a request, or cancels an approved / scheduled one any time before it runs."""
+    version = _supervised(db, supervisor, version_id)
     if version is None or version.delete_requested_at is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No delete request with that id")
-    # A request the coordinator turns down before approving is shown to the student as rejected.
+    # A request the supervisor turns down before approving is shown to the student as rejected.
     version.delete_rejected_at = datetime.now(timezone.utc) if version.delete_approved_at is None else None
     version.delete_requested_at = version.delete_approved_at = version.delete_reason = version.delete_requested_by_id = None
     db.commit()

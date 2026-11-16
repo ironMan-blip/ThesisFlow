@@ -51,15 +51,15 @@ class ProposalVersion(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
     )
 
-    # Set when the student asks to delete this version (SRS F11 keeps old versions otherwise). The coordinator approves
-    # it; it then runs DELETION_DELAY later unless the coordinator cancels it or the phase closes first.
+    # Set when the student asks to delete this version (SRS F11 keeps old versions otherwise). The thesis's supervisor
+    # approves it; it then runs DELETION_DELAY later unless the supervisor cancels it or the phase closes first.
     delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delete_reason: Mapped[str | None] = mapped_column(Text)
-    # Set when the coordinator approves the request: only then does the DELETION_DELAY clock start.
+    # Set when the supervisor approves the request: only then does the DELETION_DELAY clock start.
     delete_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Who asked: the student, or a supervisor / the coordinator scheduling it directly (approved at once).
+    # Who asked: the student, or the supervisor scheduling it directly (approved at once).
     delete_requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    # Set when the coordinator rejects the student's request, so the student sees the answer; cleared on a new request.
+    # Set when the supervisor rejects the student's request, so the student sees the answer; cleared on a new request.
     delete_rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     proposal: Mapped[Proposal] = relationship(back_populates="versions")

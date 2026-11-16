@@ -8,7 +8,7 @@ from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from app.services import proposal_service
-from tests.helpers import PDF, REASON, auth, form_group, me, run_deletions_due, student, upload
+from tests.helpers import PDF, REASON, auth, me, run_deletions_due, student, supervised_student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -71,34 +71,31 @@ def test_upload_needs_an_accepted_thesis_group(client, db):
 
 
 def test_only_the_student_and_their_supervisors_see_versions(client, db):
-    owner = student(client, db, "s@x.com")
+    owner, sup = supervised_student(client, db, "s@x.com")
     other = student(client, db, "o@x.com")
     other_faculty = auth(client, db, "f@x.com", Role.faculty)
     coord = auth(client, db, "c@x.com", Role.coordinator)
     vid = upload(client, owner).json()["versions"][0]["id"]
-    assert len(client.get("/api/theses", headers=coord).json()) == 2
-
-    assert client.get(f"/api/proposals/versions/{vid}/file", headers=other).status_code == 404
-    assert client.get(f"/api/proposals/versions/{vid}/file", headers=other_faculty).status_code == 404
-    assert client.get(f"/api/proposals/versions/{vid}/file", headers=coord).status_code == 200
-
-
-def test_group_members_and_coordinator_download_but_only_the_student_uploads(client, db):
-    owner = auth(client, db, "s@x.com")
-    sup, co = auth(client, db, "f1@x.com", Role.faculty), auth(client, db, "f2@x.com", Role.faculty)
-    coord = auth(client, db, "c@x.com", Role.coordinator)
-    body = {"supervisor_id": me(client, sup)["id"], "co_supervisor_id": me(client, co)["id"]}
-    tid = client.post("/api/theses/mine", headers=owner, json=body).json()["thesis"]["id"]
-    for f in (sup, co):  # the group exists only once both accepted
-        assert client.post(f"/api/theses/requests/{tid}/accept", headers=f).status_code == 204
-    assert client.post("/api/theses/mine/register", headers=owner).status_code == 200
-    vid = upload(client, owner).json()["versions"][0]["id"]
     file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
 
-    assert (file(owner), file(sup), file(co), file(coord)) == (200, 200, 200, 200)
-    assert file(auth(client, db, "f3@x.com", Role.faculty)) == 404  # faculty outside the group
-    assert [t["id"] for t in client.get("/api/theses", headers=co).json()] == [tid]
-    for h in (sup, co, coord):
+    assert (file(owner), file(sup)) == (200, 200)
+    assert (file(other), file(other_faculty)) == (404, 404)
+    assert file(coord) == 404  # the coordinator runs semesters and accounts, never individual theses
+    assert client.get("/api/theses", headers=coord).status_code == 403
+
+
+def test_a_joined_co_supervisor_downloads_but_only_the_student_uploads(client, db):
+    owner, sup = supervised_student(client, db, "s@x.com")
+    co = auth(client, db, "co@x.com", Role.faculty)
+    tid = client.get("/api/theses/mine", headers=owner).json()["thesis"]["id"]
+    client.post("/api/theses/mine/co-supervisor", headers=owner, json={"co_supervisor_id": me(client, co)["id"]})
+    vid = upload(client, owner).json()["versions"][0]["id"]
+    file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
+    assert file(co) == 404  # not in the group until both agree
+    for f in (co, sup):
+        assert client.post(f"/api/theses/requests/{tid}/accept", headers=f).status_code == 204
+    assert (file(owner), file(sup), file(co)) == (200, 200, 200)
+    for h in (sup, co, auth(client, db, "c@x.com", Role.coordinator)):
         assert upload(client, h).status_code == 403
 
 
@@ -191,9 +188,15 @@ def _ask(client, h, v, body=REASON):
     return client.post(f"/api/proposals/versions/{v['id']}/delete-request", headers=h, json=body)
 
 
-def test_a_version_delete_needs_a_reason_approval_and_7_days(client, db, tmp_path):
+def _decide(client, sup, v, approve=True):
+    url = f"/api/proposals/delete-requests/{v['id']}"
+    return (client.post(url + "/approve", headers=sup) if approve else client.delete(url, headers=sup)).status_code
+
+
+def test_a_version_delete_needs_a_reason_supervisor_approval_and_7_days(client, db, tmp_path):
     coord = auth(client, db, "c@x.com", Role.coordinator)
-    h, other = student(client, db, "s@x.com"), student(client, db, "o@x.com")
+    h, sup = supervised_student(client, db, "s@x.com")
+    other = student(client, db, "o@x.com")
     for t in ("a", "b", "c"):
         upload(client, h, content=PDF + t.encode(), title=t)
     c, b, a = client.get("/api/proposals/mine", headers=h).json()["versions"]
@@ -201,23 +204,20 @@ def test_a_version_delete_needs_a_reason_approval_and_7_days(client, db, tmp_pat
 
     assert _ask(client, other, a).status_code == 404  # not their version
     assert _ask(client, h, a, body={"reason": "oops"}).status_code == 422  # a reason, not a word
-    mine = _ask(client, h, a).json()
-    row = mine["versions"][-1]
-    assert (row["title"], row["delete_pending"], row["can_request_delete"]) == ("a", True, False)
-    assert row["delete_executes_at"] is None  # waiting for the coordinator: no clock yet
+    row = _ask(client, h, a).json()["versions"][-1]
+    assert (row["title"], row["delete_pending"], row["can_request_delete"], row["delete_executes_at"]) == ("a", True, False, None)
     assert _ask(client, h, a).status_code == 409  # already requested
-    assert client.get("/api/proposals/delete-requests", headers=h).status_code == 403  # coordinator only
-    assert client.get("/api/auth/me/counts", headers=coord).json()["version_delete_requests"] == 1
-    [req] = client.get("/api/proposals/delete-requests", headers=coord).json()
-    assert (req["id"], req["title"], req["student"]["email"], req["delete_reason"]) == (a["id"], "a", "s@x.com", REASON["reason"])
-    assert req["delete_executes_at"] is None
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 1}  # waits for the supervisor
+    [t] = client.get("/api/theses", headers=sup).json()
+    assert t["is_supervisor"] and [(v["title"], v["delete_pending"], v["delete_reason"]) for v in t["versions"]][-1] == ("a", True, REASON["reason"])
     assert run_deletions_due(db) == (0, 0)  # 7 days alone do nothing without approval
-    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=h).status_code == 403
-    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 204
-    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 404  # once
-    assert client.get("/api/auth/me/counts", headers=coord).json()["version_delete_requests"] == 0  # decided
-    [req] = client.get("/api/proposals/delete-requests", headers=coord).json()
-    assert req["delete_executes_at"] is not None  # still listed, so it can be cancelled
+
+    assert _decide(client, h, a) == 403  # students can't decide
+    assert _decide(client, coord, a) == 403  # nor the coordinator: it's the supervisor's call
+    assert _decide(client, auth(client, db, "f@x.com", Role.faculty), a) == 404  # another faculty member
+    assert _decide(client, sup, a) == 204
+    assert _decide(client, sup, a) == 404  # once
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
     assert client.get("/api/proposals/mine", headers=h).json()["versions"][-1]["delete_executes_at"] is not None
     assert proposal_service.run_due_deletions(db) == 0  # approved, but the 7 days aren't over
 
@@ -226,61 +226,47 @@ def test_a_version_delete_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     assert [(v["title"], v["version_no"]) for v in versions] == [("c", 2), ("b", 1)]
     assert len(list((tmp_path / "proposals").iterdir())) == 2  # the PDF is gone too
     assert client.get(f"/api/proposals/versions/{a['id']}/file", headers=h).status_code == 404
-    assert client.get("/api/proposals/delete-requests", headers=coord).json() == []
     versions = upload(client, h, content=PDF + b"d", title="d").json()["versions"]
     assert [(v["title"], v["version_no"]) for v in versions] == [("d", 3), ("c", 2), ("b", 1)]
 
 
-def test_only_the_coordinator_cancels_a_version_delete(client, db):
-    coord = auth(client, db, "c@x.com", Role.coordinator)
-    h = student(client, db, "s@x.com")
+def test_only_the_supervisor_cancels_a_version_delete(client, db):
+    h, sup = supervised_student(client, db, "s@x.com")
     v = upload(client, h).json()["versions"][0]
     _ask(client, h, v)
     assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=h).status_code == 403
-    client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord)
+    _decide(client, sup, v)
     # Uploading the same file again doesn't stop the delete either: it is stored as a new version.
     versions = upload(client, h).json()["versions"]
     assert [(x["version_no"], x["delete_pending"]) for x in versions] == [(2, False), (1, True)]
 
-    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 204
-    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 404
+    assert _decide(client, sup, v, approve=False) == 204  # cancel an approved delete
+    assert _decide(client, sup, v, approve=False) == 404
     assert client.get("/api/proposals/mine", headers=h).json()["versions"][1]["can_request_delete"] is True
     assert run_deletions_due(db) == (0, 0)
     assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 2
 
-    # A request can be rejected before approval too, and approving after the phase closed is refused.
-    _ask(client, h, v)
-    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 204
+    # Approving after the phase closed is refused.
     _ask(client, h, v)
     p1 = db.get(MilestoneTemplate, Phase.P1)
     p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0
     db.flush()
-    assert client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord).status_code == 409
+    assert _decide(client, sup, v) == 409
 
 
 def test_a_version_delete_lapses_when_the_phase_closes_first(client, db):
-    coord = auth(client, db, "c@x.com", Role.coordinator)
-    h = student(client, db, "s@x.com")
+    h, sup = supervised_student(client, db, "s@x.com")
     v = upload(client, h).json()["versions"][0]
     _ask(client, h, v)
-    client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord)  # approved, then the phase closes
+    _decide(client, sup, v)  # approved, then the phase closes
     p1 = db.get(MilestoneTemplate, Phase.P1)
     p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0  # closed: v is the final submission
     db.flush()
-    assert client.get("/api/proposals/delete-requests", headers=coord).json() == []
     mine = client.get("/api/proposals/mine", headers=h).json()["versions"][0]
     assert (mine["delete_pending"], mine["can_request_delete"], mine["delete_executes_at"]) == (False, False, None)
     assert _ask(client, h, v).status_code == 409
     assert run_deletions_due(db) == (0, 0)
     assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 1  # kept
-
-
-def _supervised(client, db, email):
-    """A student ready to upload, and their supervisor's headers."""
-    h = auth(client, db, email)
-    sup = form_group(client, db, h)
-    assert client.post("/api/theses/mine/register", headers=h).status_code == 200
-    return h, sup
 
 
 def _schedule(client, headers, v, body=REASON):
@@ -289,7 +275,7 @@ def _schedule(client, headers, v, body=REASON):
 
 def test_supervisor_deletes_a_version_directly_but_never_the_final_one(client, db, tmp_path):
     coord = auth(client, db, "c@x.com", Role.coordinator)
-    h, sup = _supervised(client, db, "s@x.com")
+    h, sup = supervised_student(client, db, "s@x.com")
     other_sup = auth(client, db, "f@x.com", Role.faculty)
     upload(client, h, content=PDF + b"a", title="a")
     b, a = upload(client, h, content=PDF + b"b", title="b").json()["versions"]
@@ -302,15 +288,15 @@ def test_supervisor_deletes_a_version_directly_but_never_the_final_one(client, d
     assert _schedule(client, sup, a).status_code == 204
     assert _schedule(client, sup, a).status_code == 409  # already scheduled
 
-    # The student is told: badge, reason, date. They can't cancel; the coordinator can, any time.
+    # The student is told: badge, reason, date, and their supervisor's contact. They can't cancel.
     assert client.get("/api/auth/me/counts", headers=h).json() == {"proposal": 1}
-    row = client.get("/api/proposals/mine", headers=h).json()["versions"][1]
+    res = client.get("/api/proposals/mine", headers=h).json()
+    row = res["versions"][1]
     assert (row["delete_pending"], row["delete_by_staff"], row["delete_reason"]) == (True, True, REASON["reason"])
     assert row["delete_executes_at"] is not None and row["can_request_delete"] is False
+    assert res["supervisor_contact"] == me(client, sup)["email"]
     assert client.delete(f"/api/proposals/delete-requests/{a['id']}", headers=h).status_code == 403
-    [req] = client.get("/api/proposals/delete-requests", headers=coord).json()
-    assert req["requested_by"]["id"] == me(client, sup)["id"] and req["delete_executes_at"] is not None
-    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 404  # approved already
+    assert _decide(client, sup, a) == 404  # approved already
     theses = client.get("/api/theses", headers=sup).json()
     assert [(v["title"], v["delete_pending"], v["can_schedule_delete"]) for v in theses[0]["versions"]] == [("b", False, False), ("a", True, False)]
 
@@ -321,22 +307,21 @@ def test_supervisor_deletes_a_version_directly_but_never_the_final_one(client, d
     assert client.get("/api/auth/me/counts", headers=h).json() == {}
 
 
-def test_co_supervisor_cannot_delete_and_coordinator_cancels(client, db):
-    coord = auth(client, db, "c@x.com", Role.coordinator)
-    h = auth(client, db, "s@x.com")
-    sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
-    tid = client.post("/api/theses/mine", headers=h, json={"supervisor_id": me(client, sup)["id"], "co_supervisor_id": me(client, co)["id"]}).json()["thesis"]["id"]
-    for f in (sup, co):
+def test_co_supervisor_cannot_delete_and_supervisor_cancels(client, db):
+    h, sup = supervised_student(client, db, "s@x.com")
+    co = auth(client, db, "co@x.com", Role.faculty)
+    tid = client.get("/api/theses/mine", headers=h).json()["thesis"]["id"]
+    client.post("/api/theses/mine/co-supervisor", headers=h, json={"co_supervisor_id": me(client, co)["id"]})
+    for f in (co, sup):
         assert client.post(f"/api/theses/requests/{tid}/accept", headers=f).status_code == 204
-    assert client.post("/api/theses/mine/register", headers=h).status_code == 200
     upload(client, h, content=PDF + b"a", title="a")
     b, a = upload(client, h, content=PDF + b"b", title="b").json()["versions"]
     assert _schedule(client, co, a).status_code == 403  # co-supervisor sees it but can't delete
-    assert [v["can_schedule_delete"] for v in client.get("/api/theses", headers=co).json()[0]["versions"]] == [False, False]
-    assert [v["can_schedule_delete"] for v in client.get("/api/theses", headers=coord).json()[0]["versions"]] == [False, False]
-    assert _schedule(client, sup, b).status_code == 409  # final version
+    [t] = client.get("/api/theses", headers=co).json()
+    assert t["is_supervisor"] is False and [v["can_schedule_delete"] for v in t["versions"]] == [False, False]
     assert _schedule(client, sup, a).status_code == 204
-    assert client.delete(f"/api/proposals/delete-requests/{a['id']}", headers=coord).status_code == 204
+    assert _decide(client, co, a, approve=False) == 404  # nor cancel it
+    assert _decide(client, sup, a, approve=False) == 204
     row = client.get("/api/proposals/mine", headers=h).json()["versions"][1]
     assert (row["delete_pending"], row["delete_rejected"]) == (False, False)  # a cancel isn't a rejection of the student
     assert run_deletions_due(db) == (0, 0)
@@ -344,11 +329,10 @@ def test_co_supervisor_cannot_delete_and_coordinator_cancels(client, db):
 
 
 def test_student_sees_a_rejected_request(client, db):
-    coord = auth(client, db, "c@x.com", Role.coordinator)
-    h = student(client, db, "s@x.com")
+    h, sup = supervised_student(client, db, "s@x.com")
     v = upload(client, h).json()["versions"][0]
     _ask(client, h, v)
-    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 204
+    assert _decide(client, sup, v, approve=False) == 204
     row = client.get("/api/proposals/mine", headers=h).json()["versions"][0]
     assert (row["delete_rejected"], row["can_request_delete"]) == (True, True)
     row = _ask(client, h, v).json()["versions"][0]  # asking again clears the old answer

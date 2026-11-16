@@ -21,7 +21,8 @@ class Role(str, enum.Enum):
 ROLE_TOOLS = {
     Role.student: ["thesis", "proposal", "deadlines", "account"],
     Role.faculty: ["theses", "deadlines", "account"],
-    Role.coordinator: ["theses", "deadlines", "accounts", "registration_requests", "deletion_requests", "restart_requests", "version_delete_requests"],
+    # Semesters (deadlines and the rollover) and accounts only: the coordinator never sees individual theses.
+    Role.coordinator: ["deadlines", "accounts", "registration_requests", "deletion_requests", "restart_requests"],
 }
 
 # The coordinator has this long to decide a sign-up or an account deletion request.

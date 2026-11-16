@@ -7,7 +7,7 @@ export const TOOLS = {
     to: "/thesis", title: "Thesis group", text: "Choose your supervisor, see your thesis ID and your phase.", icon: BOOK,
   },
   theses: {
-    to: "/theses", title: "Theses", text: "Thesis groups, supervision requests and every proposal version.", icon: BOOK,
+    to: "/theses", title: "Theses", text: "Supervision requests, your thesis groups, every proposal version and delete decisions.", icon: BOOK,
   },
   proposal: {
     to: "/proposal", title: "Proposal", text: "Upload a new version and see your past submissions.",
@@ -32,10 +32,6 @@ export const TOOLS = {
   restart_requests: {
     to: "/restart-requests", title: "Restart requests", text: "Frozen students who asked to start again at P1.",
     icon: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></>,
-  },
-  version_delete_requests: {
-    to: "/version-delete-requests", title: "Version delete requests", text: "Version deletes with reasons: approve, reject, or cancel within 7 days.",
-    icon: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5" /></>,
   },
   account: {
     to: "/account", title: "Account", text: "Your account details, and asking to delete your account.",

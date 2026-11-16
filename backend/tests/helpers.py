@@ -36,12 +36,17 @@ def form_group(client, db, student, supervisor=None):
     return supervisor
 
 
+def supervised_student(client, db, email):
+    """A student with an active thesis group registered for P1, ready to upload, and their supervisor's headers."""
+    h = auth(client, db, email)
+    sup = form_group(client, db, h)
+    assert client.post("/api/theses/mine/register", headers=h).status_code == 200
+    return h, sup
+
+
 def student(client, db, email):
     """A student with an active thesis group registered for P1, ready to upload."""
-    h = auth(client, db, email)
-    form_group(client, db, h)
-    assert client.post("/api/theses/mine/register", headers=h).status_code == 200
-    return h
+    return supervised_student(client, db, email)[0]
 
 
 def upload(client, headers, content=PDF, title="My thesis", name="p.pdf"):
