@@ -13,6 +13,12 @@ from app.schemas.user import MAX_PASSWORD, UserCreate
 from app.security import create_access_token, hash_password, verify_password
 
 _DUMMY_HASH = hash_password("timing-equaliser")
+# Same text for every clash, so sign-up can't reveal which IDs or emails have accounts. Someone who really applied
+# logs in with their password: login (which needs that password) then says whether the request is waiting or expired.
+REGISTER_TAKEN = (
+    "This ID number or email can't be registered. If you already applied, log in with your password to see "
+    "your request's status. If you didn't, contact the coordinator"
+)
 
 
 def get_by_email(db: Session, email: str) -> User | None:
@@ -62,17 +68,14 @@ def create_user(
 def register(db: Session, data: UserCreate) -> User:
     # Every sign-up waits for the coordinator to approve before the user can log in.
     now = datetime.now(timezone.utc)
-    existing = get_by_id_number(db, data.id_number) or get_by_email(db, data.email)
-    if existing and not existing.approved:
-        if now < existing.created_at + REVIEW_WINDOW:
-            # No email check exists, so someone may have used this ID or email; the coordinator can reject it.
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "User already applied to register, waiting for approval. If this wasn't you, contact the coordinator",
-            )
+    existing = {u.id: u for u in (get_by_id_number(db, data.id_number), get_by_email(db, data.email)) if u}
+    if any(u.approved or now < u.created_at + REVIEW_WINDOW for u in existing.values()):
+        # One message for every clash, so sign-up can't be used to find out which IDs or emails have accounts.
+        raise HTTPException(status.HTTP_409_CONFLICT, REGISTER_TAKEN)
+    for u in existing.values():
         # The review window ran out: the new submission replaces the old request.
-        db.delete(existing)
-        db.flush()
+        db.delete(u)
+    db.flush()
     # A request nobody reviewed within the window stops reserving its initials.
     holder = data.initials and get_by_initials(db, data.initials)
     if holder and not holder.approved and now >= holder.created_at + REVIEW_WINDOW:
@@ -122,8 +125,14 @@ def login(db: Session, id_number: str, password: str, ip: str) -> str:
     for key, _ in keys:
         rate_limit.unhit(key)
     if not user.approved:
+        if datetime.now(timezone.utc) >= user.created_at + REVIEW_WINDOW:
+            # register() replaces a request nobody decided in time.
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Your registration request expired without a decision. Register again"
+            )
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
+            status.HTTP_403_FORBIDDEN,
+            f"Your registration request is waiting for coordinator approval (within {REVIEW_HOURS} hours of applying)",
         )
     rate_limit.remember_ip(account, ip)
     return create_access_token(user.id, user.password_hash, user.session_epoch)

@@ -49,6 +49,11 @@ async function send(path, { body, headers, ...options } = {}) {
   }).catch(() => {
     throw new ApiError(0, UNAVAILABLE); // network down or the dev server stopped
   });
+  if (res.status === 401 && token && path !== "/auth/login") {
+    // Session ended (logout on another device, password change, expiry): back to login from any page.
+    clearToken();
+    window.location.replace("/login");
+  }
   if (!res.ok) {
     const data = await res.json().catch(() => null);
     // 502/504 come from the proxy when the backend is down, with no JSON detail.

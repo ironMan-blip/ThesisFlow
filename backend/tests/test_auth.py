@@ -12,8 +12,9 @@ from app.database import get_db
 from app.main import app
 from app.models.user import Role, User
 from app.security import hash_password
-from app.services import auth_service
-from tests.helpers import auth, student as make_student, upload
+from app.services import account_service, auth_service
+from app.services.auth_service import REGISTER_TAKEN
+from tests.helpers import REASON, auth, form_group, run_deletions_due, student as make_student, supervised_student, upload
 
 
 def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
@@ -51,11 +52,11 @@ def test_duplicate_email_rejected(client, db):
     auth_service.create_user(db, "a@b.com", "12345678", "A", "Password123", Role.student)
     r = register(client, email="A@B.com", id_number="87654321")
     assert r.status_code == 409
-    assert r.json()["detail"] == "User already exists"
+    assert r.json()["detail"] == REGISTER_TAKEN
     # Same email under the other role is also taken.
     r = register(client, id_number="87654321", role="faculty")
     assert r.status_code == 409
-    assert r.json()["detail"] == "User already exists"
+    assert r.json()["detail"] == REGISTER_TAKEN
 
 
 def test_duplicate_id_number_rejected(client, db):
@@ -63,7 +64,7 @@ def test_duplicate_id_number_rejected(client, db):
     for role in ["student", "faculty"]:
         r = register(client, email="other@b.com", role=role)
         assert r.status_code == 409
-        assert r.json()["detail"] == "ID number already registered"
+        assert r.json()["detail"] == REGISTER_TAKEN
 
 
 def test_login_needs_id_number_not_email(client):
@@ -193,7 +194,7 @@ def test_cannot_reregister_within_48_hours(client, db):
     old_id = client.post("/api/auth/register", json=body).json()["id"]
     r = client.post("/api/auth/register", json=body)
     assert r.status_code == 409
-    assert r.json()["detail"] == "User already applied to register, waiting for approval. If this wasn't you, contact the coordinator"
+    assert r.json()["detail"] == REGISTER_TAKEN
 
     # 48 hours pass without a decision: a new submission replaces the old one.
     user = db.get(User, old_id)
@@ -218,60 +219,63 @@ def test_register_rejects_bad_email_and_weak_password(client):
         assert r.json()["detail"].startswith("password:"), weak
 
 
-def test_account_deletion_needs_coordinator_approval(client, db, tmp_path, timelines):
-    student = make_student(client, db, "s@b.com")
+def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_path, timelines):
+    student, sup = supervised_student(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
     pdfs = list(tmp_path.rglob("*.pdf"))
     assert len(pdfs) == 1
 
-    assert client.post("/api/auth/me/deletion-request", headers=coord).status_code == 403
-    r = client.post("/api/auth/me/deletion-request", headers=student)
-    assert r.status_code == 200 and r.json()["deletion_pending"] is True
-    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 409
-    # Still usable while waiting.
-    assert client.get("/api/auth/me", headers=student).status_code == 200
+    assert client.post("/api/auth/me/deletion-request", headers=coord, json=REASON).status_code == 403
+    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 422  # no reason
+    r = client.post("/api/auth/me/deletion-request", headers=student, json={"reason": "  bye  "})
+    assert r.status_code == 422 and r.json()["detail"].startswith("reason:")  # one word isn't a reason
+    r = client.post("/api/auth/me/deletion-request", headers=student, json=REASON)
+    me = r.json()
+    assert r.status_code == 200 and me["deletion_pending"] is True and me["deletion_by_coordinator"] is False
+    assert me["coordinator_contact"] is None  # their own request: no "contact the coordinator" message
+    assert me["deletion_reason"] == REASON["reason"] and me["deletion_executes_at"] is None  # no clock until approved
+    assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 409
 
     assert client.get("/api/auth/deletion-requests", headers=student).status_code == 403
     pending = client.get("/api/auth/deletion-requests", headers=coord).json()
-    assert [p["email"] for p in pending] == ["s@b.com"]
+    assert [(p["email"], p["deletion_reason"]) for p in pending] == [("s@b.com", REASON["reason"])]
     uid = pending[0]["id"]
-    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 204
+    assert client.get("/api/auth/me/counts", headers=coord).json()["deletion_requests"] == 1
+    assert run_deletions_due(db) == (0, 0)  # 7 days alone do nothing without approval
+    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=student).status_code == 403
+    approved = client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord)
+    assert approved.status_code == 200 and approved.json()["deletion_executes_at"] is not None
+    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 404  # once
+    assert client.get("/api/auth/me/counts", headers=coord).json()["deletion_requests"] == 0  # decided
+    assert account_service.run_due_deletions(db) == 0  # approved, but the 7 days aren't over
+    assert client.get("/api/auth/me", headers=student).status_code == 200  # still usable while waiting
+
+    assert run_deletions_due(db) == (1, 0)
     assert db.get(User, uid) is None
     assert pdfs[0].exists()  # the thesis and its versions are kept as an archive
     assert client.get("/api/auth/me", headers=student).status_code == 401
-    theses = client.get("/api/theses", headers=coord).json()
+    theses = client.get("/api/theses", headers=sup).json()
     assert [(t["status"], t["student"], len(t["versions"])) for t in theses] == [("dropped", None, 1)]
 
 
-def test_reject_deletion_keeps_account(client, db):
+def test_only_the_coordinator_cancels_a_deletion(client, db):
     student = auth(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
-    uid = client.post("/api/auth/me/deletion-request", headers=student).json()["id"]
+    uid = client.post("/api/auth/me/deletion-request", headers=student, json=REASON).json()["id"]
+    assert client.delete(f"/api/auth/deletion-requests/{uid}", headers=student).status_code == 403
+    client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord)
+    assert client.delete(f"/api/auth/deletion-requests/{uid}", headers=student).status_code == 403  # approved: still only them
     r = client.delete(f"/api/auth/deletion-requests/{uid}", headers=coord)
-    assert r.status_code == 200 and r.json()["deletion_pending"] is False
+    assert r.status_code == 200 and (r.json()["deletion_pending"], r.json()["deletion_reason"]) == (False, None)
     assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
-    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 404
-
-
-def test_deletion_request_lapses_after_48_hours(client, db):
-    student = auth(client, db, "s@b.com")
-    coord = auth(client, db, "coord@b.com", Role.coordinator)
-    uid = client.post("/api/auth/me/deletion-request", headers=student).json()["id"]
-    user = db.get(User, uid)
-    user.deletion_requested_at -= timedelta(hours=48, minutes=1)
-    db.commit()
-
-    assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
-    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 404
-    assert db.get(User, uid) is not None
-    me = client.get("/api/auth/me", headers=student).json()
-    assert me["deletion_pending"] is False
+    assert client.delete(f"/api/auth/deletion-requests/{uid}", headers=coord).status_code == 404
+    assert run_deletions_due(db) == (0, 0) and db.get(User, uid) is not None
     # The user may ask again.
-    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+    assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 200
 
 
-def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path, timelines):
+def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path, timelines):
     student = make_student(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
@@ -289,23 +293,45 @@ def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path, timelines)
     assert emails("id_prefix=%25") == []  # LIKE wildcards are matched literally
     assert client.get("/api/auth/accounts?role=coordinator", headers=coord).status_code == 422
 
+    schedule = lambda uid, headers=coord, body=REASON: client.post(f"/api/auth/accounts/{uid}/deletion", headers=headers, json=body)
     coord_id = db.scalar(select(User.id).where(User.email == "coord@b.com"))
-    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=student).status_code == 403
-    assert client.delete(f"/api/auth/accounts/{coord_id}", headers=coord).status_code == 403
+    assert schedule(by_email["s@b.com"], headers=student).status_code == 403
+    assert schedule(coord_id).status_code == 403
+    assert schedule(by_email["s@b.com"], body={}).status_code == 422  # the coordinator gives a reason too
     # A supervisor of an active thesis is kept; once the thesis is archived they can go.
-    assert client.delete(f"/api/auth/accounts/{by_email[supervisor_email]}", headers=coord).status_code == 409
-    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 204
+    assert schedule(by_email[supervisor_email]).status_code == 409
+    r = schedule(by_email["s@b.com"])
+    assert r.status_code == 200 and r.json()["deletion_by_coordinator"] is True
+    # The owner sees it on their next page load: the date, the reason and who to contact before it runs.
+    mine = client.get("/api/auth/me", headers=student).json()
+    assert (mine["deletion_reason"], mine["coordinator_contact"]) == (REASON["reason"], settings.admin_email)
+    assert mine["deletion_executes_at"] is not None
+    assert schedule(by_email["s@b.com"]).status_code == 409  # already scheduled
+    assert db.get(User, by_email["s@b.com"]) is not None  # nothing happens before the 7 days
+    assert run_deletions_due(db) == (1, 0)
     assert db.get(User, by_email["s@b.com"]) is None
     assert len(list(tmp_path.rglob("*.pdf"))) == 1  # versions are never lost
-    assert client.delete(f"/api/auth/accounts/{by_email[supervisor_email]}", headers=coord).status_code == 204
-    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 404
+    assert schedule(by_email[supervisor_email]).status_code == 200
+    assert schedule(by_email["s@b.com"]).status_code == 404
+
+
+def test_a_deletion_that_became_unsafe_during_the_wait_is_dropped(client, db):
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    faculty = auth(client, db, "f@b.com", Role.faculty)
+    fid = client.get("/api/auth/me", headers=faculty).json()["id"]
+    assert client.post("/api/auth/me/deletion-request", headers=faculty, json=REASON).status_code == 200
+    assert client.post(f"/api/auth/deletion-requests/{fid}/approve", headers=coord).status_code == 200
+    form_group(client, db, auth(client, db, "s@b.com"), faculty)  # now supervises an active thesis
+    assert run_deletions_due(db) == (0, 0)
+    assert db.get(User, fid).deletion_pending is False
+    assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
 
 
 def test_pending_counts_and_name_fields(client, db):
     student = auth(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert register(client).status_code == 201
-    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+    assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 200
 
     assert client.get("/api/auth/me/counts", headers=student).json() == {}
     assert client.get("/api/auth/me/counts", headers=coord).json() == {
@@ -436,7 +462,7 @@ def test_nul_characters_are_a_422_not_a_500(client, body):
 
 def test_id_past_integer_range_is_a_422(client, db):
     h = auth(client, db, "c@b.com", Role.coordinator)
-    assert client.delete(f"/api/auth/accounts/{2**40}", headers=h).status_code == 422
+    assert client.delete(f"/api/auth/deletion-requests/{2**40}", headers=h).status_code == 422
 
 
 def test_big_bodies_need_a_signed_in_user(client):
@@ -472,3 +498,23 @@ def test_logout_ends_every_session_of_that_person(client, db):
     assert client.get("/api/auth/me", headers=other).status_code == 200  # other people stay signed in
     fresh = {"Authorization": f"Bearer {login(client, me_id, 'Password123').json()['access_token']}"}
     assert client.get("/api/auth/me", headers=fresh).status_code == 200
+
+
+def test_logged_out_token_cannot_start_a_big_upload(client, db):
+    h = auth(client, db, "s@b.com")
+    assert client.post("/api/auth/logout", headers=h).status_code == 204
+    res = client.post("/api/proposals/mine/versions", content=b"x" * (70 * 1024), headers=h)
+    assert (res.status_code, res.json()["detail"]) == (401, "Sign in to upload")
+
+
+def test_login_tells_an_applicant_their_request_status(client, db):
+    body = {"email": "s@b.com", "id_number": "22222222", "full_name": "S", "password": "Password123", "role": "student"}
+    uid = client.post("/api/auth/register", json=body).json()["id"]
+    res = client.post("/api/auth/login", data={"username": "22222222", "password": "Password123"})
+    assert res.status_code == 403 and "waiting for coordinator approval" in res.json()["detail"]
+    db.get(User, uid).created_at -= timedelta(hours=48, minutes=1)
+    db.flush()
+    res = client.post("/api/auth/login", data={"username": "22222222", "password": "Password123"})
+    assert (res.status_code, res.json()["detail"]) == (403, "Your registration request expired without a decision. Register again")
+    # Without the password nobody learns anything.
+    assert client.post("/api/auth/login", data={"username": "22222222", "password": "Wrong1234"}).status_code == 401

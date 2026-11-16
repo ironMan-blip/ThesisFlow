@@ -1,5 +1,5 @@
 // Small pieces every page shares.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { personName, when } from "../format";
 
 // Outline icon in a 24px grid; `children` are the SVG paths (see TOOLS and ICONS).
@@ -152,6 +152,41 @@ export function ConfirmDialog({ open, title, confirm, danger = false, onCancel, 
         <button onClick={onCancel} autoFocus className="btn-secondary">Cancel</button>
         <button onClick={onConfirm} className={danger ? "btn-danger" : "btn-primary"}>{confirm}</button>
       </div>
+    </dialog>
+  );
+}
+
+// Modal that asks why something is being deleted: every delete needs a reason. min/max come from the API
+// (user.min_reason_chars / max_reason_chars), which checks them too. Stays open on error so the text isn't lost.
+export function ReasonDialog({ open, title, confirm, busy, error, min, max, onCancel, onSubmit, children }) {
+  const ref = useRef(null);
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    if (open) {
+      setReason("");
+      ref.current.showModal();
+    } else ref.current.close();
+  }, [open]);
+  const length = reason.trim().length;
+  return (
+    <dialog ref={ref} onClose={onCancel} aria-labelledby="reason-title" className="card m-auto w-full max-w-lg p-6 backdrop:bg-zinc-900/40">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(reason.trim()); }} className="space-y-4">
+        <h2 id="reason-title" className="font-semibold">{title}</h2>
+        <div className="text-sm text-zinc-600">{children}</div>
+        <label className="label">
+          Reason
+          <textarea required minLength={min} maxLength={max} rows={5} value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="Explain why this should be deleted, in a sentence or two." aria-describedby="reason-hint" className="input resize-y" />
+        </label>
+        <p id="reason-hint" className="text-xs tabular-nums text-zinc-500">
+          {length < min ? `At least ${min} characters (${length} so far).` : `${length} / ${max} characters.`}
+        </p>
+        <Alerts error={error} />
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className="btn-secondary">Cancel</button>
+          <button disabled={busy || length < min} className="btn-danger">{busy ? "Saving…" : confirm}</button>
+        </div>
+      </form>
     </dialog>
   );
 }

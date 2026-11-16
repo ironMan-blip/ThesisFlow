@@ -1,23 +1,21 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, Avatar, PageHeader } from "../components/ui";
+import { Avatar, PageHeader, ReasonDialog } from "../components/ui";
+import { when } from "../format";
 import { useAction } from "../useAction";
 
 export default function AccountPage() {
   const { user } = useOutletContext();
-  const [pending, setPending] = useState(user.deletion_pending);
-  const [confirming, setConfirming] = useState(false);
-  const { busy, error, run } = useAction();
+  const [me, setMe] = useState(user); // refreshed after asking, so the scheduled date shows at once
+  const [asking, setAsking] = useState(false);
+  const { busy, error, setError, run } = useAction();
 
-  const requestDeletion = () =>
+  const requestDeletion = (reason) =>
     run("delete", async () => {
-      const me = await api("/auth/me/deletion-request", { method: "POST" });
-      setPending(me.deletion_pending);
-      setConfirming(false);
+      setMe(await api("/auth/me/deletion-request", { method: "POST", body: { reason } }));
+      setAsking(false);
     });
-
-  const sending = busy === "delete";
 
   return (
     <div className="space-y-8">
@@ -45,32 +43,35 @@ export default function AccountPage() {
       <section className="card max-w-2xl space-y-3 p-6 ring-red-200" aria-labelledby="delete-heading">
         <h2 id="delete-heading" className="font-semibold text-red-800">Delete account</h2>
         <p className="text-sm text-zinc-600">
-          Your request goes to the coordinator. If they approve it within {user.review_hours} hours, your account is deleted for good.
-          Your thesis and proposal versions stay archived with the coordinator. If they don't, your account is kept and you can ask again.
+          Tell us why. The coordinator decides; if they approve, your account is deleted for good {user.deletion_days} days
+          later. You can't take the request back: only the coordinator can reject or cancel it. Your thesis and proposal versions stay archived.
         </p>
 
-        <Alerts error={error} />
-
-        {pending ? (
-          <p role="status" className="alert-success">Deletion requested. Waiting for the coordinator to decide.</p>
-        ) : confirming ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <p role="alert" className="alert-error w-full">
-              <strong>Warning: this can't be undone.</strong> If the coordinator approves, your account will be
-              deleted permanently and cannot be recovered. Your thesis and proposal versions stay as an archive.
+        {me.deletion_pending ? (
+          <div role="status" className="space-y-1 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900 ring-1 ring-amber-600/20 ring-inset">
+            <p className="font-medium">
+              {me.deletion_executes_at
+                ? `${me.deletion_by_coordinator ? "The coordinator scheduled your account for deletion" : "Approved: your account will be deleted"} on ${when(me.deletion_executes_at)}.`
+                : "Deletion requested. Waiting for the coordinator to decide."}
             </p>
-            <span className="text-sm font-medium">Send the deletion request?</span>
-            <button onClick={() => setConfirming(false)} disabled={sending} className="btn-secondary">Cancel</button>
-            <button onClick={requestDeletion} disabled={sending} className="btn-danger">
-              {sending ? "Sending…" : "Yes, request deletion"}
-            </button>
+            <p>Only the coordinator can {me.deletion_executes_at ? "cancel it before then" : "reject it"}.</p>
+            {me.coordinator_contact && (
+              <p>If you have a problem with it, contact the coordinator at <a href={`mailto:${me.coordinator_contact}`} className="font-medium underline">{me.coordinator_contact}</a> before then.</p>
+            )}
+            <p className="whitespace-pre-line text-amber-800">Reason: {me.deletion_reason}</p>
           </div>
         ) : (
-          <button onClick={() => setConfirming(true)} className="btn-secondary text-red-700 hover:bg-red-50 hover:text-red-800">
+          <button onClick={() => { setError(null); setAsking(true); }} className="btn-secondary text-red-700 hover:bg-red-50 hover:text-red-800">
             Request account deletion
           </button>
         )}
       </section>
+
+      <ReasonDialog open={asking} title="Delete your account?" confirm="Request deletion" busy={busy === "delete"} error={error}
+        min={user.min_reason_chars} max={user.max_reason_chars} onCancel={() => setAsking(false)} onSubmit={requestDeletion}>
+        <strong className="text-red-800">This can't be undone once it runs.</strong> If the coordinator approves, your account is
+        deleted {user.deletion_days} days after that, unless they cancel it. You can keep using it until then.
+      </ReasonDialog>
     </div>
   );
 }

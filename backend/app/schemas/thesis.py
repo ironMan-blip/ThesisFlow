@@ -29,8 +29,9 @@ class ThesisOut(BaseModel):
     status: ThesisStatus
     student: PersonOut | None  # None once the student's account is deleted
     supervisor: PersonOut | None
-    co_supervisor: PersonOut | None
-    co_supervisor_accepted: bool
+    co_supervisor: PersonOut | None  # named on a formed group; a member once both flags below are true
+    co_supervisor_accepted: bool  # by the co-supervisor
+    co_supervisor_approved: bool  # by the supervisor
     deferrals: int
     defer_pending: bool
     p1_registered: bool
@@ -39,11 +40,14 @@ class ThesisOut(BaseModel):
 
 class ThesisDetailOut(ThesisOut):
     versions: list[ProposalVersionOut]  # newest first
-    can_defer: bool = False  # coordinator only: can set (P3 submitted this semester) or undo a pending deferral
+    is_supervisor: bool = False  # the viewer is the supervisor (not the co-supervisor): decides deletes and deferral
+    can_defer: bool = False  # supervisor only: can set (P3 submitted this semester) or undo a pending deferral
 
 
 class SupervisionRequestOut(ThesisOut):
-    slot: Literal["supervisor", "co_supervisor"]  # which role this faculty member is asked to take
+    # supervisor: form the group; co_supervisor: join it as co-supervisor; co_supervisor_approval: the supervisor
+    # agrees to the co-supervisor the student added.
+    slot: Literal["supervisor", "co_supervisor", "co_supervisor_approval"]
 
 
 class MyThesisOut(BaseModel):
@@ -57,13 +61,18 @@ class MyThesisOut(BaseModel):
     can_register: bool  # an accepted group in P1 that can register now
     can_form_group: bool
     can_cancel: bool  # the group request still waits for the supervisor
+    can_add_co_supervisor: bool  # a formed group with no co-supervisor named
+    can_cancel_co_supervisor: bool  # a co-supervisor was added but hasn't joined yet
     show_deferral_warning: bool  # an active, unfrozen thesis deferred before: resubmit P3 or be frozen
     show_p1_registration: bool  # an active, unfrozen group in P1 sees its registration status
 
 
 class ThesisRequestIn(BaseModel):
-    supervisor_id: int
-    co_supervisor_id: int | None = None
+    supervisor_id: int  # a group is formed with a supervisor only; a co-supervisor is added afterwards
+
+
+class CoSupervisorIn(BaseModel):
+    co_supervisor_id: int
 
 
 class DeferIn(BaseModel):

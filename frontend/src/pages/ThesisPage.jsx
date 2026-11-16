@@ -19,14 +19,24 @@ export default function ThesisPage() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     run("ask", async () => {
-      const co = f.get("co_supervisor_id");
-      setState(await api("/theses/mine", {
-        method: "POST",
-        body: { supervisor_id: Number(f.get("supervisor_id")), co_supervisor_id: co ? Number(co) : null },
-      }));
-      return "Request sent. Your thesis ID is created when your supervisor accepts.";
+      setState(await api("/theses/mine", { method: "POST", body: { supervisor_id: Number(f.get("supervisor_id")) } }));
+      return "Request sent. Your group is formed, with its thesis ID, when your supervisor accepts. You can add a co-supervisor after that.";
     });
   };
+
+  const addCo = (e) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run("co", async () => {
+      setState(await api("/theses/mine/co-supervisor", { method: "POST", body: { co_supervisor_id: Number(f.get("co_supervisor_id")) } }));
+      return "Co-supervisor asked. They join your group once both they and your supervisor accept.";
+    });
+  };
+
+  const cancelCo = () => run("cancel-co", async () => {
+    setState(await api("/theses/mine/co-supervisor", { method: "DELETE" }));
+    return "Co-supervisor request withdrawn.";
+  });
 
   const cancel = () => run("cancel", async () => {
     setState(await api("/theses/mine", { method: "DELETE" }));
@@ -50,7 +60,7 @@ export default function ThesisPage() {
     <div className="space-y-8">
       <PageHeader
         title="Thesis group"
-        intro="You need a thesis group to upload proposals: you, a supervisor and, if you like, a co-supervisor. Every proposal version is kept under your thesis ID."
+        intro="You need a thesis group to upload proposals: you and a supervisor. Once your supervisor accepts, you can add a co-supervisor if you like; they join when both they and your supervisor accept. Every proposal version is kept under your thesis ID."
       />
 
       <Alerts error={error} notice={notice} />
@@ -108,13 +118,17 @@ export default function ThesisPage() {
               )}
               <div className="space-y-4">
                 <div>
-                  <p className="mb-2 text-sm text-zinc-500">Supervisor</p>
+                  <p className="mb-2 text-sm text-zinc-500">
+                    Supervisor{t.status === "pending" && " (waiting to accept)"}
+                  </p>
                   {t.supervisor && <Person user={t.supervisor} />}
                 </div>
                 {t.co_supervisor && (
                   <div>
                     <p className="mb-2 text-sm text-zinc-500">
-                      Co-supervisor{!t.co_supervisor_accepted && " (waiting to accept)"}
+                      Co-supervisor
+                      {!(t.co_supervisor_accepted && t.co_supervisor_approved) &&
+                        ` (waiting for ${[!t.co_supervisor_accepted && "them", !t.co_supervisor_approved && "your supervisor"].filter(Boolean).join(" and ")} to accept)`}
                     </p>
                     <Person user={t.co_supervisor} />
                   </div>
@@ -124,6 +138,23 @@ export default function ThesisPage() {
                 <button onClick={cancel} disabled={busy === "cancel"} className="btn-secondary">
                   {busy === "cancel" ? "Cancelling…" : "Cancel request"}
                 </button>
+              )}
+              {state.can_cancel_co_supervisor && (
+                <button onClick={cancelCo} disabled={busy === "cancel-co"} className="btn-secondary">
+                  {busy === "cancel-co" ? "Withdrawing…" : "Withdraw co-supervisor request"}
+                </button>
+              )}
+              {state.can_add_co_supervisor && (
+                <form onSubmit={addCo} className="flex flex-wrap items-end gap-3 border-t border-zinc-100 pt-5">
+                  <label className="label min-w-56 flex-1">
+                    Add a co-supervisor (optional)
+                    <select name="co_supervisor_id" required defaultValue="" className="input">
+                      <option value="" disabled>Choose a faculty member</option>
+                      {faculty.filter((f) => f.id !== t.supervisor?.id).map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
+                    </select>
+                  </label>
+                  <button disabled={busy === "co"} className="btn-secondary">{busy === "co" ? "Sending…" : "Ask"}</button>
+                </form>
               )}
             </section>
           )}
@@ -156,13 +187,6 @@ export default function ThesisPage() {
                 <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
                   <option value="" disabled>Choose a faculty member</option>
                   {faculty.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
-                </select>
-              </label>
-              <label className="label">
-                Co-supervisor (optional)
-                <select name="co_supervisor_id" defaultValue="" className="input">
-                  <option value="">None</option>
-                  {faculty.filter((f) => String(f.id) !== supervisor).map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
                 </select>
               </label>
               <button disabled={busy === "ask" || !faculty.length} className="btn-primary w-full">
