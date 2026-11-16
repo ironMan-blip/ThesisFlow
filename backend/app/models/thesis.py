@@ -9,9 +9,16 @@ from app.database import Base
 
 class ThesisStatus(str, enum.Enum):
     pending = "pending"  # waiting for the supervisor to accept
-    active = "active"
+    formed = "formed"  # accepted by the supervisor; not registered for P1 yet, so no thesis ID and no uploads
+    active = "active"  # registered for P1: has a thesis ID
     completed = "completed"
     dropped = "dropped"  # archived: the student restarted at P1 or left; versions are kept
+
+
+# A group the supervisor accepted that is not completed or dropped.
+FORMED = (ThesisStatus.formed, ThesisStatus.active)
+# Never registered for P1, so no thesis ID and no versions: deleted, not archived, when the student leaves.
+UNREGISTERED = (ThesisStatus.pending, ThesisStatus.formed)
 
 
 class Thesis(Base):

@@ -82,7 +82,7 @@ def test_group_forms_when_the_supervisor_accepts(client, db):
     assert answer(client, sup, t["id"]) == 204
     flags = mine(client, s)
     t = flags["thesis"]
-    assert (t["status"], t["code"]) == ("active", None)  # the thesis ID comes at P1 registration
+    assert (t["status"], t["code"]) == ("formed", None)  # active, with a thesis ID, at P1 registration
     assert (flags["can_cancel"], flags["show_p1_registration"], flags["can_add_co_supervisor"]) == (False, True, True)
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
     assert [x["id"] for x in client.get("/api/theses", headers=sup).json()] == [t["id"]]
@@ -94,8 +94,10 @@ def test_co_supervisor_joins_a_formed_group_once_both_accept(client, db):
     s = auth(client, db, "s@x.com")
     sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
     form_group(client, db, s, sup)
+    assert upload(client, s).status_code == 409  # formed, not registered: no uploads yet
     assert client.post("/api/theses/mine/register", headers=s).status_code == 200
-    assert re.fullmatch(r"T\d{8}", mine(client, s)["thesis"]["code"])
+    t = mine(client, s)["thesis"]
+    assert t["status"] == "active" and re.fullmatch(r"T\d{8}", t["code"])
     tid = mine(client, s)["thesis"]["id"]
     vid = upload(client, s).json()["versions"][0]["id"]
     file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
@@ -132,7 +134,7 @@ def test_either_declining_the_co_supervisor_keeps_the_group(client, db):
     assert answer(client, sup, tid) == 204
     assert answer(client, co, tid, yes=False) == 204
     state = mine(client, s)
-    assert (state["thesis"]["status"], state["thesis"]["co_supervisor"], state["can_add_co_supervisor"]) == ("active", None, True)
+    assert (state["thesis"]["status"], state["thesis"]["co_supervisor"], state["can_add_co_supervisor"]) == ("formed", None, True)
 
     add_co(client, s, co)
     assert answer(client, co, tid) == 204
@@ -431,7 +433,7 @@ def test_a_deletion_drops_requests_not_yet_accepted(client, db):
     assert run_deletions_due(db) == (1, 0)
     assert (mine(client, s1)["thesis"], mine(client, s1)["can_form_group"]) == (None, True)
     t2 = mine(client, s2)["thesis"]
-    assert (t2["status"], t2["co_supervisor"], mine(client, s2)["can_add_co_supervisor"]) == ("active", None, True)
+    assert (t2["status"], t2["co_supervisor"], mine(client, s2)["can_add_co_supervisor"]) == ("formed", None, True)
 
 
 def test_a_frozen_group_takes_no_new_co_supervisor(client, db):

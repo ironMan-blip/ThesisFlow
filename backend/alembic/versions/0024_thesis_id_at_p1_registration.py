@@ -1,7 +1,8 @@
-"""Thesis IDs are issued at P1 registration: clear the ID of active groups that never registered
+"""Groups get their thesis ID at P1 registration: a new "formed" status for accepted groups not registered yet
 
-A group never registered when its student is still in P1, it is not registered this semester, and it has no proposal
-(uploads need registration). Groups in later phases registered in an earlier semester, so they keep their ID.
+Existing active groups that never registered become formed and lose their thesis ID: the student is still in P1, the
+group is not registered this semester and it has no proposal (uploads need registration). Groups in later phases
+registered in an earlier semester, so they stay active with their ID.
 
 Revision ID: 0024
 Revises: 0023
@@ -16,16 +17,20 @@ depends_on = None
 
 
 def upgrade():
+    # A new enum value can't be used in the transaction that adds it.
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE thesis_status ADD VALUE IF NOT EXISTS 'formed' BEFORE 'active'")
     op.execute(
         """
-        UPDATE theses t SET code = NULL
+        UPDATE theses t SET status = 'formed', code = NULL
         FROM users u
         WHERE u.id = t.student_id AND u.phase = 'P1'
-          AND t.status = 'active' AND NOT t.p1_registered AND t.code IS NOT NULL
+          AND t.status = 'active' AND NOT t.p1_registered
           AND NOT EXISTS (SELECT 1 FROM proposals p WHERE p.thesis_id = t.id)
         """
     )
 
 
 def downgrade():
-    pass  # cleared IDs are not restored; register_p1 issues a new one
+    # Postgres can't drop an enum value; formed groups go back to active (cleared IDs are not restored).
+    op.execute("UPDATE theses SET status = 'active' WHERE status = 'formed'")

@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.models.milestone import Deliverable, GroupMilestone, MilestoneTemplate, Phase
 from app.models.proposal import ProposalVersion
 from app.models.semester import Semester
-from app.models.thesis import Thesis, ThesisStatus
+from app.models.thesis import FORMED, UNREGISTERED, Thesis, ThesisStatus
 from app.models.user import Role, User
 
 NEXT_PHASE = {Phase.P1: Phase.P2, Phase.P2: Phase.P3}
@@ -251,7 +251,7 @@ def can_register(db: Session, user: User) -> bool:
     return (
         user.phase == Phase.P1
         and thesis is not None
-        and thesis.status == ThesisStatus.active
+        and thesis.status in FORMED  # active: registered in an earlier semester but still in P1
         and not thesis.p1_registered
         and not standing(db, user).frozen
         and registration_open(db)
@@ -273,8 +273,9 @@ def register_p1(db: Session, user: User) -> None:
         if not registration_open(db):
             raise HTTPException(status.HTTP_409_CONFLICT, "P1 registration is closed, register in the first week of next semester")
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a P1 student with an accepted thesis group can register, once per semester")
-    user.thesis.p1_registered = True
-    user.thesis.code = user.thesis.code or new_code(db)  # kept if the group registers again in a later semester
+    thesis = user.thesis
+    thesis.p1_registered, thesis.status = True, ThesisStatus.active
+    thesis.code = thesis.code or new_code(db)  # kept if the group registers again in a later semester
     db.commit()
 
 
@@ -346,8 +347,8 @@ def approve_restart(db: Session, user_id: int) -> User:
 def _restart(db: Session, user: User, now: datetime) -> None:
     """Fresh start at P1 with no thesis. The old thesis is archived with all its versions; the next group gets a new thesis ID."""
     thesis, user.thesis = user.thesis, None
-    if thesis is not None and thesis.status == ThesisStatus.pending:
-        db.delete(thesis)  # never accepted, so it has no thesis ID and no versions
+    if thesis is not None and thesis.status in UNREGISTERED:
+        db.delete(thesis)  # never registered, so it has no thesis ID and no versions
     elif thesis is not None:
         thesis.status, thesis.defer_pending = ThesisStatus.dropped, False
     user.phase, user.phase_started_at = Phase.P1, now

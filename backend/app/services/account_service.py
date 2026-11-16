@@ -12,7 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
-from app.models.thesis import ThesisStatus
+from app.models.thesis import UNREGISTERED, ThesisStatus
 from app.models.user import DELETION_DELAY, REVIEW_WINDOW, Role, User
 from app.services import progress_service, proposal_service, thesis_service
 
@@ -144,8 +144,8 @@ def list_accounts(db: Session, role: Role | None = None, id_prefix: str = "") ->
 def _delete(db: Session, user: User) -> None:
     # The thesis and every proposal version stay as an archive; the foreign keys only clear the user.
     thesis, user.thesis = user.thesis, None
-    if thesis is not None and thesis.status == ThesisStatus.pending:
-        db.delete(thesis)  # never accepted, so no thesis ID and no versions
+    if thesis is not None and thesis.status in UNREGISTERED:
+        db.delete(thesis)  # never registered, so no thesis ID and no versions
     elif thesis is not None and thesis.status == ThesisStatus.active:
         thesis.status = ThesisStatus.dropped
     if user.role == Role.faculty:

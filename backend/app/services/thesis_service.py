@@ -1,5 +1,5 @@
-"""Thesis groups: a student asks a supervisor; the group is formed (thesis active) when they accept. The thesis ID is
-issued when the group registers for P1 (progress_service.register_p1).
+"""Thesis groups: a student asks a supervisor (pending); the group is formed when they accept. It becomes active, with a
+thesis ID, when it registers for P1 (progress_service.register_p1), and only then can it upload.
 
 A co-supervisor is optional and can only be added to a formed group. They join once both they and the supervisor
 accept; either declining just leaves the group without a co-supervisor, and the student can pick someone else.
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.milestone import Phase
 from app.models.proposal import Proposal
-from app.models.thesis import Thesis, ThesisStatus
+from app.models.thesis import FORMED, Thesis, ThesisStatus
 from app.models.user import Role, User
 from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
 from app.services import progress_service, proposal_service  # proposal_service imports us too; used at call time only
@@ -46,7 +46,7 @@ def can_view(user: User, thesis: Thesis) -> bool:
 def mine(db: Session, user: User) -> MyThesisOut:
     s = progress_service.standing(db, user)
     t = user.thesis
-    live = t is not None and t.status == ThesisStatus.active and not s.frozen
+    live = t is not None and t.status in FORMED and not s.frozen
     can_form_group = user.thesis_id is None and user.phase is not None and not s.frozen
     can_add_co_supervisor = live and t.co_supervisor_id is None
     choices = faculty(db) if can_form_group or can_add_co_supervisor else []
@@ -64,7 +64,7 @@ def mine(db: Session, user: User) -> MyThesisOut:
         can_add_co_supervisor=can_add_co_supervisor,
         can_cancel_co_supervisor=t is not None and t.co_supervisor_id is not None and not t.co_supervisor_joined,
         faculty_choices=[PersonOut.model_validate(f) for f in choices if t is None or f.id != t.supervisor_id],
-        show_deferral_warning=live and t.deferrals > 0,
+        show_deferral_warning=live and t.status == ThesisStatus.active and t.deferrals > 0,
         show_p1_registration=live and user.phase == Phase.P1,
     )
 
@@ -130,7 +130,7 @@ def cancel(db: Session, user: User) -> MyThesisOut:
 
 
 def _requests(member: User) -> Select:
-    active = Thesis.status == ThesisStatus.active
+    active = Thesis.status.in_(FORMED)
     return select(Thesis).where(
         or_(
             (Thesis.supervisor_id == member.id) & (Thesis.status == ThesisStatus.pending),
@@ -145,7 +145,7 @@ def _slot(thesis: Thesis, member: User) -> str | None:
     """What this faculty member is asked to decide on this thesis, if anything."""
     if thesis.status == ThesisStatus.pending and thesis.supervisor_id == member.id:
         return "supervisor"
-    if thesis.status == ThesisStatus.active and thesis.co_supervisor_id is not None:
+    if thesis.status in FORMED and thesis.co_supervisor_id is not None:
         if thesis.co_supervisor_id == member.id and not thesis.co_supervisor_accepted:
             return "co_supervisor"
         if thesis.supervisor_id == member.id and not thesis.co_supervisor_approved:
@@ -178,7 +178,7 @@ def decide(db: Session, member: User, thesis_id: int, accept: bool, co_superviso
         raise HTTPException(status.HTTP_409_CONFLICT, "The student's account is frozen, so no co-supervisor can join now")
     if slot == "supervisor":
         if accept:
-            thesis.status = ThesisStatus.active  # the thesis ID comes at P1 registration
+            thesis.status = ThesisStatus.formed  # active, with a thesis ID, once it registers for P1
             # A co-supervisor named on an older request was part of what the supervisor just accepted.
             thesis.co_supervisor_approved = thesis.co_supervisor_id is not None
         else:
@@ -230,9 +230,9 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
 
 def supervises_live(db: Session, member: User) -> bool:
     """True while the faculty member has accepted a group whose thesis is not completed or dropped yet: as supervisor
-    (an active thesis), or as co-supervisor (accepted, even before the supervisor agrees). Their account can't be
+    (a formed or active thesis), or as co-supervisor (accepted, even before the supervisor agrees). Their account can't be
     deleted then. A frozen student's thesis is still active: it counts until it is dropped at a restart."""
-    active = Thesis.status == ThesisStatus.active
+    active = Thesis.status.in_(FORMED)
     return (
         db.scalar(
             select(Thesis.id)

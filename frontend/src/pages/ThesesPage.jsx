@@ -119,7 +119,7 @@ export default function ThesesPage() {
             <li key={t.id} className="card p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-semibold tabular-nums">{t.code ?? "Not registered for P1"}</h2>
+                  <h2 className="text-lg font-semibold tabular-nums">{t.code ?? "No thesis ID yet"}</h2>
                   <ThesisBadge status={t.status} />
                   {t.deferrals > 0 && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">Deferred {t.deferrals}x</span>}
                   {t.defer_pending && <span className="badge bg-red-50 text-red-800 ring-red-600/20">Deferral at semester end</span>}
