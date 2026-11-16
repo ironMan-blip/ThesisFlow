@@ -92,7 +92,7 @@ You only need [Docker](https://www.docker.com/) (with Docker Compose).
 git clone https://github.com/ironMan-blip/ThesisFlow.git && cd ThesisFlow
 cp .env.example .env                              # required: fill in every value
 docker compose up --build                         # starts db, backend and frontend
-docker compose exec backend python -m app.seed    # optional: adds a dev student and faculty
+docker compose exec backend python -m app.seed    # optional: fills the dev DB with test data (see app/seed.py)
 ```
 
 On start, the backend runs the database migrations (`alembic upgrade head`) and creates or updates the coordinator account.
@@ -317,7 +317,7 @@ backend/app/
   passwords.py  password strength rules (sign-up and ADMIN_PASSWORD)
   virus_scan.py ClamAV scan of uploads
   config.py     settings from .env
-  seed.py       dev student + faculty
+  seed.py       dev test data
 backend/alembic/versions/   DB migrations
 backend/tests/              pytest
 frontend/src/
