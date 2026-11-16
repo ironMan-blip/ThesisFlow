@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -126,4 +126,10 @@ def login(db: Session, id_number: str, password: str, ip: str) -> str:
             status.HTTP_403_FORBIDDEN, f"Your account is waiting for coordinator approval (within {REVIEW_HOURS} hours)"
         )
     rate_limit.remember_ip(account, ip)
-    return create_access_token(user.id, user.password_hash)
+    return create_access_token(user.id, user.password_hash, user.session_epoch)
+
+
+def logout_everywhere(db: Session, user: User) -> None:
+    # Bumped in SQL, so two logouts at once both count; every token issued before this stops working.
+    db.execute(update(User).where(User.id == user.id).values(session_epoch=User.session_epoch + 1))
+    db.commit()

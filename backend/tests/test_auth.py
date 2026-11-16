@@ -459,3 +459,16 @@ def test_responses_carry_security_headers(client):
 def test_weak_admin_password_refuses_to_start(password):
     with pytest.raises(ValueError):
         type(settings)(admin_password=password)
+
+
+def test_logout_ends_every_session_of_that_person(client, db):
+    laptop = auth(client, db, "l@b.com")
+    me_id = client.get("/api/auth/me", headers=laptop).json()["id_number"]
+    phone = {"Authorization": f"Bearer {login(client, me_id, 'Password123').json()['access_token']}"}
+    other = auth(client, db, "o@b.com")
+    assert client.post("/api/auth/logout", headers=laptop).status_code == 204
+    assert client.get("/api/auth/me", headers=laptop).status_code == 401
+    assert client.get("/api/auth/me", headers=phone).status_code == 401  # a copied token dies too
+    assert client.get("/api/auth/me", headers=other).status_code == 200  # other people stay signed in
+    fresh = {"Authorization": f"Bearer {login(client, me_id, 'Password123').json()['access_token']}"}
+    assert client.get("/api/auth/me", headers=fresh).status_code == 200

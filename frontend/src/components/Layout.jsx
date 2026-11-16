@@ -93,7 +93,9 @@ export default function Layout() {
       </div>
     );
 
-  const logout = () => {
+  const logout = async () => {
+    // Ends the session on the server too, so a copied token stops working. Log out locally even if that fails.
+    await api("/auth/logout", { method: "POST" }).catch(() => {});
     clearToken();
     navigate("/login");
   };

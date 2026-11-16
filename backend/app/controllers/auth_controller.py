@@ -23,6 +23,12 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
     return Token(access_token=auth_service.login(db, form.username, form.password, ip))
 
 
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Ends every session of this person, not just this browser: a copied token stops working too.
+    auth_service.logout_everywhere(db, user)
+
+
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return user

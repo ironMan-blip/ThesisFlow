@@ -18,14 +18,15 @@ def verify_password(password: str, hashed: str) -> bool:
     return password_hash.verify(password, hashed)
 
 
-def password_stamp(password_hash: str) -> str:
-    # Tokens carry this, so changing a password (e.g. ADMIN_PASSWORD) logs out every older session.
-    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+def session_stamp(password_hash: str, session_epoch: int) -> str:
+    # Tokens carry this, so changing a password (e.g. ADMIN_PASSWORD) or logging out (bumps the epoch)
+    # ends every older session of that person.
+    return hashlib.sha256(f"{password_hash}:{session_epoch}".encode()).hexdigest()[:16]
 
 
-def create_access_token(user_id: int, password_hash: str) -> str:
+def create_access_token(user_id: int, password_hash: str, session_epoch: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
-    claims = {"sub": str(user_id), "pw": password_stamp(password_hash), "exp": expire}
+    claims = {"sub": str(user_id), "pw": session_stamp(password_hash, session_epoch), "exp": expire}
     return jwt.encode(claims, settings.jwt_secret, algorithm=ALGORITHM)
 
 

@@ -329,6 +329,7 @@ frontend/src/
 |--------|------|-----|
 | POST | `/api/auth/register` | anyone |
 | POST | `/api/auth/login` | anyone |
+| POST | `/api/auth/logout` (ends all of this person's sessions) | logged in |
 | GET | `/api/auth/me` | logged in |
 | POST | `/api/auth/me/deletion-request` | student, faculty |
 | GET | `/api/auth/me/counts` (pending-request badges per tool) | logged in |
