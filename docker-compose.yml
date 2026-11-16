@@ -14,12 +14,24 @@ services:
       interval: 2s
       retries: 20
 
+  redis:
+    image: redis:7.4-alpine
+    # No host port, like db. Saved to a volume so known login IPs survive restarts.
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 20
+
   backend:
     build: ./backend
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/thesisflow
       TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/thesisflow_test
+      # Separate Redis database: tests wipe it before each test.
+      TEST_REDIS_URL: redis://redis:6379/1
     # Host-only: the backend trusts X-Forwarded-For (see Dockerfile), so it must not be reachable from the network.
     ports:
       - "127.0.0.1:8000:8000"
@@ -27,6 +39,8 @@ services:
       - ./backend:/app
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -45,4 +59,5 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   frontend_node_modules:

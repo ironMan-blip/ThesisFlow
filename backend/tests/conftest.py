@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from redis import Redis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,8 @@ from app.models.semester import Semester
 # Tests use a separate database so they never touch dev data.
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
 engine = create_engine(TEST_DATABASE_URL)
+# Likewise a separate Redis database, since every test wipes it.
+rate_limit.redis = Redis.from_url(os.environ["TEST_REDIS_URL"], decode_responses=True)
 
 
 @pytest.fixture(scope="session")

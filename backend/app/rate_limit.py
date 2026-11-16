@@ -1,9 +1,12 @@
-import time
-from collections import defaultdict, deque
+import json
+import uuid
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+from redis import Redis
+from starlette.concurrency import run_in_threadpool
 
+from app.config import settings
 from app.security import decode_access_token
 
 WINDOW_SECONDS = 60
@@ -16,22 +19,42 @@ LOGIN_PER_ACCOUNT = 10
 # so a guesser spread over many IPs can't lock the owner out of their usual devices.
 LOGIN_PER_ACCOUNT_ALL_IPS = 100
 KNOWN_IPS_PER_ACCOUNT = 5
-MAX_KEYS = 10_000
-_next_sweep = 0.0
 
-# shortcut: in-memory, per-process; move to Redis if we run more than one worker.
-_hits: dict[tuple[str, ...], deque[float]] = defaultdict(deque)
-# Keyed only by accounts that logged in, so it grows with real users, not with typed IDs.
-_known_ips: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=KNOWN_IPS_PER_ACCOUNT))
+# Shared by every backend process, so limits hold across workers and restarts. Buckets expire on their own.
+redis = Redis.from_url(settings.redis_url, decode_responses=True)
+
+# Sliding window in one atomic step, timed by the Redis clock so every worker agrees.
+# Returns seconds to wait if over the limit, else 0.
+_HIT = """
+local key, limit, window = KEYS[1], tonumber(ARGV[1]), tonumber(ARGV[2])
+local t = redis.call('TIME')
+local now = tonumber(t[1]) + tonumber(t[2]) / 1000000
+redis.call('ZREMRANGEBYSCORE', key, '-inf', '(' .. (now - window))
+if redis.call('ZCARD', key) >= limit then
+  local oldest = tonumber(redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')[2])
+  return math.floor(window - (now - oldest)) + 1
+end
+redis.call('ZADD', key, now, ARGV[3])
+redis.call('EXPIRE', key, window + 1)
+return 0
+"""
+_hit_script = redis.register_script(_HIT)
+
+
+def _key(*parts: object) -> str:
+    # JSON keeps parts apart: an ID typed as "x|1.2.3.4" can't land in the bucket for ("x", "1.2.3.4").
+    return "rl:" + json.dumps(parts)
 
 
 def is_known_ip(account: str, ip: str) -> bool:
-    return ip in _known_ips.get(account, ())
+    return ip in redis.lrange(_key("ips", account), 0, -1)
 
 
 def remember_ip(account: str, ip: str) -> None:
-    if not is_known_ip(account, ip):
-        _known_ips[account].append(ip)
+    # Most recent first; the oldest drops off past KNOWN_IPS_PER_ACCOUNT. Keyed only by accounts that logged in.
+    key = _key("ips", account)
+    with redis.pipeline() as pipe:
+        pipe.lrem(key, 0, ip).lpush(key, ip).ltrim(key, 0, KNOWN_IPS_PER_ACCOUNT - 1).execute()
 
 
 def _limit_for(path: str) -> tuple[str, int] | None:
@@ -43,27 +66,13 @@ def _limit_for(path: str) -> tuple[str, int] | None:
 
 def hit(key: tuple[str, ...], limit: int) -> int | None:
     """Record one request for key. Returns seconds to wait if over the limit, else None."""
-    global _next_sweep
-    now = time.monotonic()
-    if len(_hits) > MAX_KEYS and now >= _next_sweep:
-        # At most one full scan a second, so a flood of live keys can't make every request scan them all.
-        _next_sweep = now + 1
-        # Callers choose keys (IDs typed at login), so drop idle buckets before the dict grows without bound.
-        for k in [k for k, h in _hits.items() if not h or now - h[-1] > WINDOW_SECONDS]:
-            del _hits[k]
-    hits = _hits[key]
-    while hits and now - hits[0] > WINDOW_SECONDS:
-        hits.popleft()
-    if len(hits) >= limit:
-        return int(WINDOW_SECONDS - (now - hits[0])) + 1
-    hits.append(now)
-    return None
+    retry = _hit_script(keys=[_key(*key)], args=[limit, WINDOW_SECONDS, uuid.uuid4().hex], client=redis)
+    return retry or None
 
 
 def unhit(key: tuple[str, ...]) -> None:
     """Take back the last request recorded for key (e.g. a login that turned out to be right)."""
-    if hits := _hits.get(key):
-        hits.pop()
+    redis.zpopmax(_key(*key))
 
 
 def too_many(retry: int) -> HTTPException:
@@ -82,14 +91,13 @@ async def rate_limit(request: Request, call_next):
         claims = auth.startswith("Bearer ") and decode_access_token(auth[7:])
         if claims:
             who = f"user:{claims[0]}"
-    if retry := hit((who, prefix), limit):
+    # The Redis client is blocking; keep it off the event loop.
+    if retry := await run_in_threadpool(hit, (who, prefix), limit):
         exc = too_many(retry)
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
     return await call_next(request)
 
 
 def reset() -> None:
-    global _next_sweep
-    _hits.clear()
-    _known_ips.clear()
-    _next_sweep = 0.0
+    """Tests only: wipes the whole Redis database the client points at."""
+    redis.flushdb()

@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     admin_password: str = Field(max_length=128)  # login refuses longer passwords (schemas.user.MAX_PASSWORD)
     # Password for the dev accounts made by app.seed. Only the seed script needs it.
     seed_password: str | None = None
+    # Rate-limit counters (app.rate_limit). Not a secret: Redis has no host port.
+    redis_url: str = "redis://redis:6379/0"
     jwt_expire_minutes: int = 60 * 24
     upload_dir: str = "uploads"
     max_upload_mb: int = 20
