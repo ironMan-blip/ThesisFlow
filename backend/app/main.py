@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -10,6 +11,7 @@ from sqlalchemy.exc import DataError, OperationalError
 from starlette.concurrency import run_in_threadpool
 
 from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller, thesis_controller
+from app import virus_scan
 from app.config import settings
 from app.database import SessionLocal, get_db
 from app.deps import user_for_token
@@ -22,6 +24,8 @@ ANONYMOUS_BODY_LIMIT = 64 * 1024
 
 # Scheduled deletes run at most this long after their 7-day wait ends.
 DELETION_CHECK_SECONDS = 300
+# clamd's first start (signature download) can take minutes: retry every 10 s for up to 10 minutes.
+SCANNER_WARM_UP_TRIES, SCANNER_WARM_UP_RETRY_SECONDS = 60, 10
 log = logging.getLogger(__name__)
 
 
@@ -44,13 +48,28 @@ async def _deletion_loop() -> None:
         await asyncio.sleep(DELETION_CHECK_SECONDS)
 
 
+async def _warm_up_scanner() -> None:
+    # In the background, so startup never waits on clamd. It may still be loading signatures, so keep trying.
+    stored = Path(settings.upload_dir, "proposals").glob("*.pdf")
+    sample = max(stored, key=lambda p: p.stat().st_mtime, default=None)
+    for _ in range(SCANNER_WARM_UP_TRIES):
+        try:
+            await run_in_threadpool(virus_scan.warm_up, sample)
+            log.info("Virus scanner is warm")
+            return
+        except virus_scan.ScannerUnavailable:
+            await asyncio.sleep(SCANNER_WARM_UP_RETRY_SECONDS)
+    log.warning("Virus scanner never answered at startup; the first upload will warm it")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         auth_service.ensure_admin(db)
-    deletions = asyncio.create_task(_deletion_loop())
+    tasks = [asyncio.create_task(_deletion_loop()), asyncio.create_task(_warm_up_scanner())]
     yield
-    deletions.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(title="ThesisFlow API", lifespan=lifespan)

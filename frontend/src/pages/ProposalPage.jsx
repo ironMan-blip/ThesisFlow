@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { api, download } from "../api/client";
+import { api, download, upload } from "../api/client";
 import { Alerts, EmptyState, Icon, ICONS, PageHeader, ReasonDialog, Skeleton, VersionInfo } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
@@ -10,6 +10,7 @@ export default function ProposalPage() {
   const [proposal, setProposal] = useState(null);
   const [fileName, setFileName] = useState("");
   const [asking, setAsking] = useState(null); // version the student is asking to delete
+  const [progress, setProgress] = useState(0); // share of the file sent, 0 to 1
   const { busy, error, notice, setError, run } = useAction();
 
   useEffect(() => {
@@ -19,8 +20,9 @@ export default function ProposalPage() {
   const submit = (e) => {
     e.preventDefault();
     const form = e.currentTarget;
+    setProgress(0);
     run("upload", async () => {
-      setProposal(await api("/proposals/mine/versions", { method: "POST", body: new FormData(form) }));
+      setProposal(await upload("/proposals/mine/versions", new FormData(form), setProgress));
       form.reset();
       setFileName("");
       return "Upload complete. Your new version is at the top of the list.";
@@ -108,8 +110,16 @@ export default function ProposalPage() {
           </div>
           <Alerts error={error} notice={notice} />
           <button disabled={saving || !proposal || !!proposal.upload_block} className="btn-primary w-full">
-            {saving ? "Uploading…" : "Upload version"}
+            {/* After the last byte the server still scans and checks the file, so say so instead of sitting at 100%. */}
+            {!saving ? "Upload version" : progress < 1 ? `Uploading… ${Math.round(progress * 100)}%` : "Checking the file…"}
           </button>
+          {saving && (
+            <div role="progressbar" aria-label="Upload progress" aria-valuemin={0} aria-valuemax={100}
+              aria-valuenow={Math.round(progress * 100)} className="-mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+              <div className={`h-full rounded-full bg-teal-600 transition-[width] duration-200 ${progress >= 1 ? "animate-pulse" : ""}`}
+                style={{ width: `${Math.max(progress, 0.02) * 100}%` }} />
+            </div>
+          )}
         </form>
 
         <section className="card lg:col-span-3">

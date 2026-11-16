@@ -49,20 +49,44 @@ async function send(path, { body, headers, ...options } = {}) {
   }).catch(() => {
     throw new ApiError(0, UNAVAILABLE); // network down or the dev server stopped
   });
-  if (res.status === 401 && token && path !== "/auth/login") {
+  endIfSignedOut(res.status, token, path);
+  if (!res.ok) throw toError(res.status, await res.json().catch(() => null), res.headers.get("Retry-After"));
+  return res;
+}
+
+function endIfSignedOut(status, token, path) {
+  if (status === 401 && token && path !== "/auth/login") {
     // Session ended (logout on another device, password change, expiry): back to login from any page.
     clearToken();
     window.location.replace("/login");
   }
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    // 502/504 come from the proxy when the backend is down, with no JSON detail.
-    const fallback = res.status >= 502 && res.status <= 504 ? UNAVAILABLE : "Something went wrong";
-    const err = new ApiError(res.status, typeof data?.detail === "string" ? data.detail : fallback);
-    err.retryAfterMs = Number(res.headers.get("Retry-After")) * 1000 || 0;
-    throw err;
-  }
-  return res;
+}
+
+function toError(status, data, retryAfter) {
+  // 502/504 come from the proxy when the backend is down, with no JSON detail.
+  const fallback = status >= 502 && status <= 504 ? UNAVAILABLE : "Something went wrong";
+  const err = new ApiError(status, typeof data?.detail === "string" ? data.detail : fallback);
+  err.retryAfterMs = Number(retryAfter) * 1000 || 0;
+  return err;
+}
+
+// POST a form and report upload progress (0 to 1) as it goes: fetch can't, so this uses XMLHttpRequest.
+export function upload(path, form, onProgress) {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api${path}`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.responseType = "json";
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onerror = () => reject(new ApiError(0, UNAVAILABLE));
+    xhr.onload = () => {
+      endIfSignedOut(xhr.status, token, path);
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response);
+      else reject(toError(xhr.status, xhr.response, xhr.getResponseHeader("Retry-After")));
+    };
+    xhr.send(form);
+  });
 }
 
 export async function api(path, options) {
