@@ -36,27 +36,30 @@ log = logging.getLogger(__name__)
 T = TypeVar("T")
 _redis_down_until = 0.0
 
-# If Redis fails, limits keep working per process in memory, so the app stays up and still limits guessing.
+# Every request is also counted in this process's memory. Redis adds the count across processes; if it fails,
+# memory alone keeps limiting, with the counts from before the outage. After the outage memory still holds what
+# Redis missed, so a request must pass both.
 _hits: dict[str, deque[float]] = defaultdict(deque)
 _next_sweep = 0.0
 _known_ips: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=KNOWN_IPS_PER_ACCOUNT))
 
 
-def _with_fallback(use_redis: Callable[[], T], use_memory: Callable[[], T]) -> T:
+def _try_redis(call: Callable[[], T], default: T) -> T:
+    """Run call against Redis; give default instead while Redis is down."""
     global _redis_down_until
     if time.monotonic() >= _redis_down_until:
         try:
-            result = use_redis()
+            result = call()
         except RedisError as exc:
             if _redis_down_until == 0.0:
-                log.warning("Redis unavailable, rate limits fall back to memory: %s", exc)
+                log.warning("Redis unavailable, rate limits use memory only: %s", exc)
             _redis_down_until = time.monotonic() + REDIS_RETRY_SECONDS
-            return use_memory()
+            return default
         if _redis_down_until:
             log.warning("Redis is back, rate limits use it again")
             _redis_down_until = 0.0
         return result
-    return use_memory()
+    return default
 
 
 def _memory_hit(key: str, limit: int) -> int | None:
@@ -105,7 +108,12 @@ def _key(*parts: object) -> str:
 
 def is_known_ip(account: str, ip: str) -> bool:
     key = _key("ips", account)
-    return _with_fallback(lambda: ip in redis.lrange(key, 0, -1), lambda: ip in _known_ips.get(key, ()))
+    if ip in _known_ips.get(key, ()):
+        return True
+    if _try_redis(lambda: ip in redis.lrange(key, 0, -1), False):
+        _memory_remember_ip(key, ip)  # so this process still knows it if Redis goes down
+        return True
+    return False
 
 
 def remember_ip(account: str, ip: str) -> None:
@@ -116,7 +124,8 @@ def remember_ip(account: str, ip: str) -> None:
         with redis.pipeline() as pipe:
             pipe.lrem(key, 0, ip).lpush(key, ip).ltrim(key, 0, KNOWN_IPS_PER_ACCOUNT - 1).execute()
 
-    _with_fallback(use_redis, lambda: _memory_remember_ip(key, ip))
+    _memory_remember_ip(key, ip)
+    _try_redis(use_redis, None)
 
 
 def _limit_for(path: str) -> tuple[str, int] | None:
@@ -133,13 +142,19 @@ def hit(key: tuple[str, ...], limit: int) -> int | None:
     def use_redis() -> int | None:
         return _hit_script(keys=[k], args=[limit, WINDOW_SECONDS, uuid.uuid4().hex], client=redis) or None
 
-    return _with_fallback(use_redis, lambda: _memory_hit(k, limit))
+    if retry := _memory_hit(k, limit):
+        return retry
+    if (retry := _try_redis(use_redis, None)) and _hits.get(k):
+        _hits[k].pop()  # refused, so it doesn't count in memory either
+    return retry
 
 
 def unhit(key: tuple[str, ...]) -> None:
     """Take back the last request recorded for key (e.g. a login that turned out to be right)."""
     k = _key(*key)
-    _with_fallback(lambda: redis.zpopmax(k), lambda: _hits[k].pop() if _hits.get(k) else None)
+    if _hits.get(k):
+        _hits[k].pop()
+    _try_redis(lambda: redis.zpopmax(k), None)
 
 
 def too_many(retry: int) -> HTTPException:

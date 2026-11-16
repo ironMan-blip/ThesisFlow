@@ -1,8 +1,10 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 
 from app.controllers import account_controller, auth_controller, milestone_controller, proposal_controller, thesis_controller
 from app.config import settings
@@ -50,3 +52,14 @@ async def validation_error(_: Request, exc: RequestValidationError):
     field = err["loc"][-1] if err["loc"] else "request"
     msg = err["msg"].removeprefix("Value error, ")
     return JSONResponse(status_code=422, content={"detail": f"{field}: {msg}"})
+
+
+@app.exception_handler(OperationalError)
+async def database_unavailable(_: Request, exc: OperationalError):
+    # Postgres down or restarting: say so (503) instead of a bare 500, so the UI shows a clear message.
+    logging.getLogger(__name__).error("Database unavailable: %s", exc.orig)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "ThesisFlow can't reach its database right now. Try again in a moment."},
+        headers={"Retry-After": "5"},
+    )

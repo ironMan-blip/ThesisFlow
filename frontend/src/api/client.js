@@ -13,6 +13,8 @@ class ApiError extends Error {
   }
 }
 
+const UNAVAILABLE = "ThesisFlow can't reach the server right now. Try again in a moment.";
+
 // Sends the request with the JWT; throws ApiError with the backend's detail on non-2xx.
 async function request(path, { body, headers, ...options } = {}) {
   const token = getToken();
@@ -25,10 +27,14 @@ async function request(path, { body, headers, ...options } = {}) {
       ...headers,
     },
     body: body && !isForm ? JSON.stringify(body) : body,
+  }).catch(() => {
+    throw new ApiError(0, UNAVAILABLE); // network down or the dev server stopped
   });
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    throw new ApiError(res.status, typeof data?.detail === "string" ? data.detail : "Something went wrong");
+    // 502/504 come from the proxy when the backend is down, with no JSON detail.
+    const fallback = res.status >= 502 && res.status <= 504 ? UNAVAILABLE : "Something went wrong";
+    throw new ApiError(res.status, typeof data?.detail === "string" ? data.detail : fallback);
   }
   return res;
 }

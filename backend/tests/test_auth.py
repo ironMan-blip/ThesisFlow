@@ -4,9 +4,12 @@ import pytest
 from fastapi import HTTPException
 from redis import Redis
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from app import rate_limit
 from app.config import settings
+from app.database import get_db
+from app.main import app
 from app.models.user import Role, User
 from app.security import hash_password
 from app.services import auth_service
@@ -393,3 +396,30 @@ def test_login_still_works_and_is_limited_when_redis_is_down(client, monkeypatch
     assert register(client).status_code < 300  # requests go through instead of failing on Redis
     codes = [login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1)]
     assert codes == [401] * rate_limit.LOGIN_PER_ACCOUNT + [429]  # memory fallback still limits guessing
+
+
+def test_guesses_during_a_redis_outage_still_count_after_it(client, monkeypatch):
+    real = rate_limit.redis
+    monkeypatch.setattr(rate_limit, "redis", Redis.from_url("redis://localhost:1", socket_connect_timeout=0.5))
+    register(client)
+    assert {login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT)} == {401}
+    monkeypatch.setattr(rate_limit, "redis", real)
+    monkeypatch.setattr(rate_limit, "_redis_down_until", 0.0)  # Redis is back
+    assert login(client, password="Wrong1234").status_code == 429
+
+
+def test_counts_from_other_processes_come_from_redis(client):
+    register(client)
+    assert {login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT)} == {401}
+    rate_limit._hits.clear()  # as if the next login reached a different backend process
+    assert login(client, password="Wrong1234").status_code == 429
+
+
+def test_database_outage_is_a_clear_503(client):
+    def down():
+        raise OperationalError("SELECT 1", {}, Exception("connection refused"))
+
+    app.dependency_overrides[get_db] = down
+    res = login(client)
+    assert (res.status_code, res.headers["retry-after"]) == (503, "5")
+    assert "database" in res.json()["detail"]

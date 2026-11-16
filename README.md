@@ -219,12 +219,13 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
   - `/api/auth/login`: 60 per IP, plus 10 failed tries per ID number from one IP and 100 across all IPs (so one password can't be guessed from many IPs). IPs the account logged in from before skip the all-IPs cap, so guessing can't lock the owner out of their usual devices.
   - `/api/auth/register`: 30 per IP.
   - Any other `/api/` path: 300 per logged-in user (per IP when not logged in), so users behind one shared IP don't block each other.
-  - Over the limit returns `429` with a `Retry-After` header. Counters live in Redis, so they are shared by every backend process and survive restarts. If Redis is down, each backend process counts in memory instead (retrying Redis every 10 seconds), so the app keeps working and limits still apply.
+  - Over the limit returns `429` with a `Retry-After` header. Counters live in Redis, so they are shared by every backend process and survive restarts. Each process also counts in memory, so if Redis is down the app keeps working and limits still apply, and guesses made during the outage still count once Redis is back (Redis is retried every 10 seconds).
   - The Vite proxy overwrites `X-Forwarded-For` with the real client IP, so a client cannot dodge the limit by sending its own header. The backend port is bound to `127.0.0.1` only, because it trusts that header.
 - **Passwords** are hashed with Argon2 (`pwdlib`). Login takes the same time whether the ID exists or not (a dummy hash is checked for unknown IDs), so IDs cannot be guessed from response time. Passwords longer than 128 characters are refused without hashing.
 - **Tokens** are HS256 JWTs holding the user ID, an expiry and a short stamp of the password hash. Every request re-checks the stamp, so changing a password (for example `ADMIN_PASSWORD`) logs out all older sessions. Unapproved accounts are refused even with a token.
 - `JWT_SECRET` shorter than 32 characters stops the backend from starting.
 - **No CORS**: the browser only talks to the Vite server, which forwards `/api` to the backend.
+- **Outages**: every container restarts itself if it crashes. While Postgres is down the API answers `503` with a clear message (the UI shows it) and recovers on its own when Postgres is back.
 - **Race safety**: group requests, P1 registration, uploads, deletes, deferrals and the semester rollover take row locks (`SELECT … FOR UPDATE`), so two requests at once can't both pass the same check. Parallel sign-ups with the same email, ID or initials get a clean `409`.
 
 ### 9. Error responses
