@@ -29,7 +29,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 
 **Thesis groups**
 - Student requests a group with a supervisor (required) and co-supervisor (optional).
-- Faculty accept or decline under **Theses**; supervisor accept makes the thesis active with an ID like `T12345678`.
+- Faculty accept or decline under **Theses**. The group is formed (thesis active, ID like `T12345678`) only when the supervisor accepts, and the co-supervisor too if one was named.
 - Student can cancel a pending request and choose again.
 - P1 registration window: first week of each semester; only registered groups can upload for P1.
 - Faculty see theses they supervise; coordinator sees all.
@@ -193,7 +193,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 - A student needs a **thesis group** to upload: the student, a **supervisor** (required) and a **co-supervisor** (optional), both faculty. The student sends the request on the **Thesis group** page.
 - **P1 registration:** students sign up, ask for a group, and faculty accept any time. But an accepted group can only **register for P1** (button on the Thesis group page) in the **first week of each semester** (from the semester rollover; the first one starts when the database is set up). Only a registered group can upload for P1. A P1 group that didn't register has nothing due that semester and stays at P1; registration is cleared at every rollover.
-- Faculty accept or decline under **Theses**. When the supervisor accepts, the thesis becomes active and gets its **thesis ID** (e.g. `T12345678`: "T" + 8 random digits, unique). The co-supervisor accepts their own slot; a decline just leaves it empty. A supervisor's decline, or the student cancelling, lets the student choose again.
+- Faculty accept or decline under **Theses**. The group is formed only when **everyone named has accepted**: the supervisor, and the co-supervisor as well if the student picked one (in either order). Only then does the thesis become active and get its **thesis ID** (e.g. `T12345678`: "T" + 8 random digits, unique). If either of them declines, or the student cancels while it waits, the request ends and the student chooses again.
 - Every proposal version is stored under the thesis ID, so nothing is lost: deleting an account or restarting keeps the thesis and its versions as an archive. Faculty see the theses they supervise; the coordinator sees all of them.
 - **One phase per semester.** A new student starts at **P1**. A student who submits their phase (late inside grace counts) moves to the next phase next semester: P1 → P2 → P3.
 - **Missed deadline:** if grace ends with no upload, the account is **frozen**. The student can still log in, but cannot upload or form a group. During grace they see a warning with the freeze time. Extending the deadline lifts the freeze until the semester ends. A student who couldn't upload (phase started after the deadline closed, or a P1 group that didn't register) is not frozen; they wait for next semester.
@@ -212,7 +212,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
 - Versions are kept (SRS F11). A student can **ask to delete** a version of their current phase while uploads are open, writing a reason in a dialog. The coordinator approves or rejects it under **Version delete requests** (with the reason). After approval the delete runs **7 days** later: the version and its PDF go and later versions are renumbered. Within those 7 days only the coordinator can cancel it. Approving is refused once the phase has closed, and if the phase closes during the wait, the version is the final submission and is kept. While a delete is pending, uploading the same file again stores a new version instead of reusing the one being deleted.
-- A thesis's **supervisor or co-supervisor**, or the **coordinator**, can delete a version directly from **Theses**, with a reason. It counts as approved, so it runs **7 days** later, and only the coordinator can cancel it. They can never delete a phase's **final version** (the one that counts as the submission: a closed phase's final upload, or the open phase's latest); if a version becomes final during the wait, the delete is dropped.
+- Only the thesis's **supervisor** (not the co-supervisor, not the coordinator) can delete a version directly from **Theses**, with a reason. It counts as approved, so it runs **7 days** later, and only the coordinator can cancel it. They can never delete a phase's **final version** (the one that counts as the submission: a closed phase's final upload, or the open phase's latest); if a version becomes final during the wait, the delete is dropped.
 - The student is told: a badge on **Proposal**, and a message there with the date, the reason and the coordinator's email to contact within the 7 days if there is a problem. A request the coordinator rejects shows "Delete request rejected" on that version.
 - Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
@@ -244,7 +244,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 | Table | What it holds |
 |-------|---------------|
 | `users` | Every account. Role (`student`, `faculty`, `coordinator`), email, ID number, name, faculty initials, Argon2 password hash, `approved`, `deletion_requested_at`, `deletion_approved_at`, `deletion_reason`, `deletion_requested_by_id`. Students also have: current `thesis_id`, `phase` (P1/P2/P3, empty when completed), `phase_started_at`, `frozen_at`, `restart_requested_at`, `restart_approved`. |
-| `theses` | A thesis group: `student_id`, `supervisor_id`, `co_supervisor_id`, `co_supervisor_accepted`, `status`, `deferrals`, `defer_pending`, `p1_registered`. `code` is the thesis ID shown to users: `T` + 8 random digits (unique), issued when the supervisor accepts. |
+| `theses` | A thesis group: `student_id`, `supervisor_id`, `co_supervisor_id`, `supervisor_accepted`, `co_supervisor_accepted`, `status`, `deferrals`, `defer_pending`, `p1_registered`. `code` is the thesis ID shown to users: `T` + 8 random digits (unique), issued when the group is formed. |
 | `proposals` | One per thesis, made on its first upload. |
 | `proposal_versions` | One per upload: `version_no`, `phase`, title, abstract, original and stored file name, size, SHA-256, uploader, time. |
 | `semesters` | One row per semester; the newest is the current one. Its `started_at` opens the one-week P1 registration. |
@@ -257,7 +257,7 @@ Thesis status: `pending` (waiting for the supervisor) → `active` (has a thesis
 ### A student's path, step by step
 
 1. Registers, waits for coordinator approval, logs in. Starts at **P1**.
-2. On **Thesis group**, picks a supervisor (and optional co-supervisor). The supervisor accepts on **Theses** → thesis is `active`, gets `Txxxxxxxx`.
+2. On **Thesis group**, picks a supervisor (and optional co-supervisor). The supervisor (and the co-supervisor, if named) accept on **Theses** → thesis is `active`, gets `Txxxxxxxx`.
 3. In the first week of the semester, clicks **Register for P1**.
 4. The coordinator sets the P1 deadline on **Deadlines**. The student uploads on **Proposal** before grace ends.
 5. After every phase's grace has ended, the coordinator clicks **Start next semester**. The student moves to P2, then P3 the next semester, the same way (no registration needed for P2/P3).
@@ -298,7 +298,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 
 ### Migrations
 
-`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes.
+`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes → both supervisors accept before a group forms.
 
 ## Project layout (MVC)
 
@@ -356,7 +356,7 @@ frontend/src/
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
 | POST | `/api/proposals/versions/{id}/delete-request` (`{reason}`) | student (own) |
-| POST | `/api/proposals/versions/{id}/deletion` (`{reason}`: approved at once, runs in 7 days, never a final version) | the thesis's supervisors, coordinator |
+| POST | `/api/proposals/versions/{id}/deletion` (`{reason}`: approved at once, runs in 7 days, never a final version) | the thesis's supervisor |
 | GET / POST / DELETE | `/api/proposals/delete-requests[/{id}[/approve]]` (list, approve, reject or cancel) | coordinator |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisors, coordinator |
 

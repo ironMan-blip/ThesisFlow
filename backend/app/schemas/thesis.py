@@ -25,11 +25,12 @@ class ThesisOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    code: str | None  # the thesis ID, e.g. T12345678; None until the supervisor accepts
+    code: str | None  # the thesis ID, e.g. T12345678; None until the group is formed
     status: ThesisStatus
     student: PersonOut | None  # None once the student's account is deleted
     supervisor: PersonOut | None
     co_supervisor: PersonOut | None
+    supervisor_accepted: bool
     co_supervisor_accepted: bool
     deferrals: int
     defer_pending: bool
@@ -56,7 +57,7 @@ class MyThesisOut(BaseModel):
     registration_open: bool
     can_register: bool  # an accepted group in P1 that can register now
     can_form_group: bool
-    can_cancel: bool  # the group request still waits for the supervisor
+    can_cancel: bool  # the group request still waits for the supervisor / co-supervisor
     show_deferral_warning: bool  # an active, unfrozen thesis deferred before: resubmit P3 or be frozen
     show_p1_registration: bool  # an active, unfrozen group in P1 sees its registration status
 

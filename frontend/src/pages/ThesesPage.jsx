@@ -17,7 +17,10 @@ function Requests({ requests, decide, busy }) {
       <ul className="divide-y divide-zinc-100">
         {requests.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-            <Person user={r.student}> · asks you to be {r.slot === "supervisor" ? "supervisor" : "co-supervisor"}</Person>
+            <Person user={r.student}>
+              {" "}· asks you to be {r.slot === "supervisor" ? "supervisor" : "co-supervisor"}
+              {r.co_supervisor && " (the group forms once both supervisor and co-supervisor accept)"}
+            </Person>
             <DecideButtons busy={busy === r.id} onReject={() => decide(r, false)} onApprove={() => decide(r, true)}
               reject="Decline" approve="Accept" />
           </li>
@@ -76,7 +79,7 @@ export default function ThesesPage() {
       <PageHeader
         title="Theses"
         intro={isFaculty
-          ? "Students who asked you to supervise them, and the theses you supervise with every proposal version. You can delete a version that isn't its phase's final one, with a reason: it runs 7 days later, and only the coordinator can cancel it."
+          ? "Students who asked you to supervise them, and the theses you supervise with every proposal version. As the supervisor you can delete a version that isn't its phase's final one, with a reason: it runs 7 days later, and only the coordinator can cancel it."
           : "Every thesis group, archived ones included. After a P3 submission you can defer a thesis: once means P3 again next semester, twice freezes the student. Theses not deferred are completed when you start the next semester."}
       />
 

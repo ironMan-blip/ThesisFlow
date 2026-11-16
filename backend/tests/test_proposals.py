@@ -89,15 +89,14 @@ def test_group_members_and_coordinator_download_but_only_the_student_uploads(cli
     coord = auth(client, db, "c@x.com", Role.coordinator)
     body = {"supervisor_id": me(client, sup)["id"], "co_supervisor_id": me(client, co)["id"]}
     tid = client.post("/api/theses/mine", headers=owner, json=body).json()["thesis"]["id"]
-    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
+    for f in (sup, co):  # the group exists only once both accepted
+        assert client.post(f"/api/theses/requests/{tid}/accept", headers=f).status_code == 204
     assert client.post("/api/theses/mine/register", headers=owner).status_code == 200
     vid = upload(client, owner).json()["versions"][0]["id"]
     file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
 
-    assert (file(owner), file(sup), file(coord)) == (200, 200, 200)
-    assert file(co) == 404  # not a group member until they accept
-    assert client.post(f"/api/theses/requests/{tid}/accept", headers=co).status_code == 204
-    assert file(co) == 200
+    assert (file(owner), file(sup), file(co), file(coord)) == (200, 200, 200, 200)
+    assert file(auth(client, db, "f3@x.com", Role.faculty)) == 404  # faculty outside the group
     assert [t["id"] for t in client.get("/api/theses", headers=co).json()] == [tid]
     for h in (sup, co, coord):
         assert upload(client, h).status_code == 403
@@ -299,8 +298,9 @@ def test_supervisor_deletes_a_version_directly_but_never_the_final_one(client, d
     assert _schedule(client, sup, a, body={}).status_code == 422  # a reason is required
     assert _schedule(client, other_sup, a).status_code == 404  # not their thesis
     assert _schedule(client, h, a).status_code == 403  # students ask instead
+    assert _schedule(client, coord, a).status_code == 403  # only the supervisor deletes directly
     assert _schedule(client, sup, a).status_code == 204
-    assert _schedule(client, coord, a).status_code == 409  # already scheduled
+    assert _schedule(client, sup, a).status_code == 409  # already scheduled
 
     # The student is told: badge, reason, date. They can't cancel; the coordinator can, any time.
     assert client.get("/api/auth/me/counts", headers=h).json() == {"proposal": 1}
@@ -321,13 +321,21 @@ def test_supervisor_deletes_a_version_directly_but_never_the_final_one(client, d
     assert client.get("/api/auth/me/counts", headers=h).json() == {}
 
 
-def test_coordinator_deletes_directly_and_cancels(client, db):
+def test_co_supervisor_cannot_delete_and_coordinator_cancels(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
-    h = student(client, db, "s@x.com")
+    h = auth(client, db, "s@x.com")
+    sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
+    tid = client.post("/api/theses/mine", headers=h, json={"supervisor_id": me(client, sup)["id"], "co_supervisor_id": me(client, co)["id"]}).json()["thesis"]["id"]
+    for f in (sup, co):
+        assert client.post(f"/api/theses/requests/{tid}/accept", headers=f).status_code == 204
+    assert client.post("/api/theses/mine/register", headers=h).status_code == 200
     upload(client, h, content=PDF + b"a", title="a")
     b, a = upload(client, h, content=PDF + b"b", title="b").json()["versions"]
-    assert _schedule(client, coord, b).status_code == 409  # final version
-    assert _schedule(client, coord, a).status_code == 204
+    assert _schedule(client, co, a).status_code == 403  # co-supervisor sees it but can't delete
+    assert [v["can_schedule_delete"] for v in client.get("/api/theses", headers=co).json()[0]["versions"]] == [False, False]
+    assert [v["can_schedule_delete"] for v in client.get("/api/theses", headers=coord).json()[0]["versions"]] == [False, False]
+    assert _schedule(client, sup, b).status_code == 409  # final version
+    assert _schedule(client, sup, a).status_code == 204
     assert client.delete(f"/api/proposals/delete-requests/{a['id']}", headers=coord).status_code == 204
     row = client.get("/api/proposals/mine", headers=h).json()["versions"][1]
     assert (row["delete_pending"], row["delete_rejected"]) == (False, False)  # a cancel isn't a rejection of the student

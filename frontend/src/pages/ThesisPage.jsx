@@ -24,7 +24,9 @@ export default function ThesisPage() {
         method: "POST",
         body: { supervisor_id: Number(f.get("supervisor_id")), co_supervisor_id: co ? Number(co) : null },
       }));
-      return "Request sent. Your thesis ID is created when your supervisor accepts.";
+      return co
+        ? "Request sent. Your group is formed, with its thesis ID, once both your supervisor and co-supervisor accept. If either declines, choose again."
+        : "Request sent. Your group is formed, with its thesis ID, when your supervisor accepts.";
     });
   };
 
@@ -108,13 +110,15 @@ export default function ThesisPage() {
               )}
               <div className="space-y-4">
                 <div>
-                  <p className="mb-2 text-sm text-zinc-500">Supervisor</p>
+                  <p className="mb-2 text-sm text-zinc-500">
+                    Supervisor{t.status === "pending" && (t.supervisor_accepted ? " (accepted)" : " (waiting to accept)")}
+                  </p>
                   {t.supervisor && <Person user={t.supervisor} />}
                 </div>
                 {t.co_supervisor && (
                   <div>
                     <p className="mb-2 text-sm text-zinc-500">
-                      Co-supervisor{!t.co_supervisor_accepted && " (waiting to accept)"}
+                      Co-supervisor{t.co_supervisor_accepted ? t.status === "pending" && " (accepted)" : " (waiting to accept)"}
                     </p>
                     <Person user={t.co_supervisor} />
                   </div>

@@ -51,7 +51,7 @@ def close_all_and_roll(client, db, coord):
     return res.json()
 
 
-def test_group_needs_supervisor_acceptance_and_gets_a_thesis_id(client, db):
+def test_group_forms_only_when_supervisor_and_co_supervisor_both_accept(client, db):
     s = auth(client, db, "s@x.com")
     sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
     other_student = auth(client, db, "o@x.com")
@@ -72,15 +72,38 @@ def test_group_needs_supervisor_acceptance_and_gets_a_thesis_id(client, db):
     assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=other_student).status_code == 403
 
     assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=sup).status_code == 204
+    # The supervisor alone isn't enough when a co-supervisor is named: still no group and no thesis ID.
+    t = mine(client, s)["thesis"]
+    assert (t["status"], t["code"], t["supervisor_accepted"], t["co_supervisor_accepted"]) == ("pending", None, True, False)
+    assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=sup).status_code == 404  # answered already
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
+    assert client.get("/api/theses", headers=sup).json() == []  # not a group yet
+
+    assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=co).status_code == 204
     flags = mine(client, s)
     t = flags["thesis"]
-    assert t["status"] == "active" and re.fullmatch(r"T\d{8}", t["code"])
+    assert t["status"] == "active" and re.fullmatch(r"T\d{8}", t["code"]) and t["co_supervisor_accepted"]
     assert (flags["can_cancel"], flags["show_p1_registration"], flags["show_deferral_warning"]) == (False, True, False)
-    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
-    assert client.get("/api/theses", headers=co).json() == []  # not accepted yet: not their thesis
-    assert client.post(f"/api/theses/requests/{t['id']}/accept", headers=co).status_code == 204
     assert [x["id"] for x in client.get("/api/theses", headers=co).json()] == [t["id"]]
     assert client.get("/api/theses", headers=s).status_code == 403
+
+
+def test_co_supervisor_accepting_first_still_waits_for_the_supervisor(client, db):
+    s = auth(client, db, "s@x.com")
+    sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
+    tid = ask(client, s, sup, co=co).json()["thesis"]["id"]
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=co).status_code == 204
+    assert mine(client, s)["thesis"]["status"] == "pending"
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
+    assert mine(client, s)["thesis"]["status"] == "active"
+
+
+def test_without_a_co_supervisor_the_supervisor_alone_forms_the_group(client, db):
+    s = auth(client, db, "s@x.com")
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    tid = ask(client, s, sup).json()["thesis"]["id"]
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
+    assert mine(client, s)["thesis"]["status"] == "active"
 
 
 def test_declines_and_cancel(client, db):
@@ -88,10 +111,15 @@ def test_declines_and_cancel(client, db):
     sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
     tid = ask(client, s, sup, co=co).json()["thesis"]["id"]
 
+    # Both must accept, so either one declining ends the request, even after the other accepted.
+    assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
     assert client.post(f"/api/theses/requests/{tid}/decline", headers=co).status_code == 204
-    assert mine(client, s)["thesis"]["co_supervisor"] is None  # optional, so the group stands
-    assert client.post(f"/api/theses/requests/{tid}/decline", headers=sup).status_code == 204
     assert mine(client, s)["thesis"] is None and mine(client, s)["can_form_group"] is True
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
+    tid = ask(client, s, sup, co=co).json()["thesis"]["id"]
+    assert client.post(f"/api/theses/requests/{tid}/decline", headers=sup).status_code == 204
+    assert mine(client, s)["thesis"] is None
+    assert client.get("/api/theses/requests", headers=co).json() == []
 
     ask(client, s, sup)
     assert client.delete("/api/theses/mine", headers=s).json()["thesis"] is None

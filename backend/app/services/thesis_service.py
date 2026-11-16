@@ -1,8 +1,11 @@
 """Thesis groups: a student picks a supervisor (required) and a co-supervisor (optional); each must accept.
 
+The group is formed only when everyone named has accepted: the supervisor, and the co-supervisor too if there is
+one. Either of them declining ends the request and the student picks again.
+
 Groups can be formed and accepted any time; registering for P1 (progress_service.register_p1) is limited to a week.
 
-The supervisor accepting makes the thesis active and issues its thesis ID. Every proposal version is
+Forming the group makes the thesis active and issues its thesis ID. Every proposal version is
 stored under that thesis, so it is never lost when accounts change.
 """
 
@@ -104,7 +107,7 @@ def cancel(db: Session, user: User) -> MyThesisOut:
 def _requests(member: User) -> Select:
     return select(Thesis).where(
         or_(
-            (Thesis.supervisor_id == member.id) & (Thesis.status == ThesisStatus.pending),
+            (Thesis.supervisor_id == member.id) & Thesis.supervisor_accepted.is_(False) & (Thesis.status == ThesisStatus.pending),
             (Thesis.co_supervisor_id == member.id) & Thesis.co_supervisor_accepted.is_(False) & Thesis.status.in_(LIVE),
         )
     )
@@ -128,20 +131,31 @@ def count_requests(db: Session, member: User) -> int:
 
 def decide(db: Session, member: User, thesis_id: int, accept: bool) -> None:
     thesis = db.scalar(select(Thesis).where(Thesis.id == thesis_id).with_for_update())
-    if thesis and thesis.supervisor_id == member.id and thesis.status == ThesisStatus.pending:
-        if accept:
-            thesis.status, thesis.code = ThesisStatus.active, new_code(db)
+    slot = None
+    if thesis and thesis.status == ThesisStatus.pending:
+        if thesis.supervisor_id == member.id and not thesis.supervisor_accepted:
+            slot = "supervisor"
+        elif thesis.co_supervisor_id == member.id and not thesis.co_supervisor_accepted:
+            slot = "co_supervisor"
+    elif thesis and thesis.status == ThesisStatus.active and thesis.co_supervisor_id == member.id and not thesis.co_supervisor_accepted:
+        slot = "late_co_supervisor"  # a group formed before both had to accept: its co-supervisor can still answer
+    if slot is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending supervision request with that id")
+    if not accept:
+        if slot == "late_co_supervisor":
+            thesis.co_supervisor = None  # that group already stands
         else:
-            # Declined: the student picks again. Never accepted, so there are no versions to keep.
+            # Either one declining ends the request: the student picks again. Never formed, so no versions to keep.
             thesis.student.thesis = None
             db.delete(thesis)
-    elif thesis and thesis.co_supervisor_id == member.id and not thesis.co_supervisor_accepted and thesis.status in LIVE:
-        if accept:
-            thesis.co_supervisor_accepted = True
-        else:
-            thesis.co_supervisor = None  # the co-supervisor is optional
     else:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending supervision request with that id")
+        if slot == "supervisor":
+            thesis.supervisor_accepted = True
+        else:
+            thesis.co_supervisor_accepted = True
+        everyone = thesis.supervisor_accepted and (thesis.co_supervisor_id is None or thesis.co_supervisor_accepted)
+        if thesis.status == ThesisStatus.pending and everyone:
+            thesis.status, thesis.code = ThesisStatus.active, new_code(db)
     db.commit()
 
 
@@ -163,7 +177,7 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
     out = []
     for t in db.scalars(query):
         row = ThesisDetailOut.model_validate(t)
-        proposal_service.staff_view(db, user, row.versions)
+        proposal_service.staff_view(db, user, t, row.versions)
         row.can_defer = user.role == Role.coordinator and (t.defer_pending or progress_service.can_defer(db, t))
         out.append(row)
     return out
