@@ -6,7 +6,7 @@ from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.proposal import Proposal
 from app.models.user import Role, User
 from app.services import milestone_service
-from tests.helpers import PDF, auth, close_registration, me, student, upload
+from tests.helpers import PDF, REASON, auth, close_registration, me, run_deletions_due, student, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
 F = datetime(2099, 11, 1, 23, 59, tzinfo=timezone.utc)  # a deadline far in the future
@@ -158,9 +158,9 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     db.refresh(gm)
     assert gm.deliverable.proposal_version_id == v1["id"] and gm.submitted_at > before
 
-    # The coordinator deleting the deliverable (on request) falls back to the other upload.
-    client.post(f"/api/proposals/versions/{v1['id']}/delete-request", headers=s)
-    assert client.post(f"/api/proposals/delete-requests/{v1['id']}/approve", headers=coord).status_code == 204
+    # Deleting the deliverable (asked for, then run after the wait) falls back to the other upload.
+    client.post(f"/api/proposals/versions/{v1['id']}/delete-request", headers=s, json=REASON)
+    assert run_deletions_due(db) == (0, 1)
     db.refresh(gm)
     assert gm.deliverable.proposal_version_id == v2["id"]
 

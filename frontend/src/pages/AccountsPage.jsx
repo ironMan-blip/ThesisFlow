@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, EmptyState, Icon, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
+import { Alerts, EmptyState, Icon, ICONS, PageHeader, Person, ReasonDialog, Skeleton } from "../components/ui";
+import { when } from "../format";
 import { useAction } from "../useAction";
 
 const TABS = { student: "students", faculty: "faculties" }; // role -> tab label
 
-// Coordinator's list of every approved student and faculty account, each deletable.
+// Coordinator's list of every approved student and faculty account; any of them can be scheduled for deletion.
 export default function AccountsPage() {
+  const { user } = useOutletContext();
   const [accounts, setAccounts] = useState(null);
   const [query, setQuery] = useState("");
-  const [confirming, setConfirming] = useState(null); // id of the account awaiting "Yes, delete"
-  const { busy, error, notice, setError, run } = useAction(); // busy key is the account id being deleted
+  const [deleting, setDeleting] = useState(null); // account whose deletion reason is being written
+  const { busy, error, notice, setError, run } = useAction(); // busy key is the account id being scheduled
 
   const [role, setRole] = useState("student");
   const tab = TABS[role];
@@ -24,17 +27,19 @@ export default function AccountsPage() {
     return () => { current = false; };
   }, [role, query, setError]);
 
-  const remove = (a) =>
+  const schedule = (reason) => {
+    const a = deleting;
     run(a.id, async () => {
-      await api(`/auth/accounts/${a.id}`, { method: "DELETE" });
-      setAccounts((as) => as.filter((x) => x.id !== a.id));
-      setConfirming(null);
-      return `${a.full_name}'s account was deleted.`;
+      const updated = await api(`/auth/accounts/${a.id}/deletion`, { method: "POST", body: { reason } });
+      setAccounts((as) => as.map((x) => (x.id === a.id ? updated : x)));
+      setDeleting(null);
+      return `${a.full_name}'s account will be deleted on ${when(updated.deletion_executes_at)}. You can cancel it under Deletion requests until then.`;
     });
+  };
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Accounts" intro="Every approved account. Deleting an account keeps its thesis and proposal versions as an archive." />
+      <PageHeader title="Accounts" intro={`Every approved account. A deletion needs a reason and runs ${user.deletion_days} days later; until then you can cancel it under Deletion requests. Its thesis and proposal versions are kept as an archive.`} />
 
       <Alerts error={error} notice={notice} />
 
@@ -42,7 +47,7 @@ export default function AccountsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 sm:px-6">
           <div role="tablist" aria-label="Account type" className="inline-flex rounded-lg bg-zinc-100 p-1">
             {Object.entries(TABS).map(([r, t]) => (
-              <button key={r} role="tab" aria-selected={role === r} onClick={() => { setRole(r); setConfirming(null); }}
+              <button key={r} role="tab" aria-selected={role === r} onClick={() => setRole(r)}
                 className={`rounded-md px-3.5 py-1.5 text-sm font-medium capitalize transition focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none ${
                   role === r ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900"
                 }`}>{t}</button>
@@ -66,18 +71,10 @@ export default function AccountsPage() {
             {accounts.map((a) => (
               <li key={a.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 transition hover:bg-zinc-50/60 sm:px-6">
                 <Person user={a}>
-                  {a.deletion_pending && <> · <span className="font-medium text-amber-700">deletion requested</span></>}
+                  {a.deletion_pending && <> · <span className="font-medium text-amber-700">deletes on {when(a.deletion_executes_at)}</span></>}
                 </Person>
-                {confirming === a.id ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-red-700">Delete permanently? This can't be undone.</span>
-                    <button onClick={() => setConfirming(null)} disabled={busy === a.id} className="btn-secondary px-3 py-1.5">Cancel</button>
-                    <button onClick={() => remove(a)} disabled={busy === a.id} className="btn-danger px-3 py-1.5">
-                      {busy === a.id ? "Deleting…" : "Yes, delete"}
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => setConfirming(a.id)} aria-label={`Delete ${a.full_name}`} className="btn-ghost-danger px-3 py-1.5">Delete</button>
+                {!a.deletion_pending && (
+                  <button onClick={() => { setError(null); setDeleting(a); }} aria-label={`Delete ${a.full_name}`} className="btn-ghost-danger px-3 py-1.5">Delete</button>
                 )}
               </li>
             ))}
@@ -89,6 +86,13 @@ export default function AccountsPage() {
           </p>
         )}
       </section>
+
+      <ReasonDialog open={!!deleting} title={`Delete ${deleting?.full_name}'s account?`} confirm="Schedule deletion"
+        busy={busy === deleting?.id} error={error} min={user.min_reason_chars} max={user.max_reason_chars}
+        onCancel={() => setDeleting(null)} onSubmit={schedule}>
+        The account is deleted {user.deletion_days} days from now, and can't be recovered after that. Until then it stays
+        usable, and you can cancel the deletion. The reason is shown to the account owner.
+      </ReasonDialog>
     </div>
   );
 }

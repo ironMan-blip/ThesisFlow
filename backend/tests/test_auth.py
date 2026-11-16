@@ -12,9 +12,9 @@ from app.database import get_db
 from app.main import app
 from app.models.user import Role, User
 from app.security import hash_password
-from app.services import auth_service
+from app.services import account_service, auth_service
 from app.services.auth_service import REGISTER_TAKEN
-from tests.helpers import auth, student as make_student, upload
+from tests.helpers import REASON, auth, form_group, run_deletions_due, student as make_student, upload
 
 
 def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
@@ -219,25 +219,33 @@ def test_register_rejects_bad_email_and_weak_password(client):
         assert r.json()["detail"].startswith("password:"), weak
 
 
-def test_account_deletion_needs_coordinator_approval(client, db, tmp_path, timelines):
+def test_account_deletion_needs_a_reason_and_runs_after_7_days(client, db, tmp_path, timelines):
     student = make_student(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
     pdfs = list(tmp_path.rglob("*.pdf"))
     assert len(pdfs) == 1
 
-    assert client.post("/api/auth/me/deletion-request", headers=coord).status_code == 403
-    r = client.post("/api/auth/me/deletion-request", headers=student)
-    assert r.status_code == 200 and r.json()["deletion_pending"] is True
-    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 409
-    # Still usable while waiting.
-    assert client.get("/api/auth/me", headers=student).status_code == 200
+    assert client.post("/api/auth/me/deletion-request", headers=coord, json=REASON).status_code == 403
+    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 422  # no reason
+    r = client.post("/api/auth/me/deletion-request", headers=student, json={"reason": "  bye  "})
+    assert r.status_code == 422 and r.json()["detail"].startswith("reason:")  # one word isn't a reason
+    r = client.post("/api/auth/me/deletion-request", headers=student, json=REASON)
+    me = r.json()
+    assert r.status_code == 200 and me["deletion_pending"] is True and me["deletion_by_coordinator"] is False
+    assert me["deletion_reason"] == REASON["reason"] and me["deletion_executes_at"] is not None
+    assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 409
 
     assert client.get("/api/auth/deletion-requests", headers=student).status_code == 403
     pending = client.get("/api/auth/deletion-requests", headers=coord).json()
-    assert [p["email"] for p in pending] == ["s@b.com"]
+    assert [(p["email"], p["deletion_reason"]) for p in pending] == [("s@b.com", REASON["reason"])]
     uid = pending[0]["id"]
-    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 204
+    # No approving early, and nothing runs before the 7 days are over.
+    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 404
+    assert account_service.run_due_deletions(db) == 0
+    assert client.get("/api/auth/me", headers=student).status_code == 200  # still usable while waiting
+
+    assert run_deletions_due(db) == (1, 0)
     assert db.get(User, uid) is None
     assert pdfs[0].exists()  # the thesis and its versions are kept as an archive
     assert client.get("/api/auth/me", headers=student).status_code == 401
@@ -245,34 +253,21 @@ def test_account_deletion_needs_coordinator_approval(client, db, tmp_path, timel
     assert [(t["status"], t["student"], len(t["versions"])) for t in theses] == [("dropped", None, 1)]
 
 
-def test_reject_deletion_keeps_account(client, db):
+def test_only_the_coordinator_cancels_a_deletion(client, db):
     student = auth(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
-    uid = client.post("/api/auth/me/deletion-request", headers=student).json()["id"]
+    uid = client.post("/api/auth/me/deletion-request", headers=student, json=REASON).json()["id"]
+    assert client.delete(f"/api/auth/deletion-requests/{uid}", headers=student).status_code == 403
     r = client.delete(f"/api/auth/deletion-requests/{uid}", headers=coord)
-    assert r.status_code == 200 and r.json()["deletion_pending"] is False
+    assert r.status_code == 200 and (r.json()["deletion_pending"], r.json()["deletion_reason"]) == (False, None)
     assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
-    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 404
-
-
-def test_deletion_request_lapses_after_48_hours(client, db):
-    student = auth(client, db, "s@b.com")
-    coord = auth(client, db, "coord@b.com", Role.coordinator)
-    uid = client.post("/api/auth/me/deletion-request", headers=student).json()["id"]
-    user = db.get(User, uid)
-    user.deletion_requested_at -= timedelta(hours=48, minutes=1)
-    db.commit()
-
-    assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
-    assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord).status_code == 404
-    assert db.get(User, uid) is not None
-    me = client.get("/api/auth/me", headers=student).json()
-    assert me["deletion_pending"] is False
+    assert client.delete(f"/api/auth/deletion-requests/{uid}", headers=coord).status_code == 404
+    assert run_deletions_due(db) == (0, 0) and db.get(User, uid) is not None
     # The user may ask again.
-    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+    assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 200
 
 
-def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path, timelines):
+def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path, timelines):
     student = make_student(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert upload(client, student).status_code == 201
@@ -290,23 +285,40 @@ def test_coordinator_lists_and_deletes_accounts(client, db, tmp_path, timelines)
     assert emails("id_prefix=%25") == []  # LIKE wildcards are matched literally
     assert client.get("/api/auth/accounts?role=coordinator", headers=coord).status_code == 422
 
+    schedule = lambda uid, headers=coord, body=REASON: client.post(f"/api/auth/accounts/{uid}/deletion", headers=headers, json=body)
     coord_id = db.scalar(select(User.id).where(User.email == "coord@b.com"))
-    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=student).status_code == 403
-    assert client.delete(f"/api/auth/accounts/{coord_id}", headers=coord).status_code == 403
+    assert schedule(by_email["s@b.com"], headers=student).status_code == 403
+    assert schedule(coord_id).status_code == 403
+    assert schedule(by_email["s@b.com"], body={}).status_code == 422  # the coordinator gives a reason too
     # A supervisor of an active thesis is kept; once the thesis is archived they can go.
-    assert client.delete(f"/api/auth/accounts/{by_email[supervisor_email]}", headers=coord).status_code == 409
-    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 204
+    assert schedule(by_email[supervisor_email]).status_code == 409
+    r = schedule(by_email["s@b.com"])
+    assert r.status_code == 200 and r.json()["deletion_by_coordinator"] is True
+    assert schedule(by_email["s@b.com"]).status_code == 409  # already scheduled
+    assert db.get(User, by_email["s@b.com"]) is not None  # nothing happens before the 7 days
+    assert run_deletions_due(db) == (1, 0)
     assert db.get(User, by_email["s@b.com"]) is None
     assert len(list(tmp_path.rglob("*.pdf"))) == 1  # versions are never lost
-    assert client.delete(f"/api/auth/accounts/{by_email[supervisor_email]}", headers=coord).status_code == 204
-    assert client.delete(f"/api/auth/accounts/{by_email['s@b.com']}", headers=coord).status_code == 404
+    assert schedule(by_email[supervisor_email]).status_code == 200
+    assert schedule(by_email["s@b.com"]).status_code == 404
+
+
+def test_a_deletion_that_became_unsafe_during_the_wait_is_dropped(client, db):
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    faculty = auth(client, db, "f@b.com", Role.faculty)
+    fid = client.get("/api/auth/me", headers=faculty).json()["id"]
+    assert client.post("/api/auth/me/deletion-request", headers=faculty, json=REASON).status_code == 200
+    form_group(client, db, auth(client, db, "s@b.com"), faculty)  # now supervises an active thesis
+    assert run_deletions_due(db) == (0, 0)
+    assert db.get(User, fid).deletion_pending is False
+    assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
 
 
 def test_pending_counts_and_name_fields(client, db):
     student = auth(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
     assert register(client).status_code == 201
-    assert client.post("/api/auth/me/deletion-request", headers=student).status_code == 200
+    assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 200
 
     assert client.get("/api/auth/me/counts", headers=student).json() == {}
     assert client.get("/api/auth/me/counts", headers=coord).json() == {
@@ -438,7 +450,7 @@ def test_nul_characters_are_a_422_not_a_500(client, body):
 
 def test_id_past_integer_range_is_a_422(client, db):
     h = auth(client, db, "c@b.com", Role.coordinator)
-    assert client.delete(f"/api/auth/accounts/{2**40}", headers=h).status_code == 422
+    assert client.delete(f"/api/auth/deletion-requests/{2**40}", headers=h).status_code == 422
 
 
 def test_big_bodies_need_a_signed_in_user(client):

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.models.milestone import Phase
 from app.models.thesis import Thesis
+from app.models.user import DELETION_DELAY
 
 
 class Proposal(Base):
@@ -50,7 +51,13 @@ class ProposalVersion(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
     )
 
-    # Set when the student asks to delete this version; only the coordinator can approve it (SRS F11 keeps old versions).
+    # Set when the student asks to delete this version (SRS F11 keeps old versions otherwise). It runs DELETION_DELAY
+    # later unless the coordinator cancels it, or the phase closes first and the version becomes a final submission.
     delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delete_reason: Mapped[str | None] = mapped_column(Text)
 
     proposal: Mapped[Proposal] = relationship(back_populates="versions")
+
+    @property
+    def delete_executes_at(self) -> datetime | None:
+        return self.delete_requested_at and self.delete_requested_at + DELETION_DELAY

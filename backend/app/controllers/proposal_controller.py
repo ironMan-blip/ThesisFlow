@@ -7,6 +7,7 @@ from app.deps import get_current_user, require_roles
 from app.models.user import Role, User
 from app.schemas.proposal import ProposalOut
 from app.schemas.thesis import DeleteRequestOut
+from app.schemas.user import DeletionReasonIn
 from app.services import proposal_service
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
@@ -36,9 +37,11 @@ def download(version_id: int, user: User = Depends(get_current_user), db: Sessio
 
 
 @router.post("/versions/{version_id}/delete-request", response_model=ProposalOut)
-def request_delete(version_id: int, user: User = Depends(require_roles(Role.student)), db: Session = Depends(get_db)):
-    # Versions are kept (SRS F11); the student can only ask, the coordinator decides.
-    return proposal_service.request_delete(db, user, version_id)
+def request_delete(
+    version_id: int, data: DeletionReasonIn, user: User = Depends(require_roles(Role.student)), db: Session = Depends(get_db)
+):
+    # Versions are kept (SRS F11): a delete needs a reason, waits 7 days, and only the coordinator can cancel it.
+    return proposal_service.request_delete(db, user, version_id, data.reason)
 
 
 @router.get("/delete-requests", response_model=list[DeleteRequestOut], dependencies=[Depends(coordinator)])
@@ -46,13 +49,7 @@ def delete_requests(db: Session = Depends(get_db)):
     return proposal_service.pending_delete_requests(db)
 
 
-@router.post(
-    "/delete-requests/{version_id}/approve", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)]
-)
-def approve_delete(version_id: int, db: Session = Depends(get_db)):
-    proposal_service.approve_delete(db, version_id)
-
-
+# No approve route: a delete runs by itself once its wait is over (proposal_service.run_due_deletions).
 @router.delete("/delete-requests/{version_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)])
-def reject_delete(version_id: int, db: Session = Depends(get_db)):
-    proposal_service.reject_delete(db, version_id)
+def cancel_delete(version_id: int, db: Session = Depends(get_db)):
+    proposal_service.cancel_delete(db, version_id)

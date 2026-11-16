@@ -7,7 +7,8 @@ from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
-from tests.helpers import PDF, auth, me, student, upload
+from app.services import proposal_service
+from tests.helpers import PDF, REASON, auth, me, run_deletions_due, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -187,11 +188,11 @@ def test_pdf_needs_its_eof_trailer(client, db):
     assert upload(client, h, content=PDF + b"x" * 2048).status_code == 422  # %%EOF not near the end
 
 
-def _ask(client, h, v):
-    return client.post(f"/api/proposals/versions/{v['id']}/delete-request", headers=h)
+def _ask(client, h, v, body=REASON):
+    return client.post(f"/api/proposals/versions/{v['id']}/delete-request", headers=h, json=body)
 
 
-def test_coordinator_approves_a_version_delete_request(client, db, tmp_path):
+def test_a_version_delete_needs_a_reason_and_runs_after_7_days(client, db, tmp_path):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     h, other = student(client, db, "s@x.com"), student(client, db, "o@x.com")
     for t in ("a", "b", "c"):
@@ -200,15 +201,20 @@ def test_coordinator_approves_a_version_delete_request(client, db, tmp_path):
     assert a["can_request_delete"] and not a["delete_pending"]
 
     assert _ask(client, other, a).status_code == 404  # not their version
+    assert _ask(client, h, a, body={"reason": "oops"}).status_code == 422  # a reason, not a word
     mine = _ask(client, h, a).json()
-    assert [(v["title"], v["delete_pending"], v["can_request_delete"]) for v in mine["versions"]][-1] == ("a", True, False)
-    assert _ask(client, h, a).status_code == 409  # already asked
+    row = mine["versions"][-1]
+    assert (row["title"], row["delete_pending"], row["can_request_delete"]) == ("a", True, False)
+    assert row["delete_executes_at"] is not None
+    assert _ask(client, h, a).status_code == 409  # already scheduled
     assert client.get("/api/proposals/delete-requests", headers=h).status_code == 403  # coordinator only
     assert client.get("/api/auth/me/counts", headers=coord).json()["version_delete_requests"] == 1
     [req] = client.get("/api/proposals/delete-requests", headers=coord).json()
-    assert (req["id"], req["title"], req["student"]["email"]) == (a["id"], "a", "s@x.com")
+    assert (req["id"], req["title"], req["student"]["email"], req["delete_reason"]) == (a["id"], "a", "s@x.com", REASON["reason"])
+    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 404  # no early delete
+    assert proposal_service.run_due_deletions(db) == 0
 
-    assert client.post(f"/api/proposals/delete-requests/{a['id']}/approve", headers=coord).status_code == 204
+    assert run_deletions_due(db) == (0, 1)
     versions = client.get("/api/proposals/mine", headers=h).json()["versions"]
     assert [(v["title"], v["version_no"]) for v in versions] == [("c", 2), ("b", 1)]
     assert len(list((tmp_path / "proposals").iterdir())) == 2  # the PDF is gone too
@@ -218,22 +224,24 @@ def test_coordinator_approves_a_version_delete_request(client, db, tmp_path):
     assert [(v["title"], v["version_no"]) for v in versions] == [("d", 3), ("c", 2), ("b", 1)]
 
 
-def test_rejected_or_reuploaded_requests_keep_the_version(client, db):
+def test_only_the_coordinator_cancels_a_version_delete(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     h = student(client, db, "s@x.com")
     v = upload(client, h).json()["versions"][0]
     _ask(client, h, v)
+    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=h).status_code == 403
+    # Uploading the same file again doesn't stop the delete either: it is stored as a new version.
+    versions = upload(client, h).json()["versions"]
+    assert [(x["version_no"], x["delete_pending"]) for x in versions] == [(2, False), (1, True)]
+
     assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 204
-    assert client.get("/api/proposals/mine", headers=h).json()["versions"][0]["can_request_delete"] is True
-    assert client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord).status_code == 404
-
-    _ask(client, h, v)
-    upload(client, h)  # the same upload again: they want it, so the request is dropped
-    assert client.get("/api/proposals/delete-requests", headers=coord).json() == []
-    assert client.get("/api/proposals/mine", headers=h).json()["versions"][0]["delete_pending"] is False
+    assert client.delete(f"/api/proposals/delete-requests/{v['id']}", headers=coord).status_code == 404
+    assert client.get("/api/proposals/mine", headers=h).json()["versions"][1]["can_request_delete"] is True
+    assert run_deletions_due(db) == (0, 0)
+    assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 2
 
 
-def test_delete_requests_lapse_when_the_phase_closes(client, db):
+def test_a_version_delete_lapses_when_the_phase_closes_first(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     h = student(client, db, "s@x.com")
     v = upload(client, h).json()["versions"][0]
@@ -242,8 +250,8 @@ def test_delete_requests_lapse_when_the_phase_closes(client, db):
     p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0  # closed: v is the final submission
     db.flush()
     assert client.get("/api/proposals/delete-requests", headers=coord).json() == []
-    res = client.post(f"/api/proposals/delete-requests/{v['id']}/approve", headers=coord)
-    assert res.status_code == 409
     mine = client.get("/api/proposals/mine", headers=h).json()["versions"][0]
-    assert (mine["delete_pending"], mine["can_request_delete"]) == (False, False)
+    assert (mine["delete_pending"], mine["can_request_delete"], mine["delete_executes_at"]) == (False, False, None)
     assert _ask(client, h, v).status_code == 409
+    assert run_deletions_due(db) == (0, 0)
+    assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 1  # kept

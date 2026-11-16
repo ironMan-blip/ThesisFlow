@@ -23,6 +23,7 @@ class ProposalVersionOut(BaseModel):
     # Set by the service, student page only: they can ask the coordinator to delete it / they asked and it still can be.
     can_request_delete: bool = False
     delete_pending: bool = False
+    delete_executes_at: datetime | None = None  # when the requested delete runs, if one is pending
 
     @computed_field
     @property

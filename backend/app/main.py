@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import logging
 from contextlib import asynccontextmanager
@@ -13,17 +14,43 @@ from app.config import settings
 from app.database import SessionLocal, get_db
 from app.deps import user_for_token
 from app.rate_limit import rate_limit
-from app.services import auth_service
+from app.services import account_service, auth_service, proposal_service
 
 # Only uploads are bigger than this, and only signed-in students upload.
 ANONYMOUS_BODY_LIMIT = 64 * 1024
+
+
+# Scheduled deletes run at most this long after their 7-day wait ends.
+DELETION_CHECK_SECONDS = 300
+log = logging.getLogger(__name__)
+
+
+def _run_due_deletions() -> None:
+    with SessionLocal() as db:
+        accounts = account_service.run_due_deletions(db)
+        versions = proposal_service.run_due_deletions(db)
+    if accounts or versions:
+        log.info("Scheduled deletions ran: %s accounts, %s proposal versions", accounts, versions)
+
+
+async def _deletion_loop() -> None:
+    # In the app process, not a separate worker: the demo runs as one backend container. Row locks keep it safe
+    # if more processes ever run it.
+    while True:
+        try:
+            await run_in_threadpool(_run_due_deletions)
+        except Exception:
+            log.exception("Running scheduled deletions failed; trying again next round")
+        await asyncio.sleep(DELETION_CHECK_SECONDS)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         auth_service.ensure_admin(db)
+    deletions = asyncio.create_task(_deletion_loop())
     yield
+    deletions.cancel()
 
 
 app = FastAPI(title="ThesisFlow API", lifespan=lifespan)

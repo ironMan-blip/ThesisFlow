@@ -7,7 +7,8 @@ import { useAction } from "../useAction";
 
 // Coordinator inbox of requests to approve or reject; the pages exported below configure it.
 // person(r): who asked (the row itself for account requests); details(r): extra content under the person.
-function RequestsPage({ path, title, intro, approved, rejected, dateField, person = (r) => r, details }) {
+// cancelOnly: scheduled deletions, which run by themselves; the coordinator can only cancel them.
+function RequestsPage({ path, title, intro, approved, rejected, dateField, person = (r) => r, details, cancelOnly = false }) {
   const [requests, setRequests] = useState(null);
   const { user, refreshCounts } = useOutletContext();
   const { busy, error, notice, setError, run } = useAction(); // busy key is the request id being decided
@@ -26,7 +27,7 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField, perso
 
   return (
     <div className="space-y-8">
-      <PageHeader title={title} intro={intro(user.review_hours)} />
+      <PageHeader title={title} intro={intro(user)} />
 
       <Alerts error={error} notice={notice} />
 
@@ -47,7 +48,13 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField, perso
                     <Person user={person(r)}> · requested {when(r[dateField])}</Person>
                     {details?.(r, setError)}
                   </div>
-                  <DecideButtons busy={busy === r.id} onReject={() => decide(r, false)} onApprove={() => decide(r, true)} />
+                  {cancelOnly ? (
+                    <button onClick={() => decide(r, false)} disabled={busy === r.id} className="btn-secondary px-3 py-1.5">
+                      {busy === r.id ? "Saving…" : "Cancel deletion"}
+                    </button>
+                  ) : (
+                    <DecideButtons busy={busy === r.id} onReject={() => decide(r, false)} onApprove={() => decide(r, true)} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -58,11 +65,21 @@ function RequestsPage({ path, title, intro, approved, rejected, dateField, perso
   );
 }
 
+// When a scheduled delete runs, who asked, and why.
+function ScheduledDelete({ executesAt, by, reason }) {
+  return (
+    <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900 ring-1 ring-amber-600/20 ring-inset">
+      <p className="font-medium">Deletes on {when(executesAt)} · asked by {by}</p>
+      <p className="mt-1 whitespace-pre-line break-words text-amber-800">{reason}</p>
+    </div>
+  );
+}
+
 export const RegistrationRequestsPage = () => (
   <RequestsPage
     path="/auth/registration-requests"
     title="Registration requests"
-    intro={(h) => `Students and faculty who registered wait here until you approve them. Please review each request within ${h} hours.`}
+    intro={(u) => `Students and faculty who registered wait here until you approve them. Please review each request within ${u.review_hours} hours.`}
     approved="was approved and can now log in"
     rejected="was rejected"
     dateField="created_at"
@@ -73,10 +90,14 @@ export const DeletionRequestsPage = () => (
   <RequestsPage
     path="/auth/deletion-requests"
     title="Deletion requests"
-    intro={(h) => `Users who asked to delete their account. Approving deletes the account. Its thesis and every proposal version are kept as an archive. A request you do not approve within ${h} hours lapses and the account is kept.`}
+    intro={(u) => `Accounts scheduled for deletion, by their owner or by you, each with its reason. Each one is deleted ${u.deletion_days} days after it was asked for unless you cancel it here; nobody else can. The thesis and every proposal version are kept as an archive. If a faculty member takes on a thesis meanwhile, their deletion is dropped.`}
     approved="was deleted"
-    rejected="keeps their account"
+    rejected="keeps their account: deletion cancelled"
     dateField="deletion_requested_at"
+    cancelOnly
+    details={(r) => (
+      <ScheduledDelete executesAt={r.deletion_executes_at} by={r.deletion_by_coordinator ? "the coordinator" : "the account owner"} reason={r.deletion_reason} />
+    )}
   />
 );
 
@@ -95,17 +116,21 @@ export const VersionDeleteRequestsPage = () => (
   <RequestsPage
     path="/proposals/delete-requests"
     title="Version delete requests"
-    intro={() => "Students who asked to delete a proposal version. Every version is kept unless you approve. Approving deletes the version and its PDF and renumbers later versions. A request lapses when its phase closes, since the version is then a final submission."}
+    intro={(u) => `Proposal versions students asked to delete, each with its reason. Each one is deleted (the version and its PDF; later versions are renumbered) ${u.deletion_days} days after it was asked for unless you cancel it here; nobody else can. If the phase closes first, the version is a final submission and is kept.`}
     approved="had the version deleted"
-    rejected="keeps the version"
+    rejected="keeps the version: delete cancelled"
     dateField="delete_requested_at"
     person={(r) => r.student}
+    cancelOnly
     details={(r, setError) => (
+      <div className="space-y-2">
+      <ScheduledDelete executesAt={r.delete_executes_at} by="the student" reason={r.delete_reason} />
       <div className="flex flex-wrap items-start gap-3 rounded-lg bg-zinc-50 p-3 ring-1 ring-zinc-200/70 ring-inset">
         <VersionInfo v={r} />
         <button onClick={() => download(r.download_path, r.original_filename).catch((err) => setError(err.message))}
           className="btn-secondary px-3 py-1.5">Download</button>
         {r.thesis_code && <span className="badge bg-white font-semibold tabular-nums text-zinc-700 ring-zinc-200">{r.thesis_code}</span>}
+      </div>
       </div>
     )}
   />

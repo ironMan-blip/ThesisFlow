@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, false, func, true
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -27,6 +27,9 @@ ROLE_TOOLS = {
 # The coordinator has this long to decide a sign-up or an account deletion request.
 REVIEW_WINDOW = timedelta(hours=48)
 REVIEW_HOURS = REVIEW_WINDOW // timedelta(hours=1)
+# Every delete (an account, a proposal version) waits this long after it is asked for; only the coordinator can cancel it.
+DELETION_DELAY = timedelta(days=7)
+DELETION_DAYS = DELETION_DELAY.days
 
 
 class User(Base):
@@ -46,8 +49,10 @@ class User(Base):
     # Sign-ups start unapproved and cannot log in until the coordinator approves them.
     approved: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    # Set when the user asks to delete their account; the request lapses after REVIEW_WINDOW.
+    # Set when the account's deletion is asked for (by the user or the coordinator); it runs DELETION_DELAY later.
     deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deletion_reason: Mapped[str | None] = mapped_column(Text)
+    deletion_requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
     # Students only. The current thesis group (pending or active); faculty are linked from the thesis row instead.
     thesis_id: Mapped[int | None] = mapped_column(ForeignKey("theses.id", ondelete="SET NULL", use_alter=True, name="users_thesis_id_fkey"))
@@ -86,5 +91,12 @@ class User(Base):
 
     @property
     def deletion_pending(self) -> bool:
-        at = self.deletion_requested_at
-        return at is not None and datetime.now(timezone.utc) < at + REVIEW_WINDOW
+        return self.deletion_requested_at is not None
+
+    @property
+    def deletion_executes_at(self) -> datetime | None:
+        return self.deletion_requested_at and self.deletion_requested_at + DELETION_DELAY
+
+    @property
+    def deletion_by_coordinator(self) -> bool:
+        return self.deletion_pending and self.deletion_requested_by_id != self.id

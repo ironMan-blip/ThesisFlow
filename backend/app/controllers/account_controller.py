@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.user import Role, User
-from app.schemas.user import DeletionRequestOut, RegistrationRequestOut, RestartRequestOut, UserOut
+from app.schemas.user import DeletionReasonIn, DeletionRequestOut, RegistrationRequestOut, RestartRequestOut, UserOut
 from app.services import account_service, progress_service
 
 # Same /api/auth prefix as auth_controller, so existing URLs keep working.
@@ -15,8 +15,8 @@ coordinator = require_roles(Role.coordinator)
 
 
 @router.post("/me/deletion-request", response_model=UserOut)
-def request_deletion(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return account_service.request_deletion(db, user)
+def request_deletion(data: DeletionReasonIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return account_service.request_deletion(db, user, data.reason)
 
 
 @router.get("/registration-requests", response_model=list[RegistrationRequestOut], dependencies=[Depends(coordinator)])
@@ -41,16 +41,10 @@ def deletion_requests(db: Session = Depends(get_db)):
     return account_service.pending_deletions(db)
 
 
-@router.post(
-    "/deletion-requests/{user_id}/approve", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)]
-)
-def approve_deletion(user_id: int, db: Session = Depends(get_db)):
-    account_service.approve_deletion(db, user_id)
-
-
+# No approve route: a deletion runs by itself once its wait is over (account_service.run_due_deletions).
 @router.delete("/deletion-requests/{user_id}", response_model=UserOut, dependencies=[Depends(coordinator)])
-def reject_deletion(user_id: int, db: Session = Depends(get_db)):
-    return account_service.reject_deletion(db, user_id)
+def cancel_deletion(user_id: int, db: Session = Depends(get_db)):
+    return account_service.cancel_deletion(db, user_id)
 
 
 @router.post("/me/restart-request", response_model=UserOut)
@@ -83,6 +77,8 @@ def accounts(role: Literal[Role.student, Role.faculty] | None = None, id_prefix:
     return account_service.list_accounts(db, role, id_prefix.strip())
 
 
-@router.delete("/accounts/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(coordinator)])
-def delete_account(user_id: int, db: Session = Depends(get_db)):
-    account_service.delete_account(db, user_id)
+@router.post("/accounts/{user_id}/deletion", response_model=UserOut)
+def schedule_deletion(
+    user_id: int, data: DeletionReasonIn, user: User = Depends(coordinator), db: Session = Depends(get_db)
+):
+    return account_service.schedule_deletion(db, user, user_id, data.reason)

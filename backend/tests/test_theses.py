@@ -6,7 +6,7 @@ from sqlalchemy import delete
 
 from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.user import Role, User
-from tests.helpers import PDF, auth, close_registration, form_group, me, student, upload
+from tests.helpers import PDF, REASON, auth, close_registration, form_group, me, run_deletions_due, student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -278,8 +278,8 @@ def test_deleting_the_p3_submission_undoes_a_deferral(client, db):
     tid = mine(client, s)["thesis"]["id"]
     vid = upload(client, s).json()["versions"][0]["id"]
     assert client.put(f"/api/theses/{tid}/defer", headers=coord, json={"defer": True}).json()["defer_pending"] is True
-    client.post(f"/api/proposals/versions/{vid}/delete-request", headers=s)
-    assert client.post(f"/api/proposals/delete-requests/{vid}/approve", headers=coord).status_code == 204
+    client.post(f"/api/proposals/versions/{vid}/delete-request", headers=s, json=REASON)
+    assert run_deletions_due(db) == (0, 1)
     assert [t["defer_pending"] for t in client.get("/api/theses", headers=coord).json()] == [False]
 
 

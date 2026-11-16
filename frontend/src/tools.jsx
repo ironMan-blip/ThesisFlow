@@ -18,7 +18,7 @@ export const TOOLS = {
     icon: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   },
   accounts: {
-    to: "/accounts", title: "Accounts", text: "View every account and delete one if needed.",
+    to: "/accounts", title: "Accounts", text: "View every account and schedule one for deletion if needed.",
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M17 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3" /></>,
   },
   registration_requests: {
@@ -26,7 +26,7 @@ export const TOOLS = {
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 11l2 2 4-4" /></>,
   },
   deletion_requests: {
-    to: "/deletion-requests", title: "Deletion requests", text: "Approve or reject users who asked to delete their account.",
+    to: "/deletion-requests", title: "Deletion requests", text: "Scheduled account deletions with their reasons; cancel any within 7 days.",
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 10l5 5M21 10l-5 5" /></>,
   },
   restart_requests: {
@@ -34,7 +34,7 @@ export const TOOLS = {
     icon: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></>,
   },
   version_delete_requests: {
-    to: "/version-delete-requests", title: "Version delete requests", text: "Students who asked to delete a proposal version.",
+    to: "/version-delete-requests", title: "Version delete requests", text: "Scheduled proposal version deletes with their reasons; cancel any within 7 days.",
     icon: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5" /></>,
   },
   account: {

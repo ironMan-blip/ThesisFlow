@@ -3,11 +3,13 @@ from itertools import count
 
 from sqlalchemy import update
 
+from app.models.proposal import ProposalVersion
 from app.models.semester import Semester
-from app.models.user import Role
-from app.services import auth_service
+from app.models.user import DELETION_DELAY, Role, User
+from app.services import account_service, auth_service, proposal_service
 
 PDF = b"%PDF-1.4\n% test\n%%EOF\n"
+REASON = {"reason": "I uploaded the wrong file by mistake and it holds private data."}
 
 
 _id_numbers = count(50000000)
@@ -55,3 +57,12 @@ def close_registration(db):
     """Move the semester start a month back, so P1 registration is over and P1 deadlines can be in the past."""
     db.execute(update(Semester).values(started_at=datetime.now(timezone.utc) - timedelta(days=30)))
     db.flush()
+
+
+def run_deletions_due(db):
+    """Move every scheduled delete past its 7-day wait, then run the deletion job like the background loop does."""
+    db.execute(update(User).values(deletion_requested_at=User.deletion_requested_at - DELETION_DELAY))
+    db.execute(update(ProposalVersion).values(delete_requested_at=ProposalVersion.delete_requested_at - DELETION_DELAY))
+    db.flush()
+    db.expire_all()
+    return account_service.run_due_deletions(db), proposal_service.run_due_deletions(db)
