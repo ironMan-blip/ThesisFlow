@@ -50,7 +50,9 @@ export default function ThesesPage() {
   }, [load, setError]);
 
   const decide = (r, accept) => run(r.id, async () => {
-    await api(`/theses/requests/${r.id}/${accept ? "accept" : "decline"}`, { method: "POST" });
+    // Names the co-supervisor shown here, so a swap made meanwhile is refused instead of approved unseen.
+    const co = r.co_supervisor ? `?co_supervisor_id=${r.co_supervisor.id}` : "";
+    await api(`/theses/requests/${r.id}/${accept ? "accept" : "decline"}${co}`, { method: "POST" });
     await load();
     refreshCounts();
     return `${r.student.full_name}: request ${accept ? "accepted" : "declined"}.`;

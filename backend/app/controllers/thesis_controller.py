@@ -63,13 +63,13 @@ def requests(user: User = Depends(faculty), db: Session = Depends(get_db)):
 
 
 @router.post("/requests/{thesis_id}/accept", status_code=status.HTTP_204_NO_CONTENT)
-def accept(thesis_id: int, user: User = Depends(faculty), db: Session = Depends(get_db)):
-    thesis_service.decide(db, user, thesis_id, accept=True)
+def accept(thesis_id: int, co_supervisor_id: int | None = None, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    thesis_service.decide(db, user, thesis_id, accept=True, co_supervisor_id=co_supervisor_id)
 
 
 @router.post("/requests/{thesis_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
-def decline(thesis_id: int, user: User = Depends(faculty), db: Session = Depends(get_db)):
-    thesis_service.decide(db, user, thesis_id, accept=False)
+def decline(thesis_id: int, co_supervisor_id: int | None = None, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    thesis_service.decide(db, user, thesis_id, accept=False, co_supervisor_id=co_supervisor_id)
 
 
 # Faculty only: the coordinator runs semesters and accounts, not individual theses.

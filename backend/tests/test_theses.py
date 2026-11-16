@@ -138,6 +138,22 @@ def test_either_declining_the_co_supervisor_keeps_the_group(client, db):
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
 
 
+def test_a_stale_answer_never_approves_a_swapped_co_supervisor(client, db):
+    s = auth(client, db, "s@x.com")
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    x, y = auth(client, db, "x@x.com", Role.faculty), auth(client, db, "y@x.com", Role.faculty)
+    form_group(client, db, s, sup)
+    tid = mine(client, s)["thesis"]["id"]
+    add_co(client, s, x)
+    seen = client.get("/api/theses/requests", headers=sup).json()[0]["co_supervisor"]["id"]  # supervisor's page shows x
+
+    client.delete("/api/theses/mine/co-supervisor", headers=s)
+    add_co(client, s, y)  # swapped before the supervisor clicks
+    res = client.post(f"/api/theses/requests/{tid}/accept", headers=sup, params={"co_supervisor_id": seen})
+    assert res.status_code == 409
+    assert mine(client, s)["thesis"]["co_supervisor_approved"] is False
+
+
 def test_declines_and_cancel(client, db):
     s = auth(client, db, "s@x.com")
     sup = auth(client, db, "sup@x.com", Role.faculty)

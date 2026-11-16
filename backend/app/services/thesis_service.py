@@ -163,11 +163,14 @@ def count_requests(db: Session, member: User) -> int:
     return db.scalar(_requests(member).with_only_columns(func.count()))
 
 
-def decide(db: Session, member: User, thesis_id: int, accept: bool) -> None:
+def decide(db: Session, member: User, thesis_id: int, accept: bool, co_supervisor_id: int | None = None) -> None:
+    """co_supervisor_id: who the deciding page showed. The student may have swapped co-supervisors since then."""
     thesis = db.scalar(select(Thesis).where(Thesis.id == thesis_id).with_for_update())
     slot = thesis and _slot(thesis, member)
     if not slot:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending supervision request with that id")
+    if slot != "supervisor" and co_supervisor_id is not None and co_supervisor_id != thesis.co_supervisor_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The student changed the co-supervisor, so reload and decide again")
     if slot == "supervisor":
         if accept:
             thesis.status, thesis.code = ThesisStatus.active, new_code(db)
