@@ -315,7 +315,7 @@ def approve_restart(db: Session, user_id: int) -> User:
 def _restart(db: Session, user: User, now: datetime) -> None:
     """Fresh start at P1 with no thesis. The old thesis is archived with all its versions; the next group gets a new thesis ID."""
     thesis, user.thesis = user.thesis, None
-    if thesis is not None and thesis.never_formed:
+    if thesis is not None and thesis.status == ThesisStatus.pending:
         db.delete(thesis)  # never accepted, so it has no thesis ID and no versions
     elif thesis is not None:
         thesis.status, thesis.defer_pending = ThesisStatus.dropped, False

@@ -25,7 +25,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Every delete (an account or a proposal version) needs a written reason and the coordinator's approval. The delete then runs **7 days after the approval**; within those 7 days only the coordinator can cancel it.
 - Coordinator **Accounts** page: list, filter by role, search by ID prefix, schedule an account for deletion (with a reason).
 - Deleting a user keeps their thesis, proposal versions and PDFs as an archive.
-- Coordinator and active supervisors cannot be deleted.
+- The coordinator, and faculty who accepted a group whose thesis isn't completed or dropped, cannot be deleted.
 
 **Thesis groups**
 - Student requests a group with a supervisor; the supervisor accepting forms it (thesis active, ID like `T12345678`).
@@ -166,7 +166,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Nothing is deleted straight away. The coordinator approves or rejects the request under **Deletion requests**. Approving starts a **7-day** wait, and the deletion runs when it ends. The account keeps working until then and shows the date and the reason. A coordinator-scheduled deletion counts as approved, so its 7 days start at once.
 - **Only the coordinator** can reject a request or cancel an approved deletion within the 7 days (the page lists every request, who asked, the reason and the date). The person who asked cannot take it back. 7 days passing without approval does nothing.
 - A background job in the backend (`app.main`, every 5 minutes) runs deletions whose 7 days are over. It deletes the user. Their thesis, all its proposal versions and the PDF files are kept as an archive. If the account became undeletable during the wait (a faculty member took on a thesis), the deletion is dropped and the account kept.
-- The coordinator account cannot be deleted, and neither can a faculty member who supervises an active or requested thesis.
+- The coordinator account cannot be deleted. Neither can a faculty member who accepted a group, as supervisor or co-supervisor, until each such thesis is completed or dropped: not by them, not by the coordinator. Requests they haven't accepted don't keep them: when the deletion runs, group requests to them are dropped and co-supervisor invites withdrawn. While their deletion is approved nobody can pick them and they can't accept groups.
 
 ### 4. Account management (coordinator)
 

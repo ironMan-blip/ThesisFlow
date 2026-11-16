@@ -8,9 +8,7 @@ from app.database import Base
 
 
 class ThesisStatus(str, enum.Enum):
-    # Waiting for a supervisor to accept: a new group (no thesis ID yet), or a formed one whose supervisor's account
-    # was deleted (keeps its ID and versions; the student picks a new supervisor).
-    pending = "pending"
+    pending = "pending"  # waiting for the supervisor to accept; no thesis ID yet
     active = "active"
     completed = "completed"
     dropped = "dropped"  # archived: the student restarted at P1 or left; versions are kept
@@ -51,11 +49,6 @@ class Thesis(Base):
     @property
     def co_supervisor_joined(self) -> bool:
         return self.co_supervisor_id is not None and self.co_supervisor_accepted and self.co_supervisor_approved
-
-    @property
-    def never_formed(self) -> bool:
-        # A request no supervisor ever accepted: no thesis ID and no versions, so it can be deleted outright.
-        return self.status == ThesisStatus.pending and self.code is None
 
     def clear_co_supervisor(self) -> None:
         self.co_supervisor, self.co_supervisor_accepted, self.co_supervisor_approved = None, False, False

@@ -19,9 +19,7 @@ function Requests({ requests, decide, busy }) {
           <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <Person user={r.student}>
               {" "}· {r.slot === "supervisor"
-                ? r.code
-                  ? `asks you to take over as supervisor of ${r.code}${r.co_supervisor ? ` with co-supervisor ${fullName(r.co_supervisor)}` : ""} (their supervisor's account was deleted)`
-                  : "asks you to be their supervisor (accepting forms the group)"
+                ? "asks you to be their supervisor (accepting forms the group)"
                 : r.slot === "co_supervisor"
                   ? `asks you to be co-supervisor of ${r.code} (you join once ${fullName(r.supervisor)} also accepts)`
                   : `wants ${fullName(r.co_supervisor)} as co-supervisor of ${r.code} (they join once you both accept)`}

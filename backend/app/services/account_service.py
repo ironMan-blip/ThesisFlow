@@ -104,7 +104,8 @@ def _check_deletable(db: Session, user: User) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "The coordinator account cannot be deleted")
     if user.role == Role.faculty and thesis_service.supervises_live(db, user):
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "This faculty member supervises an active or requested thesis, so the account is kept"
+            status.HTTP_409_CONFLICT,
+            "This faculty member supervises or co-supervises a thesis that isn't completed or dropped yet, so the account is kept",
         )
 
 
@@ -143,6 +144,8 @@ def _delete(db: Session, user: User) -> None:
         db.delete(thesis)  # never accepted, so no thesis ID and no versions
     elif thesis is not None and thesis.status == ThesisStatus.active:
         thesis.status = ThesisStatus.dropped
+    if user.role == Role.faculty:
+        thesis_service.drop_requests_to(db, user)  # supervises_live already ruled out any group they accepted
     db.delete(user)
 
 
