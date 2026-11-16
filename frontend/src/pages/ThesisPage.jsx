@@ -20,9 +20,7 @@ export default function ThesisPage() {
     const f = new FormData(e.currentTarget);
     run("ask", async () => {
       setState(await api("/theses/mine", { method: "POST", body: { supervisor_id: Number(f.get("supervisor_id")) } }));
-      return needsSupervisor
-        ? "Request sent. Your group continues, with the same thesis ID, when they accept."
-        : "Request sent. Your group is formed, with its thesis ID, when your supervisor accepts. You can add a co-supervisor after that.";
+      return "Request sent. Your group is formed, with its thesis ID, when your supervisor accepts. You can add a co-supervisor after that.";
     });
   };
 
@@ -57,7 +55,6 @@ export default function ThesisPage() {
   });
 
   const t = state?.thesis;
-  const needsSupervisor = t?.status === "pending" && !t.supervisor; // a formed group whose supervisor left
 
   return (
     <div className="space-y-8">
@@ -122,13 +119,9 @@ export default function ThesisPage() {
               <div className="space-y-4">
                 <div>
                   <p className="mb-2 text-sm text-zinc-500">
-                    Supervisor{t.status === "pending" && t.supervisor && " (waiting to accept)"}
+                    Supervisor{t.status === "pending" && " (waiting to accept)"}
                   </p>
-                  {t.supervisor ? <Person user={t.supervisor} /> : (
-                    <p className="text-sm text-zinc-700">
-                      None: your supervisor's account was deleted. Choose a new one below; your thesis ID and versions are kept.
-                    </p>
-                  )}
+                  {t.supervisor && <Person user={t.supervisor} />}
                 </div>
                 {t.co_supervisor && (
                   <div>
@@ -188,12 +181,12 @@ export default function ThesisPage() {
 
           {state.can_form_group && (
             <form onSubmit={submit} className="card max-w-xl space-y-5 p-6">
-              <h2 className="font-semibold">{needsSupervisor ? "Choose a new supervisor" : "Form your thesis group"}</h2>
+              <h2 className="font-semibold">Form your thesis group</h2>
               <label className="label">
                 Supervisor
                 <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
                   <option value="" disabled>Choose a faculty member</option>
-                  {faculty.filter((f) => f.id !== t?.co_supervisor?.id).map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
+                  {faculty.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
                 </select>
               </label>
               <button disabled={busy === "ask" || !faculty.length} className="btn-primary w-full">

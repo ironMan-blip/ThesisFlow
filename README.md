@@ -25,7 +25,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Every delete (an account or a proposal version) needs a written reason and the coordinator's approval. The delete then runs **7 days after the approval**; within those 7 days only the coordinator can cancel it.
 - Coordinator **Accounts** page: list, filter by role, search by ID prefix, schedule an account for deletion (with a reason).
 - Deleting a user keeps their thesis, proposal versions and PDFs as an archive.
-- The coordinator cannot be deleted. A leaving faculty member's groups are told for 7 days, then they leave every group.
+- Coordinator and active supervisors cannot be deleted.
 
 **Thesis groups**
 - Student requests a group with a supervisor; the supervisor accepting forms it (thesis active, ID like `T12345678`).
@@ -166,7 +166,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Nothing is deleted straight away. The coordinator approves or rejects the request under **Deletion requests**. Approving starts a **7-day** wait, and the deletion runs when it ends. The account keeps working until then and shows the date and the reason. A coordinator-scheduled deletion counts as approved, so its 7 days start at once.
 - **Only the coordinator** can reject a request or cancel an approved deletion within the 7 days (the page lists every request, who asked, the reason and the date). The person who asked cannot take it back. 7 days passing without approval does nothing.
 - A background job in the backend (`app.main`, every 5 minutes) runs deletions whose 7 days are over. It deletes the user. Their thesis, all its proposal versions and the PDF files are kept as an archive. If the account became undeletable during the wait (a faculty member took on a thesis), the deletion is dropped and the account kept.
-- The coordinator account cannot be deleted. Once a faculty member's deletion is approved, everyone in their groups sees a notice on every page with the date, and nobody can pick them any more. When it runs they leave every group: an invite or unanswered request to them is dropped, and a formed group they supervised goes back to `pending` with its thesis ID and versions; the student picks a new supervisor, who accepts it like a new group (a joined co-supervisor stays).
+- The coordinator account cannot be deleted, and neither can a faculty member who supervises an active or requested thesis.
 
 ### 4. Account management (coordinator)
 
@@ -253,7 +253,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 | `group_milestones` | A thesis group's milestone for its phase in one semester: `submitted_at` and an optional `extended_due_at` (for future deadline extensions, F15). |
 | `deliverables` | Links a group milestone to the version that counts: always the latest upload for that phase. |
 
-Thesis status: `pending` (waiting for the supervisor; also a formed group whose supervisor left, which keeps its thesis ID) → `active` (has a thesis ID) → `completed` after P3, or `dropped` (archived after a restart or account deletion). All foreign keys to `users` are `SET NULL`, so deleting a user never deletes a thesis or a version.
+Thesis status: `pending` (waiting for the supervisor) → `active` (has a thesis ID) → `completed` after P3, or `dropped` (archived after a restart or account deletion). All foreign keys to `users` are `SET NULL`, so deleting a user never deletes a thesis or a version.
 
 ### A student's path, step by step
 

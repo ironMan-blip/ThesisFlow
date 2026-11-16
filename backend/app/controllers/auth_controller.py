@@ -6,7 +6,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserOut
-from app.services import auth_service, thesis_service
+from app.services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -30,7 +30,5 @@ def logout(user: User = Depends(get_current_user), db: Session = Depends(get_db)
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    out = UserOut.model_validate(user)
-    out.leaving = thesis_service.leaving(db, user)
-    return out
+def me(user: User = Depends(get_current_user)):
+    return user

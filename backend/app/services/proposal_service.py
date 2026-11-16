@@ -38,8 +38,6 @@ def _upload_block(db: Session, user: User) -> tuple[str | None, progress_service
         return f"{s.frozen_reason}, so your account is frozen. Ask to restart at P1 on the Thesis page", s
     if thesis is None:
         return "Form a thesis group first: choose a supervisor on the Thesis page", s
-    if thesis.supervisor_id is None:
-        return "Your group has no supervisor now: choose a new one on the Thesis page", s
     if thesis.status != ThesisStatus.active:
         return "Your supervisor has not accepted your thesis group yet", s
     if user.phase == Phase.P1 and not thesis.p1_registered:
