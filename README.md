@@ -171,7 +171,8 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 ### 4. Account management (coordinator)
 
 - **Accounts** lists every approved student and faculty account, with Students / Faculty tabs and a search by ID number prefix. Waiting sign-ups and the coordinator account are not listed.
-- The coordinator can schedule any listed account for deletion, with a reason and the same 7-day wait and rules: theses and versions are kept.
+- The coordinator can schedule any listed account for deletion, with a reason and the same 7-day wait and rules: theses and versions are kept. The coordinator can cancel it any time before it runs.
+- The account owner then sees an extra message at the top of every page: the deletion date, the reason, and that they should contact the coordinator (with the coordinator's email) within the 7 days if there is a problem. It stays until the deletion runs or is cancelled.
 
 ### 5. Deadlines (phases P1, P2, P3)
 

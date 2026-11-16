@@ -55,6 +55,9 @@ export default function AccountPage() {
                 : "Deletion requested. Waiting for the coordinator to decide."}
             </p>
             <p>Only the coordinator can {me.deletion_executes_at ? "cancel it before then" : "reject it"}.</p>
+            {me.coordinator_contact && (
+              <p>If you have a problem with it, contact the coordinator at <a href={`mailto:${me.coordinator_contact}`} className="font-medium underline">{me.coordinator_contact}</a> before then.</p>
+            )}
             <p className="whitespace-pre-line text-amber-800">Reason: {me.deletion_reason}</p>
           </div>
         ) : (

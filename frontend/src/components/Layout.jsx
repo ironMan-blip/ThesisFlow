@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken, isOutage } from "../api/client";
 import { TOOLS } from "../tools";
+import { when } from "../format";
 import { Avatar, CountBadge, Icon, ICONS, Logo } from "./ui";
 
 const navClass = ({ isActive }) =>
@@ -156,6 +157,21 @@ export default function Layout() {
 
       <main id="main" className="lg:pl-64">
         <div key={pathname} className="mx-auto max-w-5xl px-4 py-8 motion-safe:animate-rise-in sm:px-8 sm:py-10">
+          {user.coordinator_contact && (
+            // On every page until it runs or is cancelled: the owner must get the chance to object in time.
+            <div role="alert" className="alert-error mb-6">
+              <Icon className="mt-px size-4">{ICONS.alert}</Icon>
+              <div className="space-y-1">
+                <p className="font-medium">The coordinator has scheduled your account for deletion on {when(user.deletion_executes_at)}.</p>
+                <p className="whitespace-pre-line break-words">Reason: {user.deletion_reason}</p>
+                <p>
+                  If this is a mistake or you have a problem with it, contact the coordinator at{" "}
+                  <a href={`mailto:${user.coordinator_contact}`} className="font-medium underline">{user.coordinator_contact}</a>{" "}
+                  before then. Only the coordinator can cancel it; once it runs it can't be undone.
+                </p>
+              </div>
+            </div>
+          )}
           <Outlet context={{ user, counts, refreshCounts }} />
         </div>
       </main>

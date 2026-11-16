@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, ValidationInfo, computed_field, field_validator
 
+from app.config import settings
 from app.models.milestone import Phase
 from app.models.user import DELETION_DAYS, REVIEW_HOURS, Role
 from app.passwords import MAX_PASSWORD, MIN_PASSWORD, check_strength
@@ -77,6 +78,12 @@ class UserOut(BaseModel):
     deletion_days: int = DELETION_DAYS
     min_reason_chars: int = MIN_REASON_CHARS
     max_reason_chars: int = MAX_REASON_CHARS
+
+    @computed_field
+    @property
+    def coordinator_contact(self) -> str | None:
+        # Only with a deletion the coordinator scheduled: the owner is told to contact them before it runs.
+        return settings.admin_email if self.deletion_by_coordinator else None
 
 
 class RegistrationRequestOut(UserOut):

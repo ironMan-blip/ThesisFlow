@@ -233,6 +233,7 @@ def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     r = client.post("/api/auth/me/deletion-request", headers=student, json=REASON)
     me = r.json()
     assert r.status_code == 200 and me["deletion_pending"] is True and me["deletion_by_coordinator"] is False
+    assert me["coordinator_contact"] is None  # their own request: no "contact the coordinator" message
     assert me["deletion_reason"] == REASON["reason"] and me["deletion_executes_at"] is None  # no clock until approved
     assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 409
 
@@ -301,6 +302,10 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     assert schedule(by_email[supervisor_email]).status_code == 409
     r = schedule(by_email["s@b.com"])
     assert r.status_code == 200 and r.json()["deletion_by_coordinator"] is True
+    # The owner sees it on their next page load: the date, the reason and who to contact before it runs.
+    mine = client.get("/api/auth/me", headers=student).json()
+    assert (mine["deletion_reason"], mine["coordinator_contact"]) == (REASON["reason"], settings.admin_email)
+    assert mine["deletion_executes_at"] is not None
     assert schedule(by_email["s@b.com"]).status_code == 409  # already scheduled
     assert db.get(User, by_email["s@b.com"]) is not None  # nothing happens before the 7 days
     assert run_deletions_due(db) == (1, 0)
