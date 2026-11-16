@@ -135,7 +135,7 @@ export default function ThesesPage() {
                 <div><dt className="text-zinc-500">Student</dt><dd className="font-medium">{t.student ? `${t.student.full_name} · ID ${t.student.id_number}` : "Account deleted"}</dd></div>
                 <div><dt className="text-zinc-500">Supervisor</dt><dd className="font-medium">{fullName(t.supervisor)}</dd></div>
                 <div><dt className="text-zinc-500">Co-supervisor</dt><dd className="font-medium">
-                  {!t.co_supervisor ? "None" : t.co_supervisor_accepted && t.co_supervisor_approved ? fullName(t.co_supervisor) : `${fullName(t.co_supervisor)} (not joined yet)`}
+                  {!t.co_supervisor ? "None" : t.co_supervisor_joined ? fullName(t.co_supervisor) : `${fullName(t.co_supervisor)} (not joined yet)`}
                 </dd></div>
               </dl>
               {t.versions.length > 0 ? (

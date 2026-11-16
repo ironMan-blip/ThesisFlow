@@ -50,8 +50,10 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     assert put(client, coord, "P4", F).status_code == 422
     assert put(client, coord, "P1", F, penalty=101).status_code == 422
     assert put(client, coord, "P1", F, grace=-1).status_code == 422
-    naive = {"due_at": "2099-11-01T23:59:00", "grace_days": 0, "penalty_per_day": 0}
-    assert client.put("/api/milestones/P1", headers=coord, json=naive).status_code == 422
+    # A time without a zone, as the form sends it, is Dhaka time; due_local gives it back the same way.
+    dhaka = {"due_at": "2099-11-01T23:59", "grace_days": 0, "penalty_per_day": 0}
+    p1 = by_phase(client.put("/api/milestones/P1", headers=coord, json=dhaka))["P1"]
+    assert (p1["due_at"][:16], p1["due_local"]) == ("2099-11-01T17:59", "2099-11-01T23:59")
     # A deadline that is already over would freeze the whole phase.
     now = datetime.now(timezone.utc)
     res = put(client, coord, "P2", now - timedelta(days=2), grace=1)

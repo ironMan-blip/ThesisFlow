@@ -99,8 +99,11 @@ def test_co_supervisor_joins_a_formed_group_once_both_accept(client, db):
     vid = upload(client, s).json()["versions"][0]["id"]
     file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
 
+    choices = [p["id"] for p in mine(client, s)["faculty_choices"]]
+    assert me(client, co)["id"] in choices and me(client, sup)["id"] not in choices
     assert add_co(client, s, sup).status_code == 422  # someone else than the supervisor
     state = add_co(client, s, co).json()
+    assert (state["faculty_choices"], state["thesis"]["co_supervisor_joined"]) == ([], False)
     assert (state["can_add_co_supervisor"], state["can_cancel_co_supervisor"]) == (False, True)
     assert add_co(client, s, co).status_code == 409  # one at a time
     assert [r["slot"] for r in client.get("/api/theses/requests", headers=co).json()] == ["co_supervisor"]
@@ -112,7 +115,7 @@ def test_co_supervisor_joins_a_formed_group_once_both_accept(client, db):
     assert file(co) == 404 and client.get("/api/theses", headers=co).json() == []  # not in until the supervisor agrees
     assert answer(client, sup, tid) == 204
     t = mine(client, s)["thesis"]
-    assert (t["status"], t["co_supervisor_accepted"], t["co_supervisor_approved"]) == ("active", True, True)
+    assert (t["status"], t["co_supervisor_accepted"], t["co_supervisor_approved"], t["co_supervisor_joined"]) == ("active", True, True, True)
     assert file(co) == 200 and [x["id"] for x in client.get("/api/theses", headers=co).json()] == [tid]
     assert mine(client, s)["can_cancel_co_supervisor"] is False
     assert client.delete("/api/theses/mine/co-supervisor", headers=s).status_code == 409  # joined: stays
@@ -420,8 +423,9 @@ def test_a_deletion_drops_requests_not_yet_accepted(client, db):
     fid = me(client, f)["id"]
     assert client.post(f"/api/auth/accounts/{fid}/deletion", headers=coord, json=REASON).status_code == 200
 
-    assert fid not in [p["id"] for p in client.get("/api/theses/faculty", headers=s1).json()]
-    assert ask(client, auth(client, db, "s3@x.com"), f).status_code == 422  # can't be picked while leaving
+    s3 = auth(client, db, "s3@x.com")
+    assert fid not in [p["id"] for p in mine(client, s3)["faculty_choices"]]
+    assert ask(client, s3, f).status_code == 422  # can't be picked while leaving
     assert answer(client, f, mine(client, s1)["thesis"]["id"]) == 409  # nor accept, which would keep the account
     assert run_deletions_due(db) == (1, 0)
     assert (mine(client, s1)["thesis"], mine(client, s1)["can_form_group"]) == (None, True)

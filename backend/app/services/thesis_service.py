@@ -22,7 +22,7 @@ from app.models.milestone import Phase
 from app.models.proposal import Proposal
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
-from app.schemas.thesis import MyThesisOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
+from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
 from app.services import progress_service, proposal_service  # proposal_service imports us too; used at call time only
 
 LIVE = (ThesisStatus.pending, ThesisStatus.active)
@@ -58,6 +58,9 @@ def mine(db: Session, user: User) -> MyThesisOut:
     s = progress_service.standing(db, user)
     t = user.thesis
     live = t is not None and t.status == ThesisStatus.active and not s.frozen
+    can_form_group = user.thesis_id is None and user.phase is not None and not s.frozen
+    can_add_co_supervisor = live and t.co_supervisor_id is None
+    choices = faculty(db) if can_form_group or can_add_co_supervisor else []
     return MyThesisOut(
         thesis=user.thesis and ThesisOut.model_validate(user.thesis),
         phase=user.phase,
@@ -67,10 +70,11 @@ def mine(db: Session, user: User) -> MyThesisOut:
         registration_closes_at=progress_service.registration_closes_at(db),
         registration_open=progress_service.registration_open(db),
         can_register=progress_service.can_register(db, user),
-        can_form_group=user.thesis_id is None and user.phase is not None and not s.frozen,
+        can_form_group=can_form_group,
         can_cancel=t is not None and t.status == ThesisStatus.pending,
-        can_add_co_supervisor=live and t.co_supervisor_id is None,
+        can_add_co_supervisor=can_add_co_supervisor,
         can_cancel_co_supervisor=t is not None and t.co_supervisor_id is not None and not t.co_supervisor_joined,
+        faculty_choices=[PersonOut.model_validate(f) for f in choices if t is None or f.id != t.supervisor_id],
         show_deferral_warning=live and t.deferrals > 0,
         show_p1_registration=live and user.phase == Phase.P1,
     )

@@ -8,7 +8,6 @@ from app.schemas.thesis import (
     CoSupervisorIn,
     DeferIn,
     MyThesisOut,
-    PersonOut,
     SupervisionRequestOut,
     ThesisDetailOut,
     ThesisOut,
@@ -19,11 +18,6 @@ from app.services import progress_service, thesis_service
 router = APIRouter(prefix="/api/theses", tags=["theses"])
 student = require_roles(Role.student)
 faculty = require_roles(Role.faculty)
-
-
-@router.get("/faculty", response_model=list[PersonOut], dependencies=[Depends(student)])
-def faculty_list(db: Session = Depends(get_db)):
-    return thesis_service.faculty(db)
 
 
 @router.get("/mine", response_model=MyThesisOut)

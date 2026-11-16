@@ -32,6 +32,7 @@ class ThesisOut(BaseModel):
     co_supervisor: PersonOut | None  # named on a formed group; a member once both flags below are true
     co_supervisor_accepted: bool  # by the co-supervisor
     co_supervisor_approved: bool  # by the supervisor
+    co_supervisor_joined: bool  # both of the above: a member of the group
     deferrals: int
     defer_pending: bool
     p1_registered: bool
@@ -63,6 +64,8 @@ class MyThesisOut(BaseModel):
     can_cancel: bool  # the group request still waits for the supervisor
     can_add_co_supervisor: bool  # a formed group with no co-supervisor named
     can_cancel_co_supervisor: bool  # a co-supervisor was added but hasn't joined yet
+    # Who the student can pick now: any faculty to form a group, anyone but the supervisor as co-supervisor, else none.
+    faculty_choices: list[PersonOut]
     show_deferral_warning: bool  # an active, unfrozen thesis deferred before: resubmit P3 or be frozen
     show_p1_registration: bool  # an active, unfrozen group in P1 sees its registration status
 

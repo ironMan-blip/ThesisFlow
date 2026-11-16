@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Alerts, ConfirmDialog, PageHeader, Skeleton } from "../components/ui";
-import { fromDhakaInput, toDhakaInput, when } from "../format";
+import { when } from "../format";
 import { useAction } from "../useAction";
 
 // status -> [label, badge tone, timeline dot]
@@ -63,7 +63,7 @@ export default function DeadlinePage() {
         await api(`/milestones/${phase}`, {
           method: "PUT",
           body: {
-            due_at: fromDhakaInput(f.get("due_date"), f.get("due_time")),
+            due_at: `${f.get("due_date")}T${f.get("due_time")}`, // the server reads it as Dhaka time
             grace_days: Number(f.get("grace_days")),
             penalty_per_day: Number(f.get("penalty_per_day")),
           },
@@ -172,11 +172,11 @@ export default function DeadlinePage() {
                   <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
                     <label className="label">
                       Due date
-                      <input name="due_date" type="date" required defaultValue={m.due_at ? toDhakaInput(m.due_at).slice(0, 10) : ""} className="input" />
+                      <input name="due_date" type="date" required defaultValue={m.due_local?.slice(0, 10) ?? ""} className="input" />
                     </label>
                     <label className="label">
                       Due time (Dhaka)
-                      <input name="due_time" type="time" required defaultValue={m.due_at ? toDhakaInput(m.due_at).slice(11) : "23:59"} className="input" />
+                      <input name="due_time" type="time" required defaultValue={m.due_local?.slice(11) ?? "23:59"} className="input" />
                     </label>
                     <label className="label">
                       Grace (days)

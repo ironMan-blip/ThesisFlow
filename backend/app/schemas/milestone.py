@@ -1,23 +1,37 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from app.models.milestone import Phase
 
 MAX_GRACE_DAYS = 7
 MAX_PENALTY_PER_DAY = 100
+# The SRS shows and takes every time in Dhaka time. Bangladesh has no daylight saving, so the offset is fixed.
+DHAKA = timezone(timedelta(hours=6))
 
 
 class MilestoneIn(BaseModel):
-    due_at: AwareDatetime
+    due_at: datetime  # without a zone (as typed in the form) it is read as Dhaka time
     grace_days: int = Field(ge=0, le=MAX_GRACE_DAYS)
     penalty_per_day: int = Field(ge=0, le=MAX_PENALTY_PER_DAY)
+
+    @field_validator("due_at")
+    @classmethod
+    def in_dhaka(cls, v: datetime) -> datetime:
+        return v if v.tzinfo else v.replace(tzinfo=DHAKA)
 
 
 class MilestoneOut(BaseModel):
     phase: Phase
     due_at: datetime | None  # None until the coordinator sets it
+
+    @computed_field
+    @property
+    def due_local(self) -> str | None:
+        """due_at in Dhaka time as "YYYY-MM-DDTHH:MM", what the coordinator's date and time inputs hold."""
+        return self.due_at and self.due_at.astimezone(DHAKA).strftime("%Y-%m-%dT%H:%M")
+
     grace_days: int
     penalty_per_day: int
     closes_at: datetime | None  # due_at + grace; late after this
