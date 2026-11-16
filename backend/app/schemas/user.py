@@ -12,6 +12,9 @@ from app.passwords import MAX_PASSWORD, MIN_PASSWORD, check_strength
 # A reason in a sentence or more, never a single word: every delete is explained, by whoever asks for it.
 MIN_REASON_CHARS, MAX_REASON_CHARS = 20, 2000
 
+# Sign-up is BRAC University only: students use the student domain, faculty the staff one.
+EMAIL_DOMAINS = {Role.student: "g.bracu.ac.bd", Role.faculty: "bracu.ac.bd"}
+
 
 class DeletionReasonIn(BaseModel):
     reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=MIN_REASON_CHARS, max_length=MAX_REASON_CHARS)]
@@ -21,13 +24,24 @@ class UserCreate(BaseModel):
     # Run validators on defaults too, so faculty cannot skip initials by leaving them out.
     model_config = ConfigDict(validate_default=True)
 
+    # Coordinator is the single admin account from settings; nobody can sign up as one.
+    # Declared before email so the email check can read it.
+    role: Literal[Role.student, Role.faculty] = Role.student
     email: EmailStr
     id_number: str
     full_name: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=MIN_PASSWORD, max_length=MAX_PASSWORD)
-    # Coordinator is the single admin account from settings; nobody can sign up as one.
-    role: Literal[Role.student, Role.faculty] = Role.student
     initials: str | None = None  # faculty only
+
+    @field_validator("email")
+    @classmethod
+    def university_email(cls, v: str, info: ValidationInfo) -> str:
+        domain = EMAIL_DOMAINS.get(info.data.get("role"))
+        if domain is None:
+            return v  # role itself failed validation and is reported on its own
+        if not v.lower().endswith("@" + domain):
+            raise ValueError(f"{info.data['role'].value.capitalize()} email must end with @{domain}")
+        return v
 
     @field_validator("id_number")
     @classmethod

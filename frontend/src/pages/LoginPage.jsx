@@ -102,7 +102,7 @@ export default function LoginPage() {
               )}
               <label className="label">
                 Email
-                <input type="email" required autoComplete="email" placeholder="you@university.edu" value={email}
+                <input type="email" required autoComplete="email" placeholder={role === "faculty" ? "you@bracu.ac.bd" : "you@g.bracu.ac.bd"} value={email}
                   onChange={(e) => setEmail(e.target.value)} className="input" />
               </label>
             </>

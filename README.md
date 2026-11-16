@@ -18,7 +18,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Each page's rules fold away under a "How this works" toggle; on long pages, success and error messages float at the bottom of the screen and can be dismissed.
 
 **Accounts and login**
-- Sign up as student or faculty with name, email, 8-digit ID number and password (faculty also give unique initials).
+- Sign up as student or faculty with name, email, 8-digit ID number and password (faculty also give unique initials). Students must use a `@g.bracu.ac.bd` email, faculty a `@bracu.ac.bd` one.
 - Strong password rules; case-insensitive unique email; unique ID number.
 - Log in with ID number + password; JWT session (24 h default).
 - Coordinator approves or rejects every new sign-up; unapproved accounts cannot log in.
@@ -145,7 +145,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 ### 1. Accounts and login
 
-- Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator.
+- Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator. The email must be a BRAC University one: `@g.bracu.ac.bd` for students, `@bracu.ac.bd` for faculty.
 - Faculty must also give their **initials** (1 to 10 capital letters, e.g. `ABK`), unique across faculty.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
