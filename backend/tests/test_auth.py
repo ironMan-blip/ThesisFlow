@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import pytest
 from fastapi import HTTPException
+from redis import Redis
 from sqlalchemy import select
 
 from app import rate_limit
@@ -384,3 +385,11 @@ def test_chunked_body_is_refused_before_auth(client):
         yield b"x" * 1024
 
     assert client.post("/api/proposals/mine/versions", content=body()).status_code == 411
+
+
+def test_login_still_works_and_is_limited_when_redis_is_down(client, monkeypatch):
+    # Nothing listens on port 1, so every Redis call fails at once.
+    monkeypatch.setattr(rate_limit, "redis", Redis.from_url("redis://localhost:1", socket_connect_timeout=0.5))
+    assert register(client).status_code < 300  # requests go through instead of failing on Redis
+    codes = [login(client, password="Wrong1234").status_code for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1)]
+    assert codes == [401] * rate_limit.LOGIN_PER_ACCOUNT + [429]  # memory fallback still limits guessing

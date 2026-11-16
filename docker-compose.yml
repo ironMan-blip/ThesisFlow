@@ -16,6 +16,7 @@ services:
 
   redis:
     image: redis:7.4-alpine
+    restart: unless-stopped
     # No host port, like db. Saved to a volume so known login IPs survive restarts.
     volumes:
       - redisdata:/data
@@ -40,8 +41,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # Optional: without Redis the backend keeps rate limits in memory (app.rate_limit).
       redis:
-        condition: service_healthy
+        condition: service_started
+        required: false
 
   frontend:
     image: node:22-alpine

@@ -1,9 +1,14 @@
 import json
+import logging
+import time
 import uuid
+from collections import defaultdict, deque
+from collections.abc import Callable
+from typing import TypeVar
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
-from redis import Redis
+from redis import Redis, RedisError
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
@@ -19,9 +24,61 @@ LOGIN_PER_ACCOUNT = 10
 # so a guesser spread over many IPs can't lock the owner out of their usual devices.
 LOGIN_PER_ACCOUNT_ALL_IPS = 100
 KNOWN_IPS_PER_ACCOUNT = 5
+# While Redis is down, wait this long before trying it again, so each request doesn't wait on a dead server.
+REDIS_RETRY_SECONDS = 10
+# Fallback store only: callers choose keys (IDs typed at login), so its size is capped.
+MAX_KEYS = 10_000
 
 # Shared by every backend process, so limits hold across workers and restarts. Buckets expire on their own.
-redis = Redis.from_url(settings.redis_url, decode_responses=True)
+# Short timeouts: a hung Redis must not hang logins.
+redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=0.5, socket_timeout=0.5)
+log = logging.getLogger(__name__)
+T = TypeVar("T")
+_redis_down_until = 0.0
+
+# If Redis fails, limits keep working per process in memory, so the app stays up and still limits guessing.
+_hits: dict[str, deque[float]] = defaultdict(deque)
+_next_sweep = 0.0
+_known_ips: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=KNOWN_IPS_PER_ACCOUNT))
+
+
+def _with_fallback(use_redis: Callable[[], T], use_memory: Callable[[], T]) -> T:
+    global _redis_down_until
+    if time.monotonic() >= _redis_down_until:
+        try:
+            result = use_redis()
+        except RedisError as exc:
+            if _redis_down_until == 0.0:
+                log.warning("Redis unavailable, rate limits fall back to memory: %s", exc)
+            _redis_down_until = time.monotonic() + REDIS_RETRY_SECONDS
+            return use_memory()
+        if _redis_down_until:
+            log.warning("Redis is back, rate limits use it again")
+            _redis_down_until = 0.0
+        return result
+    return use_memory()
+
+
+def _memory_hit(key: str, limit: int) -> int | None:
+    global _next_sweep
+    now = time.monotonic()
+    if len(_hits) > MAX_KEYS and now >= _next_sweep:
+        # At most one full scan a second, so a flood of live keys can't make every request scan them all.
+        _next_sweep = now + 1
+        for k in [k for k, h in _hits.items() if not h or now - h[-1] > WINDOW_SECONDS]:
+            del _hits[k]
+    hits = _hits[key]
+    while hits and now - hits[0] > WINDOW_SECONDS:
+        hits.popleft()
+    if len(hits) >= limit:
+        return int(WINDOW_SECONDS - (now - hits[0])) + 1
+    hits.append(now)
+    return None
+
+
+def _memory_remember_ip(key: str, ip: str) -> None:
+    if ip not in _known_ips[key]:
+        _known_ips[key].append(ip)
 
 # Sliding window in one atomic step, timed by the Redis clock so every worker agrees.
 # Returns seconds to wait if over the limit, else 0.
@@ -47,14 +104,19 @@ def _key(*parts: object) -> str:
 
 
 def is_known_ip(account: str, ip: str) -> bool:
-    return ip in redis.lrange(_key("ips", account), 0, -1)
+    key = _key("ips", account)
+    return _with_fallback(lambda: ip in redis.lrange(key, 0, -1), lambda: ip in _known_ips.get(key, ()))
 
 
 def remember_ip(account: str, ip: str) -> None:
     # Most recent first; the oldest drops off past KNOWN_IPS_PER_ACCOUNT. Keyed only by accounts that logged in.
     key = _key("ips", account)
-    with redis.pipeline() as pipe:
-        pipe.lrem(key, 0, ip).lpush(key, ip).ltrim(key, 0, KNOWN_IPS_PER_ACCOUNT - 1).execute()
+
+    def use_redis() -> None:
+        with redis.pipeline() as pipe:
+            pipe.lrem(key, 0, ip).lpush(key, ip).ltrim(key, 0, KNOWN_IPS_PER_ACCOUNT - 1).execute()
+
+    _with_fallback(use_redis, lambda: _memory_remember_ip(key, ip))
 
 
 def _limit_for(path: str) -> tuple[str, int] | None:
@@ -66,13 +128,18 @@ def _limit_for(path: str) -> tuple[str, int] | None:
 
 def hit(key: tuple[str, ...], limit: int) -> int | None:
     """Record one request for key. Returns seconds to wait if over the limit, else None."""
-    retry = _hit_script(keys=[_key(*key)], args=[limit, WINDOW_SECONDS, uuid.uuid4().hex], client=redis)
-    return retry or None
+    k = _key(*key)
+
+    def use_redis() -> int | None:
+        return _hit_script(keys=[k], args=[limit, WINDOW_SECONDS, uuid.uuid4().hex], client=redis) or None
+
+    return _with_fallback(use_redis, lambda: _memory_hit(k, limit))
 
 
 def unhit(key: tuple[str, ...]) -> None:
     """Take back the last request recorded for key (e.g. a login that turned out to be right)."""
-    redis.zpopmax(_key(*key))
+    k = _key(*key)
+    _with_fallback(lambda: redis.zpopmax(k), lambda: _hits[k].pop() if _hits.get(k) else None)
 
 
 def too_many(retry: int) -> HTTPException:
@@ -99,5 +166,9 @@ async def rate_limit(request: Request, call_next):
 
 
 def reset() -> None:
-    """Tests only: wipes the whole Redis database the client points at."""
+    """Tests only: wipes the whole Redis database the client points at, and the memory fallback."""
+    global _redis_down_until, _next_sweep
+    _hits.clear()
+    _known_ips.clear()
+    _redis_down_until = _next_sweep = 0.0
     redis.flushdb()
