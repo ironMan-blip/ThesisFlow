@@ -87,7 +87,7 @@ export default function DeadlinePage() {
     <div className="space-y-8">
       <PageHeader
         title="Deadlines"
-        intro="Each phase has a due date and a grace time. Work handed in after the grace time loses marks for every late day."
+        intro="Each phase has a due date and a grace time. Work handed in during the grace time loses marks for every late day; after it ends, uploads close."
       />
 
       {data?.can_edit && (
