@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.proposal import Proposal
 from app.models.user import Role, User
+from app.schemas import milestone as milestone_schema
 from app.services import milestone_service
 from tests.helpers import PDF, REASON, auth, close_registration, me, run_deletions_due, student, supervised_student, upload
 
@@ -35,7 +36,8 @@ def set_past(db, phase, due_at, grace=0, penalty=10):
 
 
 def put(client, h, phase, due_at, grace=0, penalty=10):
-    body = {"due_at": due_at.isoformat(), "grace_days": grace, "penalty_per_day": penalty}
+    local = due_at.astimezone(milestone_schema.DHAKA).replace(tzinfo=None)
+    body = {"due_local": local.isoformat(), "grace_days": grace, "penalty_per_day": penalty}
     return client.put(f"/api/milestones/{phase}", headers=h, json=body)
 
 
@@ -50,8 +52,12 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     assert put(client, coord, "P4", F).status_code == 422
     assert put(client, coord, "P1", F, penalty=101).status_code == 422
     assert put(client, coord, "P1", F, grace=-1).status_code == 422
-    naive = {"due_at": "2099-11-01T23:59:00", "grace_days": 0, "penalty_per_day": 0}
-    assert client.put("/api/milestones/P1", headers=coord, json=naive).status_code == 422
+    # Only due_local is taken, always as Dhaka time: an old-style due_at or a zoned due_local is refused, not guessed.
+    send = lambda body: client.put("/api/milestones/P1", headers=coord, json={"grace_days": 0, "penalty_per_day": 0, **body})
+    assert send({"due_at": "2099-11-01T23:59"}).status_code == 422
+    assert send({"due_local": "2099-11-01T23:59+00:00"}).status_code == 422
+    p1 = by_phase(send({"due_local": "2099-11-01T23:59"}))["P1"]
+    assert (p1["due_at"][:16], p1["due_local"]) == ("2099-11-01T17:59", "2099-11-01T23:59")
     # A deadline that is already over would freeze the whole phase.
     now = datetime.now(timezone.utc)
     res = put(client, coord, "P2", now - timedelta(days=2), grace=1)
@@ -135,7 +141,6 @@ def test_student_late_days_and_penalty(client, db):
 def test_each_group_gets_its_own_milestone_and_extension(client, db):
     # MilestoneTemplate is the coordinator's deadline; GroupMilestone is one group's copy; its Deliverable is the
     # version that counts (the latest upload).
-    coord = auth(client, db, "c@x.com", Role.coordinator)
     (s, sup), other = supervised_student(client, db, "s@x.com"), student(client, db, "o@x.com")
     close_registration(db)
     now = datetime.now(timezone.utc)

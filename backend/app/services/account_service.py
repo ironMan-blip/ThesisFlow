@@ -13,14 +13,15 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models.thesis import ThesisStatus
-from app.models.user import DELETION_DELAY, Role, User
+from app.models.user import DELETION_DELAY, REVIEW_WINDOW, Role, User
 from app.services import progress_service, proposal_service, thesis_service
 
 log = logging.getLogger(__name__)
 
 
 def _registrations() -> Select:
-    return select(User).where(User.approved.is_(False))
+    # A request older than the review window has expired (login says so, register replaces it): not approvable.
+    return select(User).where(User.approved.is_(False), User.created_at > datetime.now(timezone.utc) - REVIEW_WINDOW)
 
 
 def _deletions() -> Select:
@@ -32,8 +33,8 @@ def pending_registrations(db: Session) -> list[User]:
 
 
 def _pending(db: Session, user_id: int) -> User:
-    user = db.get(User, user_id)
-    if user is None or user.approved:
+    user = db.scalar(_registrations().where(User.id == user_id))
+    if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending registration request with that id")
     return user
 
@@ -67,7 +68,10 @@ def _schedule(db: Session, user: User, by: User, reason: str, approved: bool) ->
 
 def request_deletion(db: Session, user: User, reason: str) -> User:
     # Waits for the coordinator. The user can't take the request back; only the coordinator can reject or cancel it.
-    return _schedule(db, _locked(db, user.id), user, reason, approved=False)
+    locked = _locked(db, user.id)
+    if locked is None:  # deleted after the token was checked
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account no longer exists")
+    return _schedule(db, locked, user, reason, approved=False)
 
 
 def schedule_deletion(db: Session, coordinator: User, user_id: int, reason: str) -> User:
@@ -104,7 +108,8 @@ def _check_deletable(db: Session, user: User) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "The coordinator account cannot be deleted")
     if user.role == Role.faculty and thesis_service.supervises_live(db, user):
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "This faculty member supervises an active or requested thesis, so the account is kept"
+            status.HTTP_409_CONFLICT,
+            "This faculty member supervises or co-supervises a thesis that isn't completed or dropped yet, so the account is kept",
         )
 
 
@@ -143,6 +148,8 @@ def _delete(db: Session, user: User) -> None:
         db.delete(thesis)  # never accepted, so no thesis ID and no versions
     elif thesis is not None and thesis.status == ThesisStatus.active:
         thesis.status = ThesisStatus.dropped
+    if user.role == Role.faculty:
+        thesis_service.drop_requests_to(db, user)  # supervises_live already ruled out any group they accepted
     db.delete(user)
 
 

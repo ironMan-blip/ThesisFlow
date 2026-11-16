@@ -8,7 +8,6 @@ from app.schemas.thesis import (
     CoSupervisorIn,
     DeferIn,
     MyThesisOut,
-    PersonOut,
     SupervisionRequestOut,
     ThesisDetailOut,
     ThesisOut,
@@ -19,11 +18,6 @@ from app.services import progress_service, thesis_service
 router = APIRouter(prefix="/api/theses", tags=["theses"])
 student = require_roles(Role.student)
 faculty = require_roles(Role.faculty)
-
-
-@router.get("/faculty", response_model=list[PersonOut], dependencies=[Depends(student)])
-def faculty_list(db: Session = Depends(get_db)):
-    return thesis_service.faculty(db)
 
 
 @router.get("/mine", response_model=MyThesisOut)
@@ -63,13 +57,13 @@ def requests(user: User = Depends(faculty), db: Session = Depends(get_db)):
 
 
 @router.post("/requests/{thesis_id}/accept", status_code=status.HTTP_204_NO_CONTENT)
-def accept(thesis_id: int, user: User = Depends(faculty), db: Session = Depends(get_db)):
-    thesis_service.decide(db, user, thesis_id, accept=True)
+def accept(thesis_id: int, co_supervisor_id: int | None = None, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    thesis_service.decide(db, user, thesis_id, accept=True, co_supervisor_id=co_supervisor_id)
 
 
 @router.post("/requests/{thesis_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
-def decline(thesis_id: int, user: User = Depends(faculty), db: Session = Depends(get_db)):
-    thesis_service.decide(db, user, thesis_id, accept=False)
+def decline(thesis_id: int, co_supervisor_id: int | None = None, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    thesis_service.decide(db, user, thesis_id, accept=False, co_supervisor_id=co_supervisor_id)
 
 
 # Faculty only: the coordinator runs semesters and accounts, not individual theses.

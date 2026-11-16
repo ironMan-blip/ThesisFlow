@@ -3,6 +3,10 @@
 A co-supervisor is optional and can only be added to a formed group. They join once both they and the supervisor
 accept; either declining just leaves the group without a co-supervisor, and the student can pick someone else.
 
+A faculty member who has accepted a group (as supervisor, or as co-supervisor) can't have their account deleted, by
+anyone, until each such thesis is completed or dropped (supervises_live). Requests they haven't accepted are dropped
+when their deletion runs (drop_requests_to).
+
 Groups can be formed and accepted any time; registering for P1 (progress_service.register_p1) is limited to a week.
 Every proposal version is stored under the thesis, so it is never lost when accounts change. The coordinator runs
 semesters and accounts and never sees individual theses.
@@ -18,10 +22,8 @@ from app.models.milestone import Phase
 from app.models.proposal import Proposal
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
-from app.schemas.thesis import MyThesisOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
+from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
 from app.services import progress_service, proposal_service  # proposal_service imports us too; used at call time only
-
-LIVE = (ThesisStatus.pending, ThesisStatus.active)
 
 
 def new_code(db: Session) -> str:
@@ -34,7 +36,11 @@ def new_code(db: Session) -> str:
 
 def faculty(db: Session) -> list[User]:
     return list(
-        db.scalars(select(User).where(User.role == Role.faculty, User.approved.is_(True)).order_by(User.full_name))
+        db.scalars(
+            select(User)
+            .where(User.role == Role.faculty, User.approved.is_(True), User.deletion_approved_at.is_(None))
+            .order_by(User.full_name)
+        )
     )
 
 
@@ -50,6 +56,9 @@ def mine(db: Session, user: User) -> MyThesisOut:
     s = progress_service.standing(db, user)
     t = user.thesis
     live = t is not None and t.status == ThesisStatus.active and not s.frozen
+    can_form_group = user.thesis_id is None and user.phase is not None and not s.frozen
+    can_add_co_supervisor = live and t.co_supervisor_id is None
+    choices = faculty(db) if can_form_group or can_add_co_supervisor else []
     return MyThesisOut(
         thesis=user.thesis and ThesisOut.model_validate(user.thesis),
         phase=user.phase,
@@ -59,10 +68,11 @@ def mine(db: Session, user: User) -> MyThesisOut:
         registration_closes_at=progress_service.registration_closes_at(db),
         registration_open=progress_service.registration_open(db),
         can_register=progress_service.can_register(db, user),
-        can_form_group=user.thesis_id is None and user.phase is not None and not s.frozen,
+        can_form_group=can_form_group,
         can_cancel=t is not None and t.status == ThesisStatus.pending,
-        can_add_co_supervisor=live and t.co_supervisor_id is None,
+        can_add_co_supervisor=can_add_co_supervisor,
         can_cancel_co_supervisor=t is not None and t.co_supervisor_id is not None and not t.co_supervisor_joined,
+        faculty_choices=[PersonOut.model_validate(f) for f in choices if t is None or f.id != t.supervisor_id],
         show_deferral_warning=live and t.deferrals > 0,
         show_p1_registration=live and user.phase == Phase.P1,
     )
@@ -77,6 +87,8 @@ def _faculty(db: Session, user_id: int, what: str) -> User:
     member = db.get(User, user_id)
     if member is None or member.role != Role.faculty or not member.approved:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{what} must be a faculty member")
+    if member.deletion_approved_at is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{member.full_name}'s account is being deleted, choose someone else")
     return member
 
 
@@ -98,13 +110,10 @@ def add_co_supervisor(db: Session, user: User, co_supervisor_id: int) -> MyThesi
     thesis = user.thesis
     if co.id == thesis.supervisor_id:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Co-supervisor must be a different faculty member")
-    thesis.co_supervisor, thesis.co_supervisor_accepted, thesis.co_supervisor_approved = co, False, False
+    thesis.clear_co_supervisor()
+    thesis.co_supervisor = co
     db.commit()
     return mine(db, user)
-
-
-def _clear_co_supervisor(thesis: Thesis) -> None:
-    thesis.co_supervisor, thesis.co_supervisor_accepted, thesis.co_supervisor_approved = None, False, False
 
 
 def cancel_co_supervisor(db: Session, user: User) -> MyThesisOut:
@@ -113,7 +122,7 @@ def cancel_co_supervisor(db: Session, user: User) -> MyThesisOut:
     thesis = user.thesis
     if thesis is None or thesis.co_supervisor_id is None or thesis.co_supervisor_joined:
         raise HTTPException(status.HTTP_409_CONFLICT, "No co-supervisor request to cancel")
-    _clear_co_supervisor(thesis)
+    thesis.clear_co_supervisor()
     db.commit()
     return mine(db, user)
 
@@ -163,11 +172,19 @@ def count_requests(db: Session, member: User) -> int:
     return db.scalar(_requests(member).with_only_columns(func.count()))
 
 
-def decide(db: Session, member: User, thesis_id: int, accept: bool) -> None:
+def decide(db: Session, member: User, thesis_id: int, accept: bool, co_supervisor_id: int | None = None) -> None:
+    """co_supervisor_id: who the deciding page showed. The student may have swapped co-supervisors since then."""
     thesis = db.scalar(select(Thesis).where(Thesis.id == thesis_id).with_for_update())
     slot = thesis and _slot(thesis, member)
     if not slot:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending supervision request with that id")
+    if slot != "supervisor" and co_supervisor_id is not None and co_supervisor_id != thesis.co_supervisor_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The student changed the co-supervisor, so reload and decide again")
+    if accept and member.deletion_approved_at is not None:
+        # Accepting would tie the account to this group, so the approved deletion could never run.
+        raise HTTPException(status.HTTP_409_CONFLICT, "Your account is being deleted, so you can't accept groups. Ask the coordinator to cancel it first")
+    if slot != "supervisor" and accept and thesis.student and progress_service.standing(db, thesis.student).frozen:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The student's account is frozen, so no co-supervisor can join now")
     if slot == "supervisor":
         if accept:
             thesis.status, thesis.code = ThesisStatus.active, new_code(db)
@@ -178,7 +195,7 @@ def decide(db: Session, member: User, thesis_id: int, accept: bool) -> None:
             thesis.student.thesis = None
             db.delete(thesis)
     elif not accept:
-        _clear_co_supervisor(thesis)  # either one declining: the group stays, without a co-supervisor
+        thesis.clear_co_supervisor()  # either one declining: the group stays, without a co-supervisor
     elif slot == "co_supervisor":
         thesis.co_supervisor_accepted = True
     else:
@@ -192,7 +209,13 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
         select(Thesis)
         .where(Thesis.status != ThesisStatus.pending)
         .order_by(Thesis.id.desc())
-        .options(selectinload(Thesis.proposal).selectinload(Proposal.versions))  # one query, not one per thesis
+        # One query each, not one per thesis.
+        .options(
+            selectinload(Thesis.proposal).selectinload(Proposal.versions),
+            selectinload(Thesis.student),
+            selectinload(Thesis.supervisor),
+            selectinload(Thesis.co_supervisor),
+        )
     )
     query = query.where(
         or_(
@@ -200,27 +223,46 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
             (Thesis.co_supervisor_id == user.id) & Thesis.co_supervisor_accepted.is_(True) & Thesis.co_supervisor_approved.is_(True),
         )
     )
+    theses = list(db.scalars(query))
+    finals = proposal_service.final_ids(db, [v.id for t in theses for v in t.versions])
+    standings = progress_service.standings(db, list({t.student for t in theses} - {None}))
     out = []
-    for t in db.scalars(query):
+    for t in theses:
         row = ThesisDetailOut.model_validate(t)
-        proposal_service.staff_view(db, user, t, row.versions)
+        proposal_service.staff_view(db, user, t, row.versions, finals, standings)
         row.is_supervisor = t.supervisor_id == user.id
         # Deferral is the supervisor's call for now (panel members later).
-        row.can_defer = row.is_supervisor and (t.defer_pending or progress_service.can_defer(db, t))
+        row.can_defer = row.is_supervisor and (t.defer_pending or progress_service.can_defer(db, t, t.student and standings.get(t.student.id)))
         out.append(row)
     return out
 
 
 def supervises_live(db: Session, member: User) -> bool:
-    """True while the faculty member supervises a pending or active thesis; their account can't be deleted then."""
+    """True while the faculty member has accepted a group whose thesis is not completed or dropped yet: as supervisor
+    (an active thesis), or as co-supervisor (accepted, even before the supervisor agrees). Their account can't be
+    deleted then. A frozen student's thesis is still active: it counts until it is dropped at a restart."""
+    active = Thesis.status == ThesisStatus.active
     return (
         db.scalar(
             select(Thesis.id)
             .where(
-                or_(Thesis.supervisor_id == member.id, Thesis.co_supervisor_id == member.id),
-                Thesis.status.in_(LIVE),
+                or_(
+                    (Thesis.supervisor_id == member.id) & active,
+                    (Thesis.co_supervisor_id == member.id) & Thesis.co_supervisor_accepted.is_(True) & active,
+                )
             )
             .limit(1)
         )
         is not None
     )
+
+
+def drop_requests_to(db: Session, member: User) -> None:
+    """Their account is being deleted: drop requests they never accepted. Group requests go, like a decline (never
+    formed, so no versions); co-supervisor invites are withdrawn, leaving the group as it was."""
+    for t in db.scalars(select(Thesis).where(Thesis.co_supervisor_id == member.id)):
+        t.clear_co_supervisor()
+    for t in db.scalars(select(Thesis).where(Thesis.supervisor_id == member.id, Thesis.status == ThesisStatus.pending)):
+        if t.student:
+            t.student.thesis = None
+        db.delete(t)

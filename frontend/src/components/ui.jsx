@@ -23,6 +23,7 @@ export const ICONS = {
   inbox: <><path d="M3 13h5l1.5 3h5L16 13h5" /><path d="M5 5h14l2 8v6H3v-6z" /></>,
   upload: <><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></>,
   file: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>,
+  chevron: <path d="m9 6 6 6-6 6" />,
 };
 
 export function Logo({ light = false }) {
@@ -34,11 +35,22 @@ export function Logo({ light = false }) {
   );
 }
 
-export function PageHeader({ title, intro }) {
+// `intro` is one short line; `help` (a list of rules) folds away under "How this works" so pages open uncluttered.
+export function PageHeader({ title, intro, help }) {
   return (
     <div>
       <h1 className="text-2xl font-semibold sm:text-3xl">{title}</h1>
       {intro && <p className="mt-2 max-w-prose text-zinc-600">{intro}</p>}
+      {help && (
+        <details className="group mt-3 max-w-prose text-sm">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md font-medium text-teal-700 transition hover:text-teal-900 focus-visible:ring-3 focus-visible:ring-teal-600/30 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+            <Icon className="size-4 transition group-open:rotate-90">{ICONS.chevron}</Icon>How this works
+          </summary>
+          <ul className="mt-3 list-disc space-y-1.5 rounded-xl bg-white py-4 pr-4 pl-9 text-zinc-600 ring-1 ring-zinc-200/70 marker:text-teal-600 motion-safe:animate-fade-in">
+            {help.map((line) => <li key={line}>{line}</li>)}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
@@ -52,13 +64,22 @@ export function Skeleton({ rows = 2, row = "h-14 rounded-lg", className = "space
   );
 }
 
-export function Alerts({ error, notice }) {
-  return (
+// `floating`: pinned to the bottom of the screen, for pages whose action buttons sit far below the page top.
+export function Alerts({ error, notice, floating = false, onDismiss }) {
+  const close = floating && onDismiss && (
+    <button onClick={onDismiss} aria-label="Dismiss" className="-my-1 -mr-1 ml-auto grid size-7 shrink-0 place-items-center rounded-md opacity-70 transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none">
+      <Icon className="size-4">{ICONS.close}</Icon>
+    </button>
+  );
+  const float = floating ? "shadow-lg motion-safe:animate-rise-in" : "";
+  const alerts = (
     <>
-      {error && <p role="alert" className="alert-error"><Icon className="mt-px size-4">{ICONS.alert}</Icon><span>{error}</span></p>}
-      {notice && <p role="status" className="alert-success"><Icon className="mt-px size-4">{ICONS.check}</Icon><span>{notice}</span></p>}
+      {error && <div role="alert" className={`alert-error ${float}`}><Icon className="mt-px size-4">{ICONS.alert}</Icon><span>{error}</span>{close}</div>}
+      {notice && <div role="status" className={`alert-success ${float}`}><Icon className="mt-px size-4">{ICONS.check}</Icon><span>{notice}</span>{close}</div>}
     </>
   );
+  if (!floating) return alerts;
+  return <div className="fixed inset-x-4 bottom-4 z-40 space-y-2 sm:left-auto sm:w-[26rem]">{alerts}</div>;
 }
 
 export function Avatar({ user, className = "size-10 text-sm" }) {

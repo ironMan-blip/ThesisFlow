@@ -37,7 +37,7 @@ export default function ThesesPage() {
   const { user, refreshCounts } = useOutletContext();
   const [theses, setTheses] = useState(null);
   const [requests, setRequests] = useState([]);
-  const { busy, error, notice, setError, run } = useAction();
+  const { busy, error, notice, setError, run, clear } = useAction();
   const [deleting, setDeleting] = useState(null); // version whose delete reason is being written
 
   const load = useCallback(async () => {
@@ -50,8 +50,13 @@ export default function ThesesPage() {
   }, [load, setError]);
 
   const decide = (r, accept) => run(r.id, async () => {
-    await api(`/theses/requests/${r.id}/${accept ? "accept" : "decline"}`, { method: "POST" });
-    await load();
+    // Names the co-supervisor shown here, so a swap made meanwhile is refused instead of approved unseen.
+    const co = r.co_supervisor ? `?co_supervisor_id=${r.co_supervisor.id}` : "";
+    try {
+      await api(`/theses/requests/${r.id}/${accept ? "accept" : "decline"}${co}`, { method: "POST" });
+    } finally {
+      await load(); // a refused, stale request shows its current state
+    }
     refreshCounts();
     return `${r.student.full_name}: request ${accept ? "accepted" : "declined"}.`;
   });
@@ -91,10 +96,16 @@ export default function ThesesPage() {
     <div className="space-y-8">
       <PageHeader
         title="Theses"
-        intro={`Supervision requests, and the theses you supervise or co-supervise with every proposal version. As the supervisor you decide: students' delete requests (approve or reject), deleting a version yourself with a reason (never a phase's final one), cancelling any delete in its ${user.deletion_days} days, and deferring a thesis after its P3 submission (once means P3 again next semester, twice freezes the student).`}
+        intro="Supervision requests, and every thesis you supervise or co-supervise."
+        help={[
+          "As the supervisor, you approve or reject a student's request to delete a proposal version.",
+          "You can also delete a version yourself, with a reason. A phase's final version can't be deleted.",
+          `Any delete runs ${user.deletion_days} days later. Until then you can cancel it.`,
+          "After the P3 submission you can defer a thesis: once means P3 again next semester, twice freezes the student.",
+        ]}
       />
 
-      <Alerts error={error} notice={notice} />
+      <Alerts error={deleting ? null : error} notice={notice} floating onDismiss={clear} />
 
       <Requests requests={requests} decide={decide} busy={busy} />
 
@@ -124,7 +135,7 @@ export default function ThesesPage() {
                 <div><dt className="text-zinc-500">Student</dt><dd className="font-medium">{t.student ? `${t.student.full_name} · ID ${t.student.id_number}` : "Account deleted"}</dd></div>
                 <div><dt className="text-zinc-500">Supervisor</dt><dd className="font-medium">{fullName(t.supervisor)}</dd></div>
                 <div><dt className="text-zinc-500">Co-supervisor</dt><dd className="font-medium">
-                  {!t.co_supervisor ? "None" : t.co_supervisor_accepted && t.co_supervisor_approved ? fullName(t.co_supervisor) : `${fullName(t.co_supervisor)} (not joined yet)`}
+                  {!t.co_supervisor ? "None" : t.co_supervisor_joined ? fullName(t.co_supervisor) : `${fullName(t.co_supervisor)} (not joined yet)`}
                 </dd></div>
               </dl>
               {t.versions.length > 0 ? (

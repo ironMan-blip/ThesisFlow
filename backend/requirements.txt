@@ -11,6 +11,8 @@ python-multipart==0.0.33
 pyjwt==2.10.1
 pwdlib[argon2]==0.2.1
 redis==5.2.1
+# Parses uploads so only real PDFs without scripts or attachments are stored.
+pypdf==7.1.0
 
 pytest==8.3.4
 httpx==0.28.1

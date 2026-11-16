@@ -2,7 +2,7 @@
 
 A web platform for running undergraduate theses, built for CSE470 (Software Engineering) at BRAC University.
 
-ThesisFlow brings the thesis process into one place: students submit their proposals and track deadlines, faculty sign up and review work, and a single coordinator runs the course (approves sign-ups, sets phase deadlines, cancels scheduled deletions). The full requirements are in `470_srs_g7.pdf`.
+ThesisFlow brings the thesis process into one place: students submit their proposals and track deadlines, faculty sign up and review work, and a single coordinator runs the course (approves sign-ups, sets phase deadlines, cancels scheduled deletions). The full requirements are in `docs/470_srs_g7.pdf`.
 
 **Stack:** FastAPI + SQLAlchemy + Alembic, PostgreSQL 16 (pgvector), React + Vite + Tailwind, all run with Docker Compose.
 
@@ -15,6 +15,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Each role sees only its own tools; the API returns the tool list.
 - Count badges on tools with waiting work (registration, deletion, restart, supervision requests).
 - Fixed sidebar on desktop, slide-out drawer on phones.
+- Each page's rules fold away under a "How this works" toggle; on long pages, success and error messages float at the bottom of the screen and can be dismissed.
 
 **Accounts and login**
 - Sign up as student or faculty with name, email, 8-digit ID number and password (faculty also give unique initials).
@@ -25,7 +26,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Every delete (an account or a proposal version) needs a written reason and the coordinator's approval. The delete then runs **7 days after the approval**; within those 7 days only the coordinator can cancel it.
 - Coordinator **Accounts** page: list, filter by role, search by ID prefix, schedule an account for deletion (with a reason).
 - Deleting a user keeps their thesis, proposal versions and PDFs as an archive.
-- Coordinator and active supervisors cannot be deleted.
+- The coordinator, and faculty who accepted a group whose thesis isn't completed or dropped, cannot be deleted.
 
 **Thesis groups**
 - Student requests a group with a supervisor; the supervisor accepting forms it (thesis active, ID like `T12345678`).
@@ -67,9 +68,9 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 
 ## Class Diagram
 
-![ThesisFlow class diagram](470_class_diagram_g7.svg)
+![ThesisFlow class diagram](docs/470_class_diagram_g7.svg)
 
-Member 3's part (auth & accounts, F11–F15), made in draw.io. Edit `470_class_diagram_g7.drawio` in draw.io, then export the `.svg` and `.png`. The other members' parts will be added to this same file.
+Member 3's part (auth & accounts, F11–F15), made in draw.io. Edit `docs/470_class_diagram_g7.drawio` in draw.io, then export the `.svg` and `.png`. The other members' parts will be added to this same file.
 
 ## Architecture
 
@@ -166,7 +167,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Nothing is deleted straight away. The coordinator approves or rejects the request under **Deletion requests**. Approving starts a **7-day** wait, and the deletion runs when it ends. The account keeps working until then and shows the date and the reason. A coordinator-scheduled deletion counts as approved, so its 7 days start at once.
 - **Only the coordinator** can reject a request or cancel an approved deletion within the 7 days (the page lists every request, who asked, the reason and the date). The person who asked cannot take it back. 7 days passing without approval does nothing.
 - A background job in the backend (`app.main`, every 5 minutes) runs deletions whose 7 days are over. It deletes the user. Their thesis, all its proposal versions and the PDF files are kept as an archive. If the account became undeletable during the wait (a faculty member took on a thesis), the deletion is dropped and the account kept.
-- The coordinator account cannot be deleted, and neither can a faculty member who supervises an active or requested thesis.
+- The coordinator account cannot be deleted. Neither can a faculty member who accepted a group, as supervisor or co-supervisor, until each such thesis is completed or dropped: not by them, not by the coordinator. Requests they haven't accepted don't keep them: when the deletion runs, group requests to them are dropped and co-supervisor invites withdrawn. While their deletion is approved nobody can pick them and they can't accept groups.
 
 ### 4. Account management (coordinator)
 
@@ -288,7 +289,8 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 - `Layout` loads `/api/auth/me` and shows only the tools in `user.tools`. The API refuses calls for tools a role doesn't have.
 - Request badges refresh every 10 seconds while the tab is visible (`/api/auth/me/counts`).
 - The Deadlines page ticks its countdowns every second and reloads from the API every minute.
-- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC.
+- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC. `PUT /api/milestones/{phase}` takes `due_local` (Dhaka wall-clock time, no zone) and refuses anything else.
+- Business rules live in the backend; the frontend only shows what the API returns (flags like `can_*`, statuses, choices).
 - Files are downloaded with `fetch` + a blob link, because a normal link can't send the JWT.
 - Delete actions ask for confirmation in a dialog first.
 
@@ -312,6 +314,8 @@ backend/app/
   deps.py       get_current_user, require_roles(...)
   rate_limit.py request limits (middleware)
   security.py   password hashing and JWTs
+  passwords.py  password strength rules (sign-up and ADMIN_PASSWORD)
+  virus_scan.py ClamAV scan of uploads
   config.py     settings from .env
   seed.py       dev student + faculty
 backend/alembic/versions/   DB migrations
@@ -324,6 +328,7 @@ frontend/src/
   useAction.js  busy / error / success state for a page's API calls
   tools.jsx     nav + dashboard entry for each tool key the API returns in user.tools
   format.js     shared display formatting
+docs/           SRS, class diagram (draw.io source + exports), contribution tracker
 ```
 
 **Rule: logic lives in the backend.** The frontend only shows what the API returns and sends what the user typed. Validation, permissions, status changes, calculations, filtering, sorting, and "can this user do X" checks all go in `services/`. If a page needs a derived value or a flag (e.g. `can_edit`), the API returns it. The frontend never decides it.
@@ -347,8 +352,7 @@ frontend/src/
 | GET | `/api/milestones` | logged in |
 | PUT | `/api/milestones/{phase}` | coordinator |
 | POST | `/api/milestones/next-semester` | coordinator |
-| GET | `/api/theses/faculty` | student |
-| GET / POST / DELETE | `/api/theses/mine` (status, request a group, cancel a pending one) | student |
+| GET / POST / DELETE | `/api/theses/mine` (status with the faculty the student can pick, request a group, cancel a pending one) | student |
 | POST / DELETE | `/api/theses/mine/co-supervisor` (`{co_supervisor_id}`: add one to a formed group; withdraw before they join) | student |
 | POST | `/api/theses/mine/register` (register the group for P1, first week only) | student |
 | GET | `/api/theses/requests` | faculty |

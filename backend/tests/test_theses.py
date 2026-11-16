@@ -1,11 +1,14 @@
+import itertools
 import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 
 from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
+from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
+from tests.conftest import engine
 from tests.helpers import PDF, REASON, auth, close_registration, form_group, me, run_deletions_due, student, supervised_student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
@@ -96,8 +99,11 @@ def test_co_supervisor_joins_a_formed_group_once_both_accept(client, db):
     vid = upload(client, s).json()["versions"][0]["id"]
     file = lambda h: client.get(f"/api/proposals/versions/{vid}/file", headers=h).status_code
 
+    choices = [p["id"] for p in mine(client, s)["faculty_choices"]]
+    assert me(client, co)["id"] in choices and me(client, sup)["id"] not in choices
     assert add_co(client, s, sup).status_code == 422  # someone else than the supervisor
     state = add_co(client, s, co).json()
+    assert (state["faculty_choices"], state["thesis"]["co_supervisor_joined"]) == ([], False)
     assert (state["can_add_co_supervisor"], state["can_cancel_co_supervisor"]) == (False, True)
     assert add_co(client, s, co).status_code == 409  # one at a time
     assert [r["slot"] for r in client.get("/api/theses/requests", headers=co).json()] == ["co_supervisor"]
@@ -109,7 +115,7 @@ def test_co_supervisor_joins_a_formed_group_once_both_accept(client, db):
     assert file(co) == 404 and client.get("/api/theses", headers=co).json() == []  # not in until the supervisor agrees
     assert answer(client, sup, tid) == 204
     t = mine(client, s)["thesis"]
-    assert (t["status"], t["co_supervisor_accepted"], t["co_supervisor_approved"]) == ("active", True, True)
+    assert (t["status"], t["co_supervisor_accepted"], t["co_supervisor_approved"], t["co_supervisor_joined"]) == ("active", True, True, True)
     assert file(co) == 200 and [x["id"] for x in client.get("/api/theses", headers=co).json()] == [tid]
     assert mine(client, s)["can_cancel_co_supervisor"] is False
     assert client.delete("/api/theses/mine/co-supervisor", headers=s).status_code == 409  # joined: stays
@@ -136,6 +142,22 @@ def test_either_declining_the_co_supervisor_keeps_the_group(client, db):
     add_co(client, s, co)
     assert client.delete("/api/theses/mine/co-supervisor", headers=s).json()["thesis"]["co_supervisor"] is None
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
+
+
+def test_a_stale_answer_never_approves_a_swapped_co_supervisor(client, db):
+    s = auth(client, db, "s@x.com")
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    x, y = auth(client, db, "x@x.com", Role.faculty), auth(client, db, "y@x.com", Role.faculty)
+    form_group(client, db, s, sup)
+    tid = mine(client, s)["thesis"]["id"]
+    add_co(client, s, x)
+    seen = client.get("/api/theses/requests", headers=sup).json()[0]["co_supervisor"]["id"]  # supervisor's page shows x
+
+    client.delete("/api/theses/mine/co-supervisor", headers=s)
+    add_co(client, s, y)  # swapped before the supervisor clicks
+    res = client.post(f"/api/theses/requests/{tid}/accept", headers=sup, params={"co_supervisor_id": seen})
+    assert res.status_code == 409
+    assert mine(client, s)["thesis"]["co_supervisor_approved"] is False
 
 
 def test_declines_and_cancel(client, db):
@@ -363,3 +385,96 @@ def test_deferred_twice_freezes(client, db):
     assert close_all_and_roll(client, db, coord)["restarted"] == 1
     state = mine(client, s)
     assert (state["phase"], state["thesis"], state["frozen_reason"]) == ("P1", None, None)
+
+
+def test_faculty_who_accepted_a_group_are_kept_until_its_thesis_ends(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    sup, co = auth(client, db, "sup@x.com", Role.faculty), auth(client, db, "co@x.com", Role.faculty)
+    s = auth(client, db, "s@x.com")
+    schedule = lambda h: client.post(f"/api/auth/accounts/{me(client, h)['id']}/deletion", headers=coord, json=REASON).status_code
+    unschedule = lambda h: client.delete(f"/api/auth/deletion-requests/{me(client, h)['id']}", headers=coord).status_code
+    ask_delete = lambda h: client.post("/api/auth/me/deletion-request", headers=h, json=REASON).status_code
+
+    ask(client, s, sup)
+    assert schedule(sup) == 200  # a request they haven't accepted doesn't keep them
+    assert unschedule(sup) == 200
+    tid = mine(client, s)["thesis"]["id"]
+    assert answer(client, sup, tid) == 204
+    assert ask_delete(sup) == schedule(sup) == 409  # not by themselves, not by the coordinator
+
+    add_co(client, s, co)
+    assert schedule(co) == 200  # only invited
+    assert unschedule(co) == 200
+    assert answer(client, co, tid) == 204
+    assert ask_delete(co) == schedule(co) == 409  # accepted, even before the supervisor agrees
+
+    db.get(Thesis, tid).status = ThesisStatus.completed  # passed
+    db.flush()
+    assert ask_delete(co) == 200 and schedule(sup) == 200
+
+
+def test_a_deletion_drops_requests_not_yet_accepted(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    f, sup2 = auth(client, db, "f@x.com", Role.faculty), auth(client, db, "sup2@x.com", Role.faculty)
+    s1, s2 = auth(client, db, "s1@x.com"), auth(client, db, "s2@x.com")
+    ask(client, s1, f)
+    form_group(client, db, s2, sup2)
+    add_co(client, s2, f)
+    fid = me(client, f)["id"]
+    assert client.post(f"/api/auth/accounts/{fid}/deletion", headers=coord, json=REASON).status_code == 200
+
+    s3 = auth(client, db, "s3@x.com")
+    assert fid not in [p["id"] for p in mine(client, s3)["faculty_choices"]]
+    assert ask(client, s3, f).status_code == 422  # can't be picked while leaving
+    assert answer(client, f, mine(client, s1)["thesis"]["id"]) == 409  # nor accept, which would keep the account
+    assert run_deletions_due(db) == (1, 0)
+    assert (mine(client, s1)["thesis"], mine(client, s1)["can_form_group"]) == (None, True)
+    t2 = mine(client, s2)["thesis"]
+    assert (t2["status"], t2["co_supervisor"], mine(client, s2)["can_add_co_supervisor"]) == ("active", None, True)
+
+
+def test_a_frozen_group_takes_no_new_co_supervisor(client, db):
+    s, sup = supervised_student(client, db, "s@x.com")
+    co = auth(client, db, "co@x.com", Role.faculty)
+    tid = mine(client, s)["thesis"]["id"]
+    add_co(client, s, co)
+    started_yesterday(client, db, s)
+    close(db, Phase.P1)
+    assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
+    assert answer(client, co, tid) == 409
+    assert answer(client, co, tid, yes=False) == 204  # declining still works
+
+
+def test_faculty_pages_use_the_same_queries_for_any_number_of_theses(client, db, timelines):
+    # The Theses page and the badge poll once ran several queries per thesis and per version.
+    sup = auth(client, db, "many@x.com", Role.faculty)
+    queries = [0]
+    event.listen(engine, "before_cursor_execute", count := lambda *a: queries.__setitem__(0, queries[0] + 1))
+
+    def add_students(n):
+        for _ in range(n):
+            h = auth(client, db, f"s{next(_ids)}@x.com")
+            form_group(client, db, h, sup)
+            assert client.post("/api/theses/mine/register", headers=h).status_code == 200
+            upload(client, h, content=PDF + b"a", title="a")
+            v = upload(client, h, content=PDF + b"b", title="b").json()["versions"][1]["id"]
+            assert client.post(f"/api/proposals/versions/{v}/delete-request", headers=h, json=REASON).status_code == 200
+
+    def cost():
+        out = []
+        for path in ("/api/theses", "/api/auth/me/counts"):
+            queries[0] = 0
+            assert client.get(path, headers=sup).status_code == 200
+            out.append(queries[0])
+        return out
+
+    try:
+        add_students(2)
+        few = cost()
+        add_students(4)
+        assert cost() == few
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+
+
+_ids = itertools.count()

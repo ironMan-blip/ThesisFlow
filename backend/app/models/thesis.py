@@ -23,10 +23,10 @@ class Thesis(Base):
     # The thesis ID people see, e.g. T12345678; issued when the supervisor accepts and the group is formed.
     code: Mapped[str | None] = mapped_column(String(9), unique=True)
     # SET NULL everywhere: deleting an account never deletes a thesis or its versions.
-    student_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     # Null only on archived rows made from proposals that existed before thesis groups.
-    supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    co_supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    co_supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     # A co-supervisor is only added to a formed group, and joins once both they (accepted) and the supervisor (approved) agree.
     co_supervisor_accepted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     co_supervisor_approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
@@ -49,6 +49,9 @@ class Thesis(Base):
     @property
     def co_supervisor_joined(self) -> bool:
         return self.co_supervisor_id is not None and self.co_supervisor_accepted and self.co_supervisor_approved
+
+    def clear_co_supervisor(self) -> None:
+        self.co_supervisor, self.co_supervisor_accepted, self.co_supervisor_approved = None, False, False
 
     @property
     def versions(self) -> list:

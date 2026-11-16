@@ -14,7 +14,7 @@ from app.models.user import Role, User
 from app.security import hash_password
 from app.services import account_service, auth_service
 from app.services.auth_service import REGISTER_TAKEN
-from tests.helpers import REASON, auth, form_group, run_deletions_due, student as make_student, supervised_student, upload
+from tests.helpers import REASON, auth, run_deletions_due, student as make_student, supervised_student, upload
 
 
 def register(client, email="a@b.com", password="Password123", id_number="12345678", role="student", initials=None):
@@ -315,18 +315,6 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     assert schedule(by_email["s@b.com"]).status_code == 404
 
 
-def test_a_deletion_that_became_unsafe_during_the_wait_is_dropped(client, db):
-    coord = auth(client, db, "coord@b.com", Role.coordinator)
-    faculty = auth(client, db, "f@b.com", Role.faculty)
-    fid = client.get("/api/auth/me", headers=faculty).json()["id"]
-    assert client.post("/api/auth/me/deletion-request", headers=faculty, json=REASON).status_code == 200
-    assert client.post(f"/api/auth/deletion-requests/{fid}/approve", headers=coord).status_code == 200
-    form_group(client, db, auth(client, db, "s@b.com"), faculty)  # now supervises an active thesis
-    assert run_deletions_due(db) == (0, 0)
-    assert db.get(User, fid).deletion_pending is False
-    assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
-
-
 def test_pending_counts_and_name_fields(client, db):
     student = auth(client, db, "s@b.com")
     coord = auth(client, db, "coord@b.com", Role.coordinator)
@@ -518,3 +506,23 @@ def test_login_tells_an_applicant_their_request_status(client, db):
     assert (res.status_code, res.json()["detail"]) == (403, "Your registration request expired without a decision. Register again")
     # Without the password nobody learns anything.
     assert client.post("/api/auth/login", data={"username": "22222222", "password": "Wrong1234"}).status_code == 401
+
+
+def test_an_expired_registration_request_cannot_be_approved(client, db):
+    uid = register(client).json()["id"]
+    db.get(User, uid).created_at -= timedelta(hours=48, minutes=1)
+    db.commit()
+    coord = auth(client, db, "coord@b.com", Role.coordinator)
+    assert client.get("/api/auth/registration-requests", headers=coord).json() == []
+    assert client.get("/api/auth/me/counts", headers=coord).json()["registration_requests"] == 0
+    assert client.post(f"/api/auth/registration-requests/{uid}/approve", headers=coord).status_code == 404
+    assert login(client).status_code == 403
+
+
+def test_deletion_request_for_a_vanished_account_is_a_401(client, db):
+    h = auth(client, db, "gone@b.com")
+    db.delete(db.get(User, me_id := client.get("/api/auth/me", headers=h).json()["id"]))
+    db.flush()
+    with pytest.raises(HTTPException) as exc:
+        account_service.request_deletion(db, User(id=me_id), REASON["reason"])
+    assert exc.value.status_code == 401

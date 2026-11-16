@@ -6,13 +6,11 @@ import { useAction } from "../useAction";
 
 export default function ThesisPage() {
   const [state, setState] = useState(null);
-  const [faculty, setFaculty] = useState([]);
   const [supervisor, setSupervisor] = useState("");
-  const { busy, error, notice, setError, run } = useAction();
+  const { busy, error, notice, setError, run, clear } = useAction();
 
   useEffect(() => {
     api("/theses/mine").then(setState).catch((err) => setError(err.message));
-    api("/theses/faculty").then(setFaculty).catch((err) => setError(err.message));
   }, [setError]);
 
   const submit = (e) => {
@@ -60,10 +58,15 @@ export default function ThesisPage() {
     <div className="space-y-8">
       <PageHeader
         title="Thesis group"
-        intro="You need a thesis group to upload proposals: you and a supervisor. Once your supervisor accepts, you can add a co-supervisor if you like; they join when both they and your supervisor accept. Every proposal version is kept under your thesis ID."
+        intro="You need a thesis group, you and a supervisor, before you can upload proposals."
+        help={[
+          "Choose a supervisor and send a request. The group forms when they accept.",
+          "After that you can add a co-supervisor if you like. They join when both they and your supervisor accept.",
+          "Every proposal version is kept under your thesis ID.",
+        ]}
       />
 
-      <Alerts error={error} notice={notice} />
+      <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
       {!state ? (
         <Skeleton rows={2} row="h-28 rounded-xl" className="space-y-4" />
@@ -127,7 +130,7 @@ export default function ThesisPage() {
                   <div>
                     <p className="mb-2 text-sm text-zinc-500">
                       Co-supervisor
-                      {!(t.co_supervisor_accepted && t.co_supervisor_approved) &&
+                      {!t.co_supervisor_joined &&
                         ` (waiting for ${[!t.co_supervisor_accepted && "them", !t.co_supervisor_approved && "your supervisor"].filter(Boolean).join(" and ")} to accept)`}
                     </p>
                     <Person user={t.co_supervisor} />
@@ -150,7 +153,7 @@ export default function ThesisPage() {
                     Add a co-supervisor (optional)
                     <select name="co_supervisor_id" required defaultValue="" className="input">
                       <option value="" disabled>Choose a faculty member</option>
-                      {faculty.filter((f) => f.id !== t.supervisor?.id).map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
+                      {state.faculty_choices.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
                     </select>
                   </label>
                   <button disabled={busy === "co"} className="btn-secondary">{busy === "co" ? "Sending…" : "Ask"}</button>
@@ -186,10 +189,10 @@ export default function ThesisPage() {
                 Supervisor
                 <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
                   <option value="" disabled>Choose a faculty member</option>
-                  {faculty.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
+                  {state.faculty_choices.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
                 </select>
               </label>
-              <button disabled={busy === "ask" || !faculty.length} className="btn-primary w-full">
+              <button disabled={busy === "ask" || !state.faculty_choices.length} className="btn-primary w-full">
                 {busy === "ask" ? "Sending…" : "Send request"}
               </button>
             </form>
