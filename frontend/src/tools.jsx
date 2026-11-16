@@ -34,7 +34,7 @@ export const TOOLS = {
     icon: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></>,
   },
   version_delete_requests: {
-    to: "/version-delete-requests", title: "Version delete requests", text: "Version delete requests with reasons: approve, reject, or cancel within 7 days.",
+    to: "/version-delete-requests", title: "Version delete requests", text: "Version deletes with reasons: approve, reject, or cancel within 7 days.",
     icon: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5" /></>,
   },
   account: {

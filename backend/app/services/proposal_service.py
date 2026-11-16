@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.milestone import Phase
+from app.models.milestone import Deliverable, Phase
 from app.models.proposal import Proposal, ProposalVersion
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import DELETION_DELAY, User
@@ -62,13 +62,36 @@ def get_mine(db: Session, user: User) -> ProposalOut:
         upload_block=block,
         freeze_at=s.closes_at if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.due_at else None,
     )
-    requested = {v.id for v in thesis.versions if v.delete_requested_at} if thesis else set()
+    rows = {v.id: v for v in thesis.versions} if thesis else {}
     for v in out.versions:
-        deletable = block is None and _in_current_phase(user, v)
-        v.can_request_delete, v.delete_pending = deletable and v.id not in requested, deletable and v.id in requested
+        row = rows[v.id]
+        if row.delete_by_staff:
+            # Scheduled by a supervisor / the coordinator: the page shows it with the reason and who to contact.
+            v.delete_pending = not _is_final(db, row)
+        else:
+            deletable = block is None and _in_current_phase(user, v)
+            v.can_request_delete = deletable and row.delete_requested_at is None
+            v.delete_pending = deletable and row.delete_requested_at is not None
+            v.delete_rejected = row.delete_rejected_at is not None and row.delete_requested_at is None
         if not v.delete_pending:
-            v.delete_executes_at = None  # a request on a final submission has lapsed
+            v.delete_executes_at = v.delete_reason = None  # lapsed (the version became final)
     return out
+
+
+def _is_final(db: Session, version: ProposalVersion) -> bool:
+    """The version that counts as its phase's submission: the closed phase's final one, or the open phase's latest."""
+    return db.scalar(select(Deliverable.id).where(Deliverable.proposal_version_id == version.id)) is not None
+
+
+def staff_view(db: Session, staff: User, versions: list[ProposalVersionOut]) -> None:
+    """Fill in the delete fields a supervisor / the coordinator sees for one thesis's versions."""
+    for v in versions:
+        row = db.get(ProposalVersion, v.id)
+        final = _is_final(db, row)
+        v.delete_pending = row.delete_requested_at is not None and (row.delete_by_staff and not final or _deletable(db, row) is not None)
+        v.can_schedule_delete = not final and row.delete_requested_at is None
+        if not v.delete_pending:
+            v.delete_executes_at = v.delete_reason = None
 
 
 def _in_current_phase(user: User, v) -> bool:
@@ -240,9 +263,31 @@ def request_delete(db: Session, user: User, version_id: int, reason: str) -> Pro
     if _deletable(db, version) is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "This version is a final submission, so it can't be deleted")
     version.delete_requested_at, version.delete_reason = datetime.now(timezone.utc), reason
+    version.delete_requested_by_id, version.delete_rejected_at = user.id, None
     db.commit()
     db.refresh(user.thesis)
     return get_mine(db, user)
+
+
+def schedule_delete(db: Session, staff: User, version_id: int, reason: str) -> None:
+    """A supervisor of the thesis, or the coordinator: delete a version directly. Counts as approved, so it runs
+    DELETION_DELAY from now; only the coordinator can cancel it. The final version of a phase is never deleted."""
+    version = _lock_for(db, version_id)
+    if version is None or not thesis_service.can_view(staff, version.proposal.thesis):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found")
+    if version.delete_requested_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This version's deletion is already requested")
+    if _is_final(db, version):
+        raise HTTPException(status.HTTP_409_CONFLICT, "This is the final version of its phase, so it can't be deleted")
+    now = datetime.now(timezone.utc)
+    version.delete_requested_at = version.delete_approved_at = now
+    version.delete_reason, version.delete_requested_by_id, version.delete_rejected_at = reason, staff.id, None
+    db.commit()
+
+
+def _runnable(db: Session, version: ProposalVersion) -> bool:
+    # A staff delete never touches a final version; a student's request follows the upload rule (current phase, open).
+    return not _is_final(db, version) if version.delete_by_staff else _deletable(db, version) is not None
 
 
 def _requested() -> Select:
@@ -253,14 +298,21 @@ def pending_delete_requests(db: Session) -> list[DeleteRequestOut]:
     # Lapsed requests (the phase closed first) are left out. Few rows, so the rule is checked in Python.
     out = []
     for v in db.scalars(_requested().order_by(ProposalVersion.delete_requested_at)):
-        if student := _deletable(db, v):
+        if _runnable(db, v):
+            student, by = v.proposal.thesis.student, v.delete_requested_by_id and db.get(User, v.delete_requested_by_id)
             row = DeleteRequestOut.model_validate(
                 {**ProposalVersionOut.model_validate(v).model_dump(), "delete_requested_at": v.delete_requested_at,
-                 "delete_reason": v.delete_reason, "student": PersonOut.model_validate(student),
-                 "thesis_code": v.proposal.thesis.code}
+                 "delete_reason": v.delete_reason, "student": student and PersonOut.model_validate(student),
+                 "requested_by": by and PersonOut.model_validate(by), "thesis_code": v.proposal.thesis.code}
             )
             out.append(row)
     return out
+
+
+def count_staff_deletes(db: Session, student: User) -> int:
+    """Student badge: their versions a supervisor / the coordinator scheduled for deletion."""
+    rows = db.scalars(_requested().join(Proposal).where(Proposal.thesis_id == student.thesis_id)) if student.thesis_id else []
+    return sum(v.delete_by_staff and not _is_final(db, v) for v in rows)
 
 
 def count_delete_requests(db: Session) -> int:
@@ -293,17 +345,22 @@ def cancel_delete(db: Session, version_id: int) -> None:
     version = _lock_for(db, version_id)
     if version is None or version.delete_requested_at is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No delete request with that id")
-    version.delete_requested_at = version.delete_approved_at = version.delete_reason = None
+    # A request the coordinator turns down before approving is shown to the student as rejected.
+    version.delete_rejected_at = datetime.now(timezone.utc) if version.delete_approved_at is None else None
+    version.delete_requested_at = version.delete_approved_at = version.delete_reason = version.delete_requested_by_id = None
     db.commit()
 
 
-def _delete_version(db: Session, version: ProposalVersion, student: User) -> str:
+def _delete_version(db: Session, version: ProposalVersion) -> str:
     """Delete the row and renumber later versions; returns the stored file name for the caller to remove after commit."""
     thesis = version.proposal.thesis
+    student = thesis.student if thesis.student and thesis.student.thesis_id == thesis.id else None
     stored, removed_no, proposal_id = version.stored_filename, version.version_no, version.proposal_id
     db.delete(version)
     db.flush()
     _close_gap(db, proposal_id, removed_no)
+    if student is None:
+        return stored  # archived thesis: no live milestone to update
     if gm := progress_service.group_milestone(db, student):
         progress_service.sync_deliverable(db, gm, student)
     if progress_service.submitted_at(db, student) is None:
@@ -321,12 +378,13 @@ def run_due_deletions(db: Session, now: datetime | None = None) -> int:
             db.rollback()  # cancelled meanwhile
             continue
         stored = None
-        if student := _deletable(db, version):
-            stored = _delete_version(db, version, student)
+        if _runnable(db, version):
+            stored = _delete_version(db, version)
             deleted += 1
         else:
-            # The phase closed during the wait: the version is now a final submission and is kept.
+            # It became a final version during the wait (the phase closed, or later versions went): it is kept.
             version.delete_requested_at = version.delete_approved_at = version.delete_reason = None
+            version.delete_requested_by_id = None
         db.commit()
         if stored:
             # File goes only after the row is gone, so a failed commit never loses a PDF.

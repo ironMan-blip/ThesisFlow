@@ -24,6 +24,10 @@ class ProposalVersionOut(BaseModel):
     can_request_delete: bool = False
     delete_pending: bool = False
     delete_executes_at: datetime | None = None  # when the requested delete runs, if one is pending
+    delete_by_staff: bool = False  # scheduled by a supervisor or the coordinator, not asked by the student
+    delete_reason: str | None = None  # shown to the group and the coordinator while a delete is pending
+    delete_rejected: bool = False  # student page: the coordinator rejected their last request for it
+    can_schedule_delete: bool = False  # staff pages: a supervisor / the coordinator may delete it (never a final version)
 
     @computed_field
     @property
@@ -48,6 +52,7 @@ class ProposalOut(BaseModel):
     freeze_at: datetime | None = None
     max_upload_mb: int = settings.max_upload_mb
     max_abstract_chars: int = MAX_ABSTRACT_CHARS
+    coordinator_contact: str = settings.admin_email  # shown with a version a supervisor / the coordinator scheduled to delete
 
     @model_validator(mode="after")
     def _mark_latest(self):

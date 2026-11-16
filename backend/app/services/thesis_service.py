@@ -17,7 +17,7 @@ from app.models.proposal import Proposal
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
 from app.schemas.thesis import MyThesisOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
-from app.services import progress_service
+from app.services import progress_service, proposal_service  # proposal_service imports us too; used at call time only
 
 LIVE = (ThesisStatus.pending, ThesisStatus.active)
 
@@ -163,6 +163,7 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
     out = []
     for t in db.scalars(query):
         row = ThesisDetailOut.model_validate(t)
+        proposal_service.staff_view(db, user, row.versions)
         row.can_defer = user.role == Role.coordinator and (t.defer_pending or progress_service.can_defer(db, t))
         out.append(row)
     return out

@@ -112,8 +112,9 @@ def pending_counts(db: Session, user: User) -> dict[str, int]:
     # Badge counts keyed by tool: the coordinator decides requests, faculty answer supervision requests.
     if user.role == Role.faculty:
         return {"theses": thesis_service.count_requests(db, user)}
-    if user.role != Role.coordinator:
-        return {}
+    if user.role == Role.student:
+        n = proposal_service.count_staff_deletes(db, user)
+        return {"proposal": n} if n else {}
     # Polled every 10s by the UI, so count in SQL instead of loading the rows.
     count = lambda q: db.scalar(q.with_only_columns(func.count()))
     return {

@@ -75,5 +75,6 @@ class DeleteRequestOut(ProposalVersionOut):
 
     delete_requested_at: datetime
     delete_reason: str
-    student: PersonOut
+    student: PersonOut | None  # None once the student's account is deleted (archived thesis)
+    requested_by: PersonOut | None
     thesis_code: str | None

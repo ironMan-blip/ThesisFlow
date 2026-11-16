@@ -57,8 +57,17 @@ class ProposalVersion(Base):
     delete_reason: Mapped[str | None] = mapped_column(Text)
     # Set when the coordinator approves the request: only then does the DELETION_DELAY clock start.
     delete_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Who asked: the student, or a supervisor / the coordinator scheduling it directly (approved at once).
+    delete_requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    # Set when the coordinator rejects the student's request, so the student sees the answer; cleared on a new request.
+    delete_rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     proposal: Mapped[Proposal] = relationship(back_populates="versions")
+
+    @property
+    def delete_by_staff(self) -> bool:
+        # A deleted staff account leaves None, which still isn't the student. A deleted student's own request lapses.
+        return self.delete_requested_at is not None and self.delete_requested_by_id != self.proposal.thesis.student_id
 
     @property
     def delete_executes_at(self) -> datetime | None:

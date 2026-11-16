@@ -45,6 +45,15 @@ def request_delete(
     return proposal_service.request_delete(db, user, version_id, data.reason)
 
 
+@router.post("/versions/{version_id}/deletion", status_code=status.HTTP_204_NO_CONTENT)
+def schedule_delete(
+    version_id: int, data: DeletionReasonIn, user: User = Depends(require_roles(Role.faculty, Role.coordinator)),
+    db: Session = Depends(get_db),
+):
+    # The thesis's supervisors or the coordinator: approved at once, runs in 7 days, never a final version.
+    proposal_service.schedule_delete(db, user, version_id, data.reason)
+
+
 @router.get("/delete-requests", response_model=list[DeleteRequestOut], dependencies=[Depends(coordinator)])
 def delete_requests(db: Session = Depends(get_db)):
     return proposal_service.pending_delete_requests(db)

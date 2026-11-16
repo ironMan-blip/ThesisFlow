@@ -45,6 +45,22 @@ export default function ProposalPage() {
     <div className="space-y-8">
       <PageHeader title="Proposal" intro={`Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept. To delete one, give a reason: if the coordinator approves, it is deleted ${user.deletion_days} days later unless they cancel it, and only if the phase is still open then. Your latest upload when the phase closes is your final submission.`} />
 
+      {proposal?.versions.filter((v) => v.delete_by_staff && v.delete_pending).map((v) => (
+        // A supervisor or the coordinator scheduled this: the student must get the chance to object in time.
+        <div key={v.id} role="alert" className="alert-error">
+          <Icon className="mt-px size-4">{ICONS.alert}</Icon>
+          <div className="space-y-1">
+            <p className="font-medium">v{v.version_no} ("{v.title}") is scheduled for deletion on {when(v.delete_executes_at)}.</p>
+            <p className="whitespace-pre-line break-words">Reason: {v.delete_reason}</p>
+            <p>
+              If this is a mistake or you have a problem with it, contact the coordinator at{" "}
+              <a href={`mailto:${proposal.coordinator_contact}`} className="font-medium underline">{proposal.coordinator_contact}</a>{" "}
+              before then. Only the coordinator can cancel it.
+            </p>
+          </div>
+        </div>
+      ))}
+
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -114,6 +130,7 @@ export default function ProposalPage() {
                   <VersionInfo v={v} abstract />
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {v.delete_pending && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">{v.delete_executes_at ? `Deletes on ${when(v.delete_executes_at)}` : "Delete requested"}</span>}
+                    {v.delete_rejected && <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">Delete request rejected</span>}
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
                     {v.can_request_delete && (
                       <button onClick={() => { setError(null); setAsking(v); }} disabled={busy === "ask"} aria-label={`Ask to delete v${v.version_no}`}

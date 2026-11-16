@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, download } from "../api/client";
-import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, Skeleton, ThesisBadge, VersionInfo } from "../components/ui";
-import { personName } from "../format";
+import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, ReasonDialog, Skeleton, ThesisBadge, VersionInfo } from "../components/ui";
+import { personName, when } from "../format";
 import { useAction } from "../useAction";
 
 const fullName = (p) => (p ? personName(p) : "Account deleted");
@@ -33,6 +33,7 @@ export default function ThesesPage() {
   const [theses, setTheses] = useState(null);
   const [requests, setRequests] = useState([]);
   const { busy, error, notice, setError, run } = useAction();
+  const [deleting, setDeleting] = useState(null); // version whose delete reason is being written
 
   const load = useCallback(async () => {
     setTheses(await api("/theses"));
@@ -60,12 +61,22 @@ export default function ThesesPage() {
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
+  const scheduleDelete = (reason) => {
+    const v = deleting;
+    run("delete", async () => {
+      await api(`/proposals/versions/${v.id}/deletion`, { method: "POST", body: { reason } });
+      await load();
+      setDeleting(null);
+      return `v${v.version_no} will be deleted in ${user.deletion_days} days. The student is told, with your reason; only the coordinator can cancel it.`;
+    });
+  };
+
   return (
     <div className="space-y-8">
       <PageHeader
         title="Theses"
         intro={isFaculty
-          ? "Students who asked you to supervise them, and the theses you supervise with every proposal version."
+          ? "Students who asked you to supervise them, and the theses you supervise with every proposal version. You can delete a version that isn't its phase's final one, with a reason: it runs 7 days later, and only the coordinator can cancel it."
           : "Every thesis group, archived ones included. After a P3 submission you can defer a thesis: once means P3 again next semester, twice freezes the student. Theses not deferred are completed when you start the next semester."}
       />
 
@@ -105,7 +116,18 @@ export default function ThesesPage() {
                   {t.versions.map((v) => (
                     <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                       <VersionInfo v={v} />
-                      <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {v.delete_pending && (
+                          <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20" title={v.delete_reason}>
+                            {v.delete_executes_at ? `Deletes on ${when(v.delete_executes_at)}` : "Delete requested by the student"}
+                          </span>
+                        )}
+                        <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
+                        {v.can_schedule_delete && (
+                          <button onClick={() => { setError(null); setDeleting(v); }} aria-label={`Delete v${v.version_no}`}
+                            className="btn-ghost-danger px-3 py-1.5">Delete</button>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -116,6 +138,12 @@ export default function ThesesPage() {
           ))}
         </ul>
       )}
+
+      <ReasonDialog open={!!deleting} title={`Delete v${deleting?.version_no}?`} confirm="Schedule delete" busy={busy === "delete"}
+        error={error} min={user.min_reason_chars} max={user.max_reason_chars} onCancel={() => setDeleting(null)} onSubmit={scheduleDelete}>
+        The version and its PDF are deleted {user.deletion_days} days from now and later versions are renumbered. The student
+        sees your reason and can contact the coordinator; only the coordinator can cancel it. A phase's final version can't be deleted.
+      </ReasonDialog>
     </div>
   );
 }

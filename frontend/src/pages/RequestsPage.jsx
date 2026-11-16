@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, download } from "../api/client";
 import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, Skeleton, VersionInfo } from "../components/ui";
-import { when } from "../format";
+import { personName, when } from "../format";
 import { useAction } from "../useAction";
 
 // Coordinator inbox of requests to approve or reject; the pages exported below configure it.
@@ -121,15 +121,16 @@ export const VersionDeleteRequestsPage = () => (
   <RequestsPage
     path="/proposals/delete-requests"
     title="Version delete requests"
-    intro={(u) => `Proposal versions students asked to delete, each with its reason. Approve or reject a request. An approved version and its PDF are deleted ${u.deletion_days} days after you approve it (later versions are renumbered), unless you cancel it here before then; nobody else can. If the phase closes first, the version is a final submission and is kept.`}
+    intro={(u) => `Proposal version deletes, each with its reason: students ask and you approve or reject; supervisors and you schedule them directly (approved at once, never a phase's final version). An approved version and its PDF are deleted ${u.deletion_days} days after you approve it (later versions are renumbered), unless you cancel it here before then; nobody else can. If the phase closes first, the version is a final submission and is kept.`}
     approved="will have the version deleted after the waiting period"
     rejected="keeps the version"
     dateField="delete_requested_at"
-    person={(r) => r.student}
+    person={(r) => r.student ?? r.requested_by}
     executesAt={(r) => r.delete_executes_at}
     details={(r, setError) => (
       <div className="space-y-2">
-      <ScheduledDelete executesAt={r.delete_executes_at} by="the student" reason={r.delete_reason} />
+      <ScheduledDelete executesAt={r.delete_executes_at} reason={r.delete_reason}
+        by={!r.requested_by ? "a deleted account" : r.student && r.requested_by.id === r.student.id ? "the student" : personName(r.requested_by)} />
       <div className="flex flex-wrap items-start gap-3 rounded-lg bg-zinc-50 p-3 ring-1 ring-zinc-200/70 ring-inset">
         <VersionInfo v={r} />
         <button onClick={() => download(r.download_path, r.original_filename).catch((err) => setError(err.message))}
