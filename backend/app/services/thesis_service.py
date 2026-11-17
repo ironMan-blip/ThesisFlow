@@ -51,7 +51,7 @@ def can_view(user: User, thesis: Thesis) -> bool:
 
 def _form_block(db: Session, user: User, frozen: bool) -> str | None:
     """Why this student can't send a supervisor request for their group now, or None if they can."""
-    if user.thesis_id is not None or user.phase is None or frozen:
+    if user.thesis_id is not None or frozen:
         return "Your group already has a thesis" if user.thesis_id is not None else "You can't form a thesis group right now"
     member = group_service.membership(db, user.id)
     if member is None:
@@ -60,8 +60,8 @@ def _form_block(db: Session, user: User, frozen: bool) -> str | None:
     if (needed := MIN_MEMBERS - len(group.members)) > 0:
         return f"Your group needs {needed} more {'member' if needed == 1 else 'members'} before choosing a supervisor"
     for m in group.members:
-        if m.user.thesis_id is not None or m.user.phase != user.phase or progress_service.standing(db, m.user).frozen:
-            return f"{m.user.full_name} can't join a {user.phase.value} thesis now, so your group can't choose a supervisor yet"
+        if m.user.thesis_id is not None or progress_service.standing(db, m.user).frozen:
+            return f"{m.user.full_name} already has a thesis, so your group can't choose a supervisor yet"
     return None
 
 
@@ -85,7 +85,7 @@ def mine(db: Session, user: User) -> MyThesisOut:
         register_block=progress_service.register_block(db, user) if live and user.phase == Phase.P1 else None,
         can_form_group=can_form_group,
         # Only worth explaining while there is no thesis yet; with one, the page shows the thesis instead.
-        form_group_block=form_block if t is None and user.phase is not None and not s.frozen else None,
+        form_group_block=form_block if t is None and not s.frozen else None,
         can_cancel=t is not None and t.status == ThesisStatus.pending,
         can_add_co_supervisor=can_add_co_supervisor,
         can_cancel_co_supervisor=t is not None and t.co_supervisor_id is not None and not t.co_supervisor_joined,

@@ -42,7 +42,7 @@ def _row(m: MilestoneTemplate | None, phase: Phase, now: datetime, mine: progres
         out.countdown_to, out.countdown_label = closes_at, "Grace ends in"
     # A student who couldn't upload (phase started after grace ended, or no accepted group) had nothing due:
     # no personal status, same rule as progress_service._missed.
-    if mine and progress_service.held_to(user, closes_at):
+    if mine and progress_service.held_to(user.thesis, closes_at):
         submitted_at = mine.submitted_at
         out.submitted_at = submitted_at
         if submitted_at is None and now > closes_at:

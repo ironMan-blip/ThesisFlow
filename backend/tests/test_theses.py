@@ -36,7 +36,7 @@ def user_of(client, db, h) -> User:
 
 def started_yesterday(client, db, h):
     # Backdate the phase start so a deadline that just passed counts as missed.
-    user_of(client, db, h).phase_started_at -= timedelta(days=1)
+    user_of(client, db, h).thesis.phase_started_at -= timedelta(days=1)
     db.flush()
 
 
@@ -187,7 +187,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     close(db, Phase.P1)
 
     state = mine(client, s)
-    assert state["frozen_reason"] == "You missed the P1 deadline" and state["can_form_group"] is False
+    assert state["frozen_reason"] == "Your group missed the P1 deadline" and state["can_form_group"] is False
     res = upload(client, s)
     assert res.status_code == 409 and "frozen" in res.json()["detail"]
 
@@ -216,7 +216,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     # Approved, but the fresh start waits for the next semester.
     state = mine(client, s)
     assert (state["restart_approved"], state["thesis"]["id"], state["frozen_reason"]) == (
-        True, old_thesis["id"], "You missed the P1 deadline"
+        True, old_thesis["id"], "Your group missed the P1 deadline"
     )
     assert client.post("/api/auth/me/restart-request", headers=s).status_code == 409
     assert close_all_and_roll(client, db, coord)["restarted"] == 1
@@ -225,7 +225,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     assert state["restart_approved"] is False
     # A fresh start leaves the old group too; the teammates (who didn't restart) keep the old thesis.
     assert (state["phase"], state["thesis"], state["frozen_reason"], state["form_group_block"]) == (
-        "P1", None, None, "Create or join a group first"
+        None, None, None, "Create or join a group first"
     )
     form_group(client, db, s)
     new_thesis = mine(client, s)["thesis"]
@@ -240,11 +240,11 @@ def test_extension_without_restart_request_lets_a_frozen_student_continue(client
     coord = auth(client, db, "c@x.com", Role.coordinator)
     started_yesterday(client, db, s)
     close(db, Phase.P1)
-    assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
+    assert mine(client, s)["frozen_reason"] == "Your group missed the P1 deadline"
     db.get(MilestoneTemplate, Phase.P1).grace_days = 2  # extended, and they never asked to restart
     db.flush()
     assert upload(client, s).status_code == 201
-    assert close_all_and_roll(client, db, coord)["advanced"] == 3  # the whole group
+    assert close_all_and_roll(client, db, coord)["advanced"] == 1  # one thesis group
     assert me(client, s)["phase"] == "P2"
 
 
@@ -256,7 +256,7 @@ def test_restart_can_be_rejected(client, db):
     uid = client.post("/api/auth/me/restart-request", headers=s).json()["id"]
     r = client.delete(f"/api/auth/restart-requests/{uid}", headers=coord)
     assert r.status_code == 200 and r.json()["restart_pending"] is False
-    assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
+    assert mine(client, s)["frozen_reason"] == "Your group missed the P1 deadline"
 
 
 def test_late_sign_up_waits_for_next_semester_instead_of_freezing(client, db):
@@ -265,7 +265,7 @@ def test_late_sign_up_waits_for_next_semester_instead_of_freezing(client, db):
     assert mine(client, s)["frozen_reason"] is None
     coord = auth(client, db, "c@x.com", Role.coordinator)
     assert close_all_and_roll(client, db, coord)["frozen"] == 0
-    assert me(client, s)["phase"] == "P1"
+    assert me(client, s)["phase"] is None  # no thesis, so no phase yet
 
 
 def test_groups_form_any_time_but_register_for_p1_only_in_the_first_week(client, db):
@@ -299,7 +299,7 @@ def test_groups_form_any_time_but_register_for_p1_only_in_the_first_week(client,
     close(db, Phase.P1)
     assert [mine(client, h)["frozen_reason"] for h in (unregistered, late)] == [None, None]
     res = close_all_and_roll(client, db, coord)
-    assert (res["advanced"], res["frozen"]) == (3, 0)  # on_time's group of 3
+    assert (res["advanced"], res["frozen"]) == (1, 0)  # on_time's group
     assert [me(client, h)["phase"] for h in (on_time, unregistered, late)] == ["P2", "P1", "P1"]
 
     # The new semester opens registration again.
@@ -317,12 +317,14 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
     res = client.post("/api/milestones/next-semester", headers=coord)
     assert (res.status_code, res.json()["detail"]) == (409, "P1, P2, P3 is still open, wait until its grace period ends")
 
-    # done's group of 3 moves on; only missed (not its teammates) started the phase before the deadline.
-    assert close_all_and_roll(client, db, coord) == {"advanced": 3, "completed": 0, "deferred": 0, "frozen": 1, "restarted": 0}
+    # Counted per thesis group: done's moves on, missed's is frozen.
+    assert close_all_and_roll(client, db, coord) == {
+        "advanced": 1, "completed": 0, "deferred": 0, "cancelled": 0, "frozen": 1, "restarted": 0
+    }
     assert me(client, done)["phase"] == "P2"
     assert [m["status"] for m in client.get("/api/milestones", headers=coord).json()["milestones"]] == ["not_set"] * 3
     # The freeze is saved, so it outlives the cleared deadlines.
-    assert mine(client, missed)["frozen_reason"] == "You missed the P1 deadline"
+    assert mine(client, missed)["frozen_reason"] == "Your group missed the P1 deadline"
 
     reopen(db)
     assert client.get("/api/proposals/mine", headers=done).json()["phase"] == "P2"
@@ -332,7 +334,7 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
 def p3_student(client, db, email):
     """A P3 student and their supervisor, who decides deferrals (panel members later)."""
     s, sup = supervised_student(client, db, email)
-    user_of(client, db, s).phase = Phase.P3
+    user_of(client, db, s).thesis.phase = Phase.P3
     db.flush()
     return s, sup
 
@@ -356,7 +358,7 @@ def test_p3_without_deferral_completes_the_thesis(client, db):
     assert client.get("/api/proposals/mine", headers=s).json()["upload_block"] == "Your thesis is complete"
 
 
-def test_deferred_twice_freezes(client, db):
+def test_deferred_twice_cancels_the_thesis(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     s, sup = p3_student(client, db, "s@x.com")
     tid = mine(client, s)["thesis"]["id"]
@@ -371,16 +373,12 @@ def test_deferred_twice_freezes(client, db):
     assert client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True}).status_code == 409
     upload(client, s, content=PDF + b"again")
     client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True})
-    assert close_all_and_roll(client, db, coord)["frozen"] == 1
-    assert mine(client, s)["frozen_reason"] == "Your thesis was deferred twice"
-
-    uid = me(client, s)["id"]
-    client.post("/api/auth/me/restart-request", headers=s)
-    client.post(f"/api/auth/restart-requests/{uid}/approve", headers=coord)
-    reopen(db)
-    assert close_all_and_roll(client, db, coord)["restarted"] == 1
+    assert close_all_and_roll(client, db, coord)["cancelled"] == 1
+    # Cancelled: kept as an archive with its versions, and the group is free to ask a supervisor again.
     state = mine(client, s)
-    assert (state["phase"], state["thesis"], state["frozen_reason"]) == ("P1", None, None)
+    assert (state["phase"], state["thesis"], state["frozen_reason"], state["can_form_group"]) == (None, None, None, True)
+    archived = {t["id"]: t for t in client.get("/api/theses", headers=sup).json()}[tid]
+    assert (archived["status"], len(archived["versions"])) == ("dropped", 2)
 
 
 def test_faculty_who_accepted_a_group_are_kept_until_its_thesis_ends(client, db):
@@ -436,7 +434,7 @@ def test_a_frozen_group_takes_no_new_co_supervisor(client, db):
     add_co(client, s, co)
     started_yesterday(client, db, s)
     close(db, Phase.P1)
-    assert mine(client, s)["frozen_reason"] == "You missed the P1 deadline"
+    assert mine(client, s)["frozen_reason"] == "Your group missed the P1 deadline"
     assert answer(client, co, tid) == 409
     assert answer(client, co, tid, yes=False) == 204  # declining still works
 

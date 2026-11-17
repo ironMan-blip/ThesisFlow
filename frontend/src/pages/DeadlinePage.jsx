@@ -86,7 +86,7 @@ export default function DeadlinePage() {
     run("semester", async () => {
       const r = await api("/milestones/next-semester", { method: "POST" });
       show(await api("/milestones"));
-      return `New semester started: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.frozen} frozen, ${r.restarted} restarted at P1. Set the new deadlines below.`;
+      return `New semester started. Thesis groups: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.cancelled} cancelled, ${r.frozen} frozen. Students restarted at P1: ${r.restarted}. Set the new deadlines below.`;
     });
   };
 
@@ -102,8 +102,9 @@ export default function DeadlinePage() {
           <div className="max-w-prose">
             <h2 className="font-semibold">End this semester</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Once every grace time has ended: students who submitted move to their next phase, P3 theses are completed
-              or deferred, students who missed are frozen, approved restarts start fresh at P1, and all deadlines are cleared for next semester.
+              Once every grace time has ended: thesis groups that submitted move to their next phase, P3 theses are completed
+              or deferred (a second deferral cancels the thesis), groups that missed are frozen, approved restarts start fresh, and
+              all deadlines are cleared for next semester.
               P1 registration then opens for one week.
             </p>
           </div>

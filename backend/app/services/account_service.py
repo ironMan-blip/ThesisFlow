@@ -41,7 +41,7 @@ def _pending(db: Session, user_id: int) -> User:
 def approve_registration(db: Session, user_id: int) -> User:
     user = _pending(db, user_id)
     # A student's phase starts when they can log in, so a sign-up approved late isn't counted as missing a deadline.
-    user.approved, user.phase_started_at = True, datetime.now(timezone.utc)
+    user.approved = True
     db.commit()
     db.refresh(user)
     return user

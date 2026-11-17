@@ -6,6 +6,7 @@ from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Tex
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.milestone import Phase
 
 
 class ThesisStatus(str, enum.Enum):
@@ -45,7 +46,15 @@ class Thesis(Base):
     status: Mapped[ThesisStatus] = mapped_column(
         Enum(ThesisStatus, name="thesis_status"), default=ThesisStatus.pending
     )
-    # P3 deferrals by the coordinator (no panel yet): the second one freezes the student.
+    # The group's phase: P1 from the start, moved on by progress_service.advance_phases at each new semester.
+    phase: Mapped[Phase] = mapped_column(Enum(Phase, name="phase"), default=Phase.P1, server_default=Phase.P1.value)
+    # When the current phase started (thesis made, new semester, or P3 again after a deferral); only uploads after it count.
+    phase_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+    # Set at the semester rollover when the group missed its deadline; members can then ask to restart.
+    frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P3 deferrals by the supervisor (panel members later): the second one cancels the thesis.
     deferrals: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # The coordinator's choice for this semester; applied at the semester rollover.
     defer_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

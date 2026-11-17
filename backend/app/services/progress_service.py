@@ -1,12 +1,12 @@
-"""Student phase rules: one phase per semester, P1 -> P2 -> P3.
+"""Phase rules (deadlines feature). The phase belongs to the thesis group, one phase per semester, P1 -> P2 -> P3.
 
 - Groups can be formed and accepted any time, but an accepted group can only register for P1 in the first week
-  of each semester. A P1 student whose group didn't register has nothing due and waits for the next semester.
-- Uploading for the current phase before its grace period ends counts as submitted (late or not).
-- Grace ends with no upload: the student is frozen and can ask the coordinator to restart at P1 at any time.
-  An approved restart starts fresh at P1 at the next semester rollover.
-- After P3 the supervisor may defer the thesis: once means P3 again next semester, twice freezes the student.
-- The semester rollover moves everyone on and clears the deadlines for the next semester.
+  of each semester. A P1 group that didn't register has nothing due and waits for the next semester.
+- Uploading for the group's phase before its grace period ends counts as submitted (late or not).
+- Grace ends with no upload: the group is frozen, and its members can ask the coordinator to restart at P1.
+  An approved restart starts that student fresh (no group, no thesis) at the next semester rollover.
+- After P3 the supervisor may defer the thesis: once means P3 again next semester, twice cancels the thesis.
+- The semester rollover (semester feature) calls advance_phases to move every group on, then clears the deadlines.
 """
 
 import secrets
@@ -25,7 +25,7 @@ from app.models.thesis import FORMED, UNREGISTERED, Thesis, ThesisStatus
 from app.models.user import Role, User
 
 NEXT_PHASE = {Phase.P1: Phase.P2, Phase.P2: Phase.P3}
-MAX_DEFERRALS = 2  # the second deferral freezes the student
+MAX_DEFERRALS = 2  # the second deferral cancels the thesis
 REGISTRATION_WINDOW = timedelta(weeks=1)
 
 
@@ -78,10 +78,12 @@ def current_semester_id(db: Session) -> int | None:
 
 
 def group_milestone(db: Session, user: User, create: bool = False) -> GroupMilestone | None:
-    """The student's group milestone for their current phase this semester. Earlier semesters (a deferred P3) don't count."""
-    if user.thesis_id is None or user.phase is None:
-        return None
-    key = dict(thesis_id=user.thesis_id, semester_id=current_semester_id(db), phase=user.phase)
+    """The student's group milestone for its current phase this semester. Earlier semesters (a deferred P3) don't count."""
+    return _milestone(db, user.thesis, create) if user.phase else None
+
+
+def _milestone(db: Session, thesis: Thesis, create: bool = False) -> GroupMilestone | None:
+    key = dict(thesis_id=thesis.id, semester_id=current_semester_id(db), phase=thesis.phase)
     gm = db.scalar(select(GroupMilestone).filter_by(**key))
     if gm is None and create:
         gm = GroupMilestone(**key)
@@ -95,7 +97,7 @@ def phase_uploads(user: User):
     return (
         ProposalVersion.proposal.has(thesis_id=user.thesis_id)
         & (ProposalVersion.phase == user.phase)
-        & (ProposalVersion.created_at >= user.phase_started_at)
+        & (ProposalVersion.created_at >= user.thesis.phase_started_at)
     )
 
 
@@ -122,25 +124,29 @@ def submitted_at(db: Session, user: User) -> datetime | None:
     return gm and gm.submitted_at
 
 
-def held_to(user: User, closes_at: datetime) -> bool:
-    # Only students who could upload have anything due: their phase started before the deadline closed, their
-    # group is accepted and, in P1, registered this semester. Everyone else waits for next semester.
-    thesis = user.thesis
+def held_to(thesis: Thesis | None, closes_at: datetime) -> bool:
+    # Only groups that could upload have anything due: their phase started before the deadline closed, they are
+    # accepted and, in P1, registered this semester. Everyone else waits for next semester.
     return (
-        user.phase_started_at < closes_at
-        and thesis is not None
+        thesis is not None
+        and thesis.phase_started_at < closes_at
         and thesis.status == ThesisStatus.active
-        and (user.phase != Phase.P1 or thesis.p1_registered)
+        and (thesis.phase != Phase.P1 or thesis.p1_registered)
     )
 
 
-def _missed(user: User, s: Standing, now: datetime) -> bool:
-    return s.closes_at is not None and now > s.closes_at and s.submitted_at is None and held_to(user, s.closes_at)
+def _missed(thesis: Thesis | None, s: Standing, now: datetime) -> bool:
+    return s.closes_at is not None and now > s.closes_at and s.submitted_at is None and held_to(thesis, s.closes_at)
 
 
 def standing(db: Session, user: User, now: datetime | None = None) -> Standing:
     template = db.get(MilestoneTemplate, user.phase) if user.phase else None
     return _standing(user, template, group_milestone(db, user), now or _now())
+
+
+def thesis_standing(db: Session, thesis: Thesis, now: datetime | None = None) -> Standing:
+    """The group's own standing: its deadline, submission and freeze. Members' restart requests don't count here."""
+    return _thesis_standing(thesis, db.get(MilestoneTemplate, thesis.phase), _milestone(db, thesis), now or _now())
 
 
 def standings(db: Session, students: list[User]) -> dict[int, Standing]:
@@ -163,19 +169,19 @@ def standings(db: Session, students: list[User]) -> dict[int, Standing]:
 
 
 def _standing(user: User, template: MilestoneTemplate | None, gm: GroupMilestone | None, now: datetime) -> Standing:
+    # A live thesis only: a completed one has nothing due.
+    s = _thesis_standing(user.thesis, template, gm, now) if user.phase else Standing(template, gm)
+    if not s.frozen and (user.restart_pending or user.restart_approved):
+        # Asking for a fresh start is final: a later deadline extension doesn't reopen this thesis for them.
+        s.frozen_reason = "You asked to restart at P1"
+    return s
+
+
+def _thesis_standing(thesis: Thesis, template: MilestoneTemplate | None, gm: GroupMilestone | None, now: datetime) -> Standing:
     s = Standing(template, gm)
-    reason = None
-    if user.frozen_at is not None:
-        thesis = user.thesis
-        deferred = thesis is not None and thesis.deferrals >= MAX_DEFERRALS
-        reason = "Your thesis was deferred twice" if deferred else f"You missed the {user.phase.value} deadline"
-    elif user.phase and _missed(user, s, now):
+    if thesis.frozen_at is not None or _missed(thesis, s, now):
         # Shown as soon as grace ends; saved at the rollover. A deadline extension lifts it before then.
-        reason = f"You missed the {user.phase.value} deadline"
-    elif user.restart_pending or user.restart_approved:
-        # Asking for a fresh start is final: a later deadline extension doesn't reopen this thesis.
-        reason = "You asked to restart at P1"
-    s.frozen_reason = reason
+        s.frozen_reason = f"Your group missed the {thesis.phase.value} deadline"
     return s
 
 
@@ -208,49 +214,55 @@ def next_semester(db: Session) -> dict[str, int]:
         raise HTTPException(
             status.HTTP_409_CONFLICT, f"{', '.join(sorted(still_open))} is still open, wait until its grace period ends"
         )
-    result = {"advanced": 0, "completed": 0, "deferred": 0, "frozen": 0, "restarted": 0}
-    # A thesis's P3 outcome is decided once, by its first member seen, and then applied to every member.
-    p3_outcome: dict[int, str] = {}
+    restarted = 0
     for user in _students(db):
         if user.restart_approved:
             _restart(db, user, now)
-            result["restarted"] += 1
-            continue
-        if user.phase is None or user.frozen_at is not None:
-            continue
-        s = standing(db, user, now)
-        thesis = user.thesis
-        if s.frozen:
-            user.frozen_at = now
-            _withdraw_co_supervisor(thesis)
-            result["frozen"] += 1
-        elif s.submitted_at is None or thesis is None or (thesis.status != ThesisStatus.active and thesis.id not in p3_outcome):
-            continue  # nothing due for them this semester (no deadline, or they started late): same phase again
-        elif user.phase in NEXT_PHASE:
-            user.phase, user.phase_started_at = NEXT_PHASE[user.phase], now
-            result["advanced"] += 1
-        else:
-            if thesis.id not in p3_outcome:
-                if thesis.defer_pending:
-                    thesis.defer_pending = False
-                    thesis.deferrals += 1
-                    p3_outcome[thesis.id] = "frozen" if thesis.deferrals >= MAX_DEFERRALS else "deferred"
-                else:
-                    thesis.status = ThesisStatus.completed
-                    p3_outcome[thesis.id] = "completed"
-            outcome = p3_outcome[thesis.id]
-            if outcome == "frozen":
-                user.frozen_at = now
-                _withdraw_co_supervisor(thesis)
-            elif outcome == "deferred":
-                user.phase_started_at = now  # P3 again; last semester's upload no longer counts
-            else:
-                user.phase = None
-            result[outcome] += 1
+            restarted += 1
+    result = {**advance_phases(db, now), "restarted": restarted}
     db.execute(delete(MilestoneTemplate))
     db.execute(update(Thesis).values(p1_registered=False))  # P1 registration is per semester
     db.add(Semester(started_at=now))  # opens P1 registration for the new semester
     db.commit()
+    return result
+
+
+def advance_phases(db: Session, now: datetime | None = None) -> dict[str, int]:
+    """Moves every thesis group on by what it handed in this semester; the semester rollover calls it once the old
+    semester's deadlines have all closed, before they are cleared. No commit.
+
+    Submitted P1 -> P2, P2 -> P3. After P3 the thesis is completed, unless the supervisor deferred it: the first
+    deferral means P3 again next semester, the second cancels the thesis (its members are free to start again).
+    A group that missed its deadline is frozen. A group with nothing due (not registered for P1, or its phase started
+    after the deadline) stays where it is. Counts are thesis groups."""
+    now = now or _now()
+    result = {"advanced": 0, "completed": 0, "deferred": 0, "cancelled": 0, "frozen": 0}
+    active = select(Thesis).where(Thesis.status == ThesisStatus.active, Thesis.frozen_at.is_(None))
+    for thesis in db.scalars(active.order_by(Thesis.id).with_for_update()).all():
+        s = thesis_standing(db, thesis, now)
+        if s.frozen:
+            thesis.frozen_at = now
+            _withdraw_co_supervisor(thesis)
+            result["frozen"] += 1
+        elif s.submitted_at is None:
+            continue  # nothing due this semester: same phase again
+        elif thesis.phase in NEXT_PHASE:
+            thesis.phase, thesis.phase_started_at = NEXT_PHASE[thesis.phase], now
+            result["advanced"] += 1
+        elif not thesis.defer_pending:
+            thesis.status = ThesisStatus.completed
+            result["completed"] += 1
+        else:
+            thesis.defer_pending, thesis.deferrals = False, thesis.deferrals + 1
+            if thesis.deferrals >= MAX_DEFERRALS:
+                thesis.status = ThesisStatus.dropped
+                for m in thesis.members:
+                    m.thesis = None  # cancelled: kept as an archive, and the members can form a new thesis
+                result["cancelled"] += 1
+            else:
+                thesis.phase_started_at = now  # P3 again; last semester's upload no longer counts
+                result["deferred"] += 1
+    db.flush()
     return result
 
 
@@ -295,10 +307,9 @@ def register_p1(db: Session, user: User) -> None:
 
 def can_defer(db: Session, thesis: Thesis, s: Standing | None = None) -> bool:
     """s: a member's standing, if the caller already has it (see standings). Members share phase and deadlines."""
-    student = thesis.members[0] if thesis.members else None
-    if thesis.status != ThesisStatus.active or student is None or student.phase != Phase.P3:
+    if thesis.status != ThesisStatus.active or thesis.phase != Phase.P3:
         return False
-    s = s or standing(db, student)
+    s = s or thesis_standing(db, thesis)
     return not s.frozen and s.submitted_at is not None
 
 
@@ -379,8 +390,7 @@ def _restart(db: Session, user: User, now: datetime) -> None:
 
     group_service.drop_membership(db, user)
     release_thesis(db, user)
-    user.phase, user.phase_started_at = Phase.P1, now
-    user.frozen_at, user.restart_approved = None, False
+    user.restart_approved = False
 
 
 def reject_restart(db: Session, user_id: int) -> User:

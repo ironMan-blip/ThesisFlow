@@ -95,8 +95,6 @@ def main():
             student = auth_service.get_by_email(db, email) or auth_service.create_user(
                 db, email, id_number, name, pw, Role.student, approved=approved
             )
-            # Backdate the phase so seeded uploads (an hour ago and later) count toward this phase.
-            student.phase_started_at = now - timedelta(days=2)
             if state is None:
                 db.commit()
                 print(f"created {email} (ID {id_number})")
@@ -107,6 +105,10 @@ def main():
                 status=ThesisStatus.pending if state == "pending" else ThesisStatus.active,
                 code=None if state == "pending" else progress_service.new_code(db),
                 p1_registered=state != "pending",
+                # Backdated so seeded uploads (an hour ago and later) count toward this phase.
+                phase=Phase.P2 if state == "p2" else Phase.P1,
+                phase_started_at=now - timedelta(days=2),
+                frozen_at=now - timedelta(days=1) if state == "frozen" else None,
             )
             if co:
                 thesis.co_supervisor_id = fac[co].id
@@ -114,10 +116,6 @@ def main():
             db.add(thesis)
             db.flush()
             student.thesis_id = thesis.id
-            if state == "p2":
-                student.phase = Phase.P2
-            if state == "frozen":
-                student.frozen_at = now - timedelta(days=1)
 
             if n_versions:
                 title = next(titles)
@@ -129,7 +127,7 @@ def main():
                     stored = f"{uuid.uuid4().hex}.pdf"
                     (_upload_dir() / stored).write_bytes(data)
                     db.add(ProposalVersion(
-                        proposal_id=proposal.id, version_no=v, phase=student.phase, title=title,
+                        proposal_id=proposal.id, version_no=v, phase=thesis.phase, title=title,
                         abstract=f"Draft {v} of the proposal for {title.lower()}. Problem, method and expected results.",
                         original_filename=f"proposal_v{v}.pdf", stored_filename=stored, size_bytes=len(data),
                         sha256=hashlib.sha256(data).hexdigest(), uploaded_by_id=student.id,

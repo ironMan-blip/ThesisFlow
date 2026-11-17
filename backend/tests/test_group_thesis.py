@@ -105,8 +105,7 @@ def test_p3_completes_the_thesis_for_every_member(client, db):
     tid = ask(client, hs[0], sup).json()["thesis"]["id"]
     client.post(f"/api/theses/requests/{tid}/accept", headers=sup)
     client.post("/api/theses/mine/register", headers=hs[0])
-    for h in hs:
-        db.get(User, me(client, h)["id"]).phase = Phase.P3
+    db.get(User, me(client, hs[0])["id"]).thesis.phase = Phase.P3  # one phase for the whole group
     db.flush()
     assert upload(client, hs[1]).status_code == 201
 
@@ -114,6 +113,6 @@ def test_p3_completes_the_thesis_for_every_member(client, db):
         m.due_at, m.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0
     db.flush()
     res = client.post("/api/milestones/next-semester", headers=coord).json()
-    assert res["completed"] == 3
-    assert [me(client, h)["phase"] for h in hs] == [None, None, None]
+    assert res["completed"] == 1  # one thesis group
+    assert [me(client, h)["phase"] for h in hs] == [None, None, None]  # completed, for every member
     assert thesis_state(client, hs[2])["thesis"]["status"] == "completed"

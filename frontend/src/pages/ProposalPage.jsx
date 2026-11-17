@@ -56,7 +56,7 @@ export default function ProposalPage() {
           {proposal?.freeze_at && (
             <p role="alert" className="alert-error">
               <Icon className="mt-px size-4">{ICONS.alert}</Icon>
-              <span>You haven't submitted {proposal.phase} yet. Upload before {when(proposal.freeze_at)} or your account will be frozen.</span>
+              <span>You haven't submitted {proposal.phase} yet. Upload before {when(proposal.freeze_at)} or your group will be frozen.</span>
             </p>
           )}
           {proposal?.title && (

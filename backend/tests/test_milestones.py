@@ -124,20 +124,21 @@ def test_student_late_days_and_penalty(client, db):
     m = db.get(MilestoneTemplate, Phase.P1)
     m.due_at, m.grace_days, m.penalty_per_day = now - timedelta(days=3), 1, 15
     for h in (other, no_group):
-        db.get(User, me(client, h)["id"]).phase_started_at = now - timedelta(days=5)
+        if thesis := db.get(User, me(client, h)["id"]).thesis:
+            thesis.phase_started_at = now - timedelta(days=5)
     db.flush()
     rows = by_phase(client.get("/api/milestones", headers=other))
     assert (rows["P1"]["status"], rows["P1"]["submission_status"]) == ("closed", "not_submitted")
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (None, None)
     assert rows["P1"]["submitted_at"] is None  # another student's uploads don't count for this one
 
-    # No accepted group, so they couldn't upload: nothing was due.
+    # No thesis group, so no phase: nothing was due.
     rows = by_phase(client.get("/api/milestones", headers=no_group))
-    assert (rows["P1"]["mine"], rows["P1"]["submission_status"]) == (True, None)
+    assert (rows["P1"]["mine"], rows["P1"]["submission_status"]) == (False, None)
 
-    # Signed up after grace ended: nothing was due, so no late days or penalty.
+    # Signed up after grace ended: no thesis group yet, so nothing was due: no late days or penalty.
     late = by_phase(client.get("/api/milestones", headers=auth(client, db, "late@x.com")))["P1"]
-    assert (late["mine"], late["submission_status"], late["late_days"]) == (True, None, None)
+    assert (late["mine"], late["submission_status"], late["late_days"]) == (False, None, None)
 
 
 def test_each_group_gets_its_own_milestone_and_extension(client, db):

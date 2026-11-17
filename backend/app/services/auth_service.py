@@ -52,7 +52,6 @@ def create_user(
         password_hash=hash_password(password),
         role=role,
         approved=approved,
-        phase=Phase.P1 if role == Role.student else None,  # every student starts at P1
     )
     db.add(user)
     try:

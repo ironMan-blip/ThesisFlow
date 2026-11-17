@@ -59,14 +59,6 @@ class User(Base):
 
     # Students only. The current thesis group (pending or active); faculty are linked from the thesis row instead.
     thesis_id: Mapped[int | None] = mapped_column(ForeignKey("theses.id", ondelete="SET NULL", use_alter=True, name="users_thesis_id_fkey"))
-    # Students only: the phase they are in this semester. Null once the thesis is completed.
-    phase: Mapped[Phase | None] = mapped_column(Enum(Phase, name="phase"))
-    # When the current phase started (sign-up, rollover or restart); only uploads after it count.
-    phase_started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
-    )
-    # Set at the semester rollover for a missed deadline or a second P3 deferral.
-    frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # A frozen student asked the coordinator to restart at P1.
     restart_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # The coordinator approved the restart; the next semester rollover puts them back at P1, fresh.
@@ -74,6 +66,12 @@ class User(Base):
 
     # post_update: users and theses point at each other, so this link is written in a second UPDATE.
     thesis = relationship("Thesis", foreign_keys=[thesis_id], post_update=True)
+
+    @property
+    def phase(self) -> Phase | None:
+        """Students only: their thesis group's current phase. None without a live thesis, or once it is completed."""
+        t = self.thesis
+        return t.phase if t is not None and t.status.value in ("pending", "formed", "active") else None
 
     @property
     def tools(self) -> list[str]:

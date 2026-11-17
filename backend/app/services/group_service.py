@@ -219,11 +219,8 @@ def decide(db: Session, user: User, invitation_id: int, accept: bool) -> MyGroup
         # Joining before P1 registration: the new member shares the group's thesis, so they must be able to work on it.
         if _locked(thesis):
             raise HTTPException(status.HTTP_409_CONFLICT, "That group is registered for P1, so it can't take new members")
-        phase = thesis.members[0].phase if thesis.members else user.phase
-        if user.thesis_id is not None or user.phase != phase or progress_service.standing(db, user).frozen:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, f"That group has a thesis in {phase.value if phase else 'another phase'}, which you can't join now"
-            )
+        if user.thesis_id is not None or progress_service.standing(db, user).frozen:
+            raise HTTPException(status.HTTP_409_CONFLICT, "That group has a thesis, which you can't join now")
         user.thesis = thesis
     group.members.append(GroupMember(user=user))
     invitation.status = InvitationStatus.accepted

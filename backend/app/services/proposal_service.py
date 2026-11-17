@@ -45,14 +45,14 @@ def _upload_block(
     """Why this student can't upload right now (None means they can), and their standing (pass it if known)."""
     s = s or progress_service.standing(db, user)
     thesis = user.thesis
-    if user.phase is None:
-        return "Your thesis is complete", s
     if s.frozen:
         if user.restart_pending or user.restart_approved:
             return f"{s.frozen_reason}, so your account is frozen until you start fresh at P1", s
         return f"{s.frozen_reason}, so your account is frozen. Ask to restart at P1 on the Thesis page", s
     if thesis is None:
         return "Form a thesis group first: choose a supervisor on the Thesis page", s
+    if user.phase is None:  # the group's phase; none once the thesis is completed
+        return "Your thesis is complete", s
     if thesis.status == ThesisStatus.pending:
         return "Your supervisor has not accepted your thesis group yet", s
     if thesis.status != ThesisStatus.active or (user.phase == Phase.P1 and not thesis.p1_registered):

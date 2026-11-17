@@ -78,7 +78,7 @@ export default function ThesisPage() {
         <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
           <div>
             <p className="text-sm text-zinc-500">Current phase</p>
-            <p className="mt-1 text-2xl font-semibold">{state.phase ?? "Thesis complete"}</p>
+            <p className="mt-1 text-2xl font-semibold">{state.phase ?? (t?.status === "completed" ? "Thesis complete" : "No thesis yet")}</p>
           </div>
           {t?.code && (
             <div className="text-right">
