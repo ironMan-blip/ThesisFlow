@@ -255,6 +255,7 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
         .options(
             selectinload(Thesis.proposal).selectinload(Proposal.versions),
             selectinload(Thesis.members),
+            selectinload(Thesis.group),
             selectinload(Thesis.supervisor),
             selectinload(Thesis.co_supervisor),
             selectinload(Thesis.title_changes),

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, ConfirmDialog, EmptyState, Skeleton, PageHeader } from "../components/ui";
-import { fromDhakaInput, memberNames, personName, toDhakaInput, when } from "../format";
+import { Alerts, ConfirmDialog, EmptyState, GroupName, Skeleton, PageHeader } from "../components/ui";
+import { fromDhakaInput, personName, toDhakaInput, when } from "../format";
 import { TOOLS } from "../tools";
 import { useAction } from "../useAction";
 
@@ -237,16 +237,22 @@ export default function MeetingsPage() {
       />
 
       {!isStudent && theses?.length > 0 && (
-        <label className="label block max-w-md">
-          Thesis
-          <select value={thesisId ?? ""} onChange={(e) => setThesisId(Number(e.target.value))} className="input">
-            {theses.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.code ?? "No thesis ID yet"} · {memberNames(t)}{t.status !== "active" ? ` (${t.status === "dropped" ? "archived" : t.status})` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="max-w-md space-y-2">
+          <label className="label block">
+            Thesis
+            <select value={thesisId ?? ""} onChange={(e) => setThesisId(Number(e.target.value))} className="input">
+              {theses.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.code ?? "No thesis ID yet"} · {t.group_name ?? "Unnamed group"}{t.status !== "active" ? ` (${t.status === "dropped" ? "archived" : t.status})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* A select's options can't show a hover card, so the chosen group gets one here. */}
+          {theses.find((t) => t.id === thesisId) && (
+            <p className="text-sm text-zinc-500">Group <GroupName thesis={theses.find((t) => t.id === thesisId)} /></p>
+          )}
+        </div>
       )}
 
       <Alerts error={error} notice={notice} />

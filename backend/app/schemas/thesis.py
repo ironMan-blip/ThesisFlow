@@ -27,6 +27,7 @@ class ThesisOut(BaseModel):
     id: int
     code: str | None  # the thesis ID, e.g. T12345678; None until the supervisor accepts
     status: ThesisStatus
+    group_name: str | None  # None on theses made before groups, or once the group is gone
     student: PersonOut | None  # the member who sent the supervisor request; None once their account is deleted
     members: list[PersonOut]  # the group's students on this thesis now; may be empty once archived
     supervisor: PersonOut | None

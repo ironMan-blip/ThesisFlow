@@ -77,6 +77,10 @@ class Thesis(Base):
     )
 
     @property
+    def group_name(self) -> str | None:
+        return self.group.name if self.group else None
+
+    @property
     def co_supervisor_joined(self) -> bool:
         return self.co_supervisor_id is not None and self.co_supervisor_accepted and self.co_supervisor_approved
 
