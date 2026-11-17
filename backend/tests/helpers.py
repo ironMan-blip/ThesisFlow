@@ -5,10 +5,9 @@ from itertools import count
 from pypdf import PdfWriter
 from sqlalchemy import update
 
-from app.models.proposal import ProposalVersion
 from app.models.semester import Semester
 from app.models.user import DELETION_DELAY, Role, User
-from app.services import account_service, auth_service, proposal_service
+from app.services import account_service, auth_service
 
 
 
@@ -80,9 +79,8 @@ def close_registration(db):
 
 
 def run_deletions_due(db):
-    """Move every approved delete past its 7-day wait, then run the deletion job like the background loop does."""
+    """Move every approved account delete past its 7-day wait, then run the deletion job like the background loop does."""
     db.execute(update(User).values(deletion_approved_at=User.deletion_approved_at - DELETION_DELAY))
-    db.execute(update(ProposalVersion).values(delete_approved_at=ProposalVersion.delete_approved_at - DELETION_DELAY))
     db.flush()
     db.expire_all()
-    return account_service.run_due_deletions(db), proposal_service.run_due_deletions(db)
+    return account_service.run_due_deletions(db)

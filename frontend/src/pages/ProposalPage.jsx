@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
 import { api, download, upload } from "../api/client";
-import { Alerts, EmptyState, Icon, ICONS, PageHeader, ReasonDialog, Skeleton, VersionInfo } from "../components/ui";
+import { Alerts, EmptyState, Icon, ICONS, PageHeader, Skeleton, VersionInfo } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
 export default function ProposalPage() {
-  const { user } = useOutletContext();
   const [proposal, setProposal] = useState(null);
   const [fileName, setFileName] = useState("");
-  const [asking, setAsking] = useState(null); // version the student is asking to delete
   const [progress, setProgress] = useState(0); // share of the file sent, 0 to 1
   const { busy, error, notice, setError, run } = useAction();
 
@@ -31,41 +28,14 @@ export default function ProposalPage() {
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
-  const askDelete = (reason) => {
-    const v = asking;
-    run("ask", async () => {
-      const res = await api(`/proposals/versions/${v.id}/delete-request`, { method: "POST", body: { reason } });
-      setProposal(res);
-      setAsking(null);
-      return `Delete requested for v${v.version_no}. Your supervisor decides; if approved it is deleted ${user.deletion_days} days later.`;
-    });
-  };
-
   const saving = busy === "upload";
 
   return (
     <div className="space-y-8">
       <PageHeader title="Proposal" intro="Upload a new version of your proposal and see everything you have handed in." help={[
         "Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept.",
-        "Your latest upload when the phase closes is your final submission.",
-        `To delete a version, give a reason. If your supervisor approves, it is deleted ${user.deletion_days} days later, unless they cancel it or the phase has closed by then.`,
+        "Your latest upload when the phase closes is your final submission. Versions can't be deleted.",
       ]} />
-
-      {proposal?.versions.filter((v) => v.delete_by_staff && v.delete_pending).map((v) => (
-        // The supervisor scheduled this: the student must get the chance to object in time.
-        <div key={v.id} role="alert" className="alert-error">
-          <Icon className="mt-px size-4">{ICONS.alert}</Icon>
-          <div className="space-y-1">
-            <p className="font-medium">v{v.version_no} ("{v.title}") is scheduled for deletion on {when(v.delete_executes_at)}.</p>
-            <p className="whitespace-pre-line break-words">Reason: {v.delete_reason}</p>
-            <p>
-              Your supervisor scheduled it. If this is a mistake or you have a problem with it, contact them
-              {proposal.supervisor_contact && <> at <a href={`mailto:${proposal.supervisor_contact}`} className="font-medium underline">{proposal.supervisor_contact}</a></>}{" "}
-              before then: they can cancel it.
-            </p>
-          </div>
-        </div>
-      ))}
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
@@ -143,13 +113,7 @@ export default function ProposalPage() {
                 <li key={v.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <VersionInfo v={v} abstract />
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {v.delete_pending && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">{v.delete_executes_at ? `Deletes on ${when(v.delete_executes_at)}` : "Delete requested"}</span>}
-                    {v.delete_rejected && <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">Delete request rejected</span>}
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
-                    {v.can_request_delete && (
-                      <button onClick={() => { setError(null); setAsking(v); }} disabled={busy === "ask"} aria-label={`Ask to delete v${v.version_no}`}
-                        className="btn-ghost-danger px-3 py-1.5">Ask to delete</button>
-                    )}
                   </div>
                 </li>
               ))}
@@ -157,12 +121,6 @@ export default function ProposalPage() {
           )}
         </section>
       </div>
-
-      <ReasonDialog open={!!asking} title={`Delete v${asking?.version_no}?`} confirm="Schedule delete" busy={busy === "ask"} error={error}
-        min={user.min_reason_chars} max={user.max_reason_chars} onCancel={() => setAsking(null)} onSubmit={askDelete}>
-        If your supervisor approves, the version and its PDF are deleted {user.deletion_days} days after that, and later versions are
-        renumbered. You can't take this back: only your supervisor can reject or cancel it. If the phase closes first, the version is kept as a final submission.
-      </ReasonDialog>
 
     </div>
   );

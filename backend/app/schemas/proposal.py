@@ -20,14 +20,6 @@ class ProposalVersionOut(BaseModel):
     size_bytes: int
     created_at: datetime
     is_latest: bool = False  # set by ProposalOut
-    # Set by the service, student page only: they can ask their supervisor to delete it / they asked and it still can be.
-    can_request_delete: bool = False
-    delete_pending: bool = False
-    delete_executes_at: datetime | None = None  # when the requested delete runs, if one is pending
-    delete_by_staff: bool = False  # scheduled by the supervisor, not asked by the student
-    delete_reason: str | None = None  # shown to the group while a delete is pending
-    delete_rejected: bool = False  # student page: the supervisor rejected their last request for it
-    can_schedule_delete: bool = False  # Theses page: the thesis's supervisor may delete it (never a final version)
 
     @computed_field
     @property
@@ -52,7 +44,6 @@ class ProposalOut(BaseModel):
     freeze_at: datetime | None = None
     max_upload_mb: int = settings.max_upload_mb
     max_abstract_chars: int = MAX_ABSTRACT_CHARS
-    supervisor_contact: str | None = None  # shown with a version the supervisor scheduled to delete: they can cancel it
 
     @model_validator(mode="after")
     def _mark_latest(self):

@@ -352,17 +352,6 @@ def test_p3_without_deferral_completes_the_thesis(client, db):
     assert client.get("/api/proposals/mine", headers=s).json()["upload_block"] == "Your thesis is complete"
 
 
-def test_deleting_the_p3_submission_undoes_a_deferral(client, db):
-    s, sup = p3_student(client, db, "s@x.com")
-    tid = mine(client, s)["thesis"]["id"]
-    vid = upload(client, s).json()["versions"][0]["id"]
-    assert client.put(f"/api/theses/{tid}/defer", headers=sup, json={"defer": True}).json()["defer_pending"] is True
-    client.post(f"/api/proposals/versions/{vid}/delete-request", headers=s, json=REASON)
-    assert client.post(f"/api/proposals/delete-requests/{vid}/approve", headers=sup).status_code == 204
-    assert run_deletions_due(db) == (0, 1)
-    assert [t["defer_pending"] for t in client.get("/api/theses", headers=sup).json()] == [False]
-
-
 def test_deferred_twice_freezes(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     s, sup = p3_student(client, db, "s@x.com")
@@ -430,7 +419,7 @@ def test_a_deletion_drops_requests_not_yet_accepted(client, db):
     assert fid not in [p["id"] for p in mine(client, s3)["faculty_choices"]]
     assert ask(client, s3, f).status_code == 422  # can't be picked while leaving
     assert answer(client, f, mine(client, s1)["thesis"]["id"]) == 409  # nor accept, which would keep the account
-    assert run_deletions_due(db) == (1, 0)
+    assert run_deletions_due(db) == 1
     assert (mine(client, s1)["thesis"], mine(client, s1)["can_form_group"]) == (None, True)
     t2 = mine(client, s2)["thesis"]
     assert (t2["status"], t2["co_supervisor"], mine(client, s2)["can_add_co_supervisor"]) == ("formed", None, True)
@@ -449,7 +438,7 @@ def test_a_frozen_group_takes_no_new_co_supervisor(client, db):
 
 
 def test_faculty_pages_use_the_same_queries_for_any_number_of_theses(client, db, timelines):
-    # The Theses page and the badge poll once ran several queries per thesis and per version.
+    # The Theses page and the badge poll once ran several queries per thesis.
     sup = auth(client, db, "many@x.com", Role.faculty)
     queries = [0]
     event.listen(engine, "before_cursor_execute", count := lambda *a: queries.__setitem__(0, queries[0] + 1))
@@ -460,8 +449,7 @@ def test_faculty_pages_use_the_same_queries_for_any_number_of_theses(client, db,
             form_group(client, db, h, sup)
             assert client.post("/api/theses/mine/register", headers=h).status_code == 200
             upload(client, h, content=PDF + b"a", title="a")
-            v = upload(client, h, content=PDF + b"b", title="b").json()["versions"][1]["id"]
-            assert client.post(f"/api/proposals/versions/{v}/delete-request", headers=h, json=REASON).status_code == 200
+            upload(client, h, content=PDF + b"b", title="b")
 
     def cost():
         out = []

@@ -22,7 +22,7 @@ from app.models.proposal import Proposal
 from app.models.thesis import FORMED, Thesis, ThesisStatus
 from app.models.user import Role, User
 from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
-from app.services import progress_service, proposal_service  # proposal_service imports us too; used at call time only
+from app.services import progress_service
 
 
 def faculty(db: Session) -> list[User]:
@@ -215,12 +215,10 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
         )
     )
     theses = list(db.scalars(query))
-    finals = proposal_service.final_ids(db, [v.id for t in theses for v in t.versions])
     standings = progress_service.standings(db, list({t.student for t in theses} - {None}))
     out = []
     for t in theses:
         row = ThesisDetailOut.model_validate(t)
-        proposal_service.staff_view(db, user, t, row.versions, finals, standings)
         row.is_supervisor = t.supervisor_id == user.id
         # Deferral is the supervisor's call for now (panel members later).
         row.can_defer = row.is_supervisor and (t.defer_pending or progress_service.can_defer(db, t, t.student and standings.get(t.student.id)))

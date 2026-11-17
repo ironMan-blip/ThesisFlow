@@ -6,7 +6,6 @@ from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.user import Role, User
 from app.schemas.proposal import ProposalOut
-from app.schemas.user import DeletionReasonIn
 from app.services import proposal_service
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
@@ -32,33 +31,3 @@ def upload(
 def download(version_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     path, filename = proposal_service.get_version_file(db, user, version_id)
     return FileResponse(path, media_type="application/pdf", filename=filename)
-
-
-@router.post("/versions/{version_id}/delete-request", response_model=ProposalOut)
-def request_delete(
-    version_id: int, data: DeletionReasonIn, user: User = Depends(require_roles(Role.student)), db: Session = Depends(get_db)
-):
-    # Versions are kept (SRS F11): a delete needs a reason and the supervisor's approval, then waits 7 days, and
-    # only the supervisor can cancel it.
-    return proposal_service.request_delete(db, user, version_id, data.reason)
-
-
-@router.post("/versions/{version_id}/deletion", status_code=status.HTTP_204_NO_CONTENT)
-def schedule_delete(
-    version_id: int, data: DeletionReasonIn, user: User = Depends(require_roles(Role.faculty)), db: Session = Depends(get_db),
-):
-    # The thesis's supervisor only: approved at once, runs in 7 days, never a final version.
-    proposal_service.schedule_delete(db, user, version_id, data.reason)
-
-
-# The thesis's supervisor decides: approve or reject a student's request, or cancel any delete before it runs.
-@router.post("/delete-requests/{version_id}/approve", status_code=status.HTTP_204_NO_CONTENT)
-def approve_delete(version_id: int, user: User = Depends(require_roles(Role.faculty)), db: Session = Depends(get_db)):
-    proposal_service.approve_delete(db, user, version_id)
-
-
-# Approved deletes run by themselves once their wait is over (proposal_service.run_due_deletions).
-# DELETE rejects a request waiting for approval, or cancels an approved one.
-@router.delete("/delete-requests/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
-def cancel_delete(version_id: int, user: User = Depends(require_roles(Role.faculty)), db: Session = Depends(get_db)):
-    proposal_service.cancel_delete(db, user, version_id)

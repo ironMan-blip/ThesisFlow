@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models.thesis import UNREGISTERED, ThesisStatus
 from app.models.user import DELETION_DELAY, REVIEW_WINDOW, Role, User
-from app.services import group_service, progress_service, proposal_service, thesis_service
+from app.services import group_service, progress_service, thesis_service
 
 log = logging.getLogger(__name__)
 
@@ -114,13 +114,12 @@ def _check_deletable(db: Session, user: User) -> None:
 
 
 def pending_counts(db: Session, user: User) -> dict[str, int]:
-    # Badge counts keyed by tool: the coordinator decides account requests, faculty answer supervision and delete requests.
+    # Badge counts keyed by tool: the coordinator decides account requests, faculty answer supervision requests.
     if user.role == Role.faculty:
-        # Supervision requests plus students' version delete requests waiting for this supervisor.
-        return {"theses": thesis_service.count_requests(db, user) + proposal_service.count_delete_requests(db, user)}
+        return {"theses": thesis_service.count_requests(db, user)}
     if user.role == Role.student:
-        counts = {"proposal": proposal_service.count_staff_deletes(db, user), "thesis": group_service.count_invitations(db, user)}
-        return {tool: n for tool, n in counts.items() if n}
+        n = group_service.count_invitations(db, user)
+        return {"thesis": n} if n else {}
     # Polled every 10s by the UI, so count in SQL instead of loading the rows.
     count = lambda q: db.scalar(q.with_only_columns(func.count()))
     return {

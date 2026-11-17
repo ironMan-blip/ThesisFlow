@@ -250,7 +250,7 @@ def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     assert [(p["email"], p["deletion_reason"]) for p in pending] == [("s@b.com", REASON["reason"])]
     uid = pending[0]["id"]
     assert client.get("/api/auth/me/counts", headers=coord).json()["deletion_requests"] == 1
-    assert run_deletions_due(db) == (0, 0)  # 7 days alone do nothing without approval
+    assert run_deletions_due(db) == 0  # 7 days alone do nothing without approval
     assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=student).status_code == 403
     approved = client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord)
     assert approved.status_code == 200 and approved.json()["deletion_executes_at"] is not None
@@ -259,7 +259,7 @@ def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     assert account_service.run_due_deletions(db) == 0  # approved, but the 7 days aren't over
     assert client.get("/api/auth/me", headers=student).status_code == 200  # still usable while waiting
 
-    assert run_deletions_due(db) == (1, 0)
+    assert run_deletions_due(db) == 1
     assert db.get(User, uid) is None
     assert pdfs[0].exists()  # the thesis and its versions are kept as an archive
     assert client.get("/api/auth/me", headers=student).status_code == 401
@@ -278,7 +278,7 @@ def test_only_the_coordinator_cancels_a_deletion(client, db):
     assert r.status_code == 200 and (r.json()["deletion_pending"], r.json()["deletion_reason"]) == (False, None)
     assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
     assert client.delete(f"/api/auth/deletion-requests/{uid}", headers=coord).status_code == 404
-    assert run_deletions_due(db) == (0, 0) and db.get(User, uid) is not None
+    assert run_deletions_due(db) == 0 and db.get(User, uid) is not None
     # The user may ask again.
     assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 200
 
@@ -316,7 +316,7 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     assert mine["deletion_executes_at"] is not None
     assert schedule(by_email["s@b.com"]).status_code == 409  # already scheduled
     assert db.get(User, by_email["s@b.com"]) is not None  # nothing happens before the 7 days
-    assert run_deletions_due(db) == (1, 0)
+    assert run_deletions_due(db) == 1
     assert db.get(User, by_email["s@b.com"]) is None
     assert len(list(tmp_path.rglob("*.pdf"))) == 1  # versions are never lost
     assert schedule(by_email[supervisor_email]).status_code == 200

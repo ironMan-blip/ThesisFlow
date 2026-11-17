@@ -50,7 +50,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Real PDF check (by content: starts with `%PDF-`, `%%EOF` in the last 1 KB) and size limit (`MAX_UPLOAD_MB`, 20 MB default; oversized requests get `413` early).
 - Numbered versions (v1, v2, …), newest first, with download links.
 - Identical re-upload reuses the existing version instead of storing a copy.
-- Every past version is kept (SRS F11). A student can ask to delete one, with a reason; if the coordinator approves, it runs 7 days later unless they cancel it. See below.
+- Every past version is kept (SRS F11). Nobody can delete a version: not the student, the supervisor or the coordinator.
 - Group members and coordinator can view and download versions.
 - Uploads on one thesis are locked so version numbers never clash.
 
@@ -213,9 +213,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Only the student uploads. The group (the student, the supervisor, and the co-supervisor once joined) can view and download its versions; the coordinator can't.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
-- Versions are kept (SRS F11). A student can **ask to delete** a version of their current phase while uploads are open, writing a reason in a dialog. The thesis's **supervisor** approves or rejects it on **Theses** (with the reason). After approval the delete runs **7 days** later: the version and its PDF go and later versions are renumbered. Within those 7 days only the supervisor can cancel it. Approving is refused once the phase has closed, and if the phase closes during the wait, the version is the final submission and is kept. While a delete is pending, uploading the same file again stores a new version instead of reusing the one being deleted.
-- Only the thesis's **supervisor** (not the co-supervisor, not the coordinator) can delete a version directly from **Theses**, with a reason. It counts as approved, so it runs **7 days** later, and the supervisor can cancel it until then. The student sees the date, the reason and the supervisor's email to contact. They can never delete a phase's **final version** (the one that counts as the submission: a closed phase's final upload, or the open phase's latest); if a version becomes final during the wait, the delete is dropped.
-- The student is told: a badge on **Proposal**, and a message there with the date, the reason and the coordinator's email to contact within the 7 days if there is a problem. A request the coordinator rejects shows "Delete request rejected" on that version.
+- Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions; re-uploading one unchanged still works at the cap.
 - Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
 
@@ -301,7 +299,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 
 ### Migrations
 
-`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes → co-supervisors added after a group forms.
+`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes → co-supervisors added after a group forms → version deletes removed.
 
 ## Project layout (MVC)
 
@@ -361,9 +359,6 @@ docs/           SRS, class diagram (draw.io source + exports), contribution trac
 | PUT | `/api/theses/{id}/defer` | the thesis's supervisor |
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
-| POST | `/api/proposals/versions/{id}/delete-request` (`{reason}`) | student (own) |
-| POST | `/api/proposals/versions/{id}/deletion` (`{reason}`: approved at once, runs in 7 days, never a final version) | the thesis's supervisor |
-| POST / DELETE | `/api/proposals/delete-requests/{id}[/approve]` (approve, reject or cancel) | the thesis's supervisor |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisor and joined co-supervisor |
 
 Full request/response shapes are at http://localhost:5174/docs.
