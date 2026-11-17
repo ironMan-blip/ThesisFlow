@@ -94,6 +94,7 @@ git clone https://github.com/ironMan-blip/ThesisFlow.git && cd ThesisFlow
 cp .env.example .env                              # required: fill in every value
 docker compose up --build                         # starts db, backend and frontend
 docker compose exec backend python -m app.seed    # optional: fills the dev DB with test data (see app/seed.py)
+docker compose exec backend python -m app.recheck_uploads  # once, after updating: re-checks PDFs stored by older versions
 ```
 
 On start, the backend runs the database migrations (`alembic upgrade head`) and creates or updates the coordinator account.

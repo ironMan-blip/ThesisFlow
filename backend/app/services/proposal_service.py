@@ -398,3 +398,24 @@ def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, st
     if not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File is missing on the server")
     return path, version.original_filename
+
+
+def recheck_stored_files(db: Session) -> tuple[int, list[tuple[int, str]]]:
+    """Run every stored version through the upload check, which rewrites files that pass (see _check_pdf).
+    For files stored before that rewrite existed, or under an older check. Returns (rewritten, [(version id, why)]).
+    A file that fails is kept untouched: versions are never deleted (SRS F11), so what to do is the coordinator's call."""
+    rewritten, failed = 0, []
+    for version in db.scalars(select(ProposalVersion).order_by(ProposalVersion.id)):
+        path = _upload_dir() / version.stored_filename
+        if not path.is_file():
+            failed.append((version.id, "File is missing on the server"))
+            continue
+        try:
+            _check_pdf(path)
+        except HTTPException as exc:
+            failed.append((version.id, exc.detail))
+            continue
+        version.size_bytes = path.stat().st_size
+        db.commit()  # per file: the file on disk has already changed
+        rewritten += 1
+    return rewritten, failed

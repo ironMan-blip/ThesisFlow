@@ -5,11 +5,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pypdf import PdfReader
 from pypdf.generic import DictionaryObject, NameObject, TextStringObject
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app import virus_scan
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
+from app.models.proposal import ProposalVersion
 from app.models.user import Role
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from app.services import proposal_service
@@ -354,3 +355,23 @@ def test_infected_uploads_are_refused_and_uploads_pause_without_a_scanner(client
     assert upload(client, h).status_code == 503
     assert client.get("/api/proposals/mine", headers=h).json()["versions"] == []
     assert list((tmp_path / "proposals").iterdir()) == []  # neither file was kept
+
+
+def test_recheck_rewrites_old_files_and_keeps_failures(client, db, tmp_path):
+    # Files stored before uploads were rewritten get the same rewrite; a file that now fails is kept, only reported.
+    h = student(client, db, "old@x.com")
+    upload(client, h, content=_tagged("ok"))
+    upload(client, h, content=_tagged("bad"))
+    good, bad = sorted(db.scalars(select(ProposalVersion)), key=lambda v: v.version_no)
+    hidden = b"99 0 obj\n<< /S /JavaScript /JS (app.alert(1)) >>\nendobj\n"
+    header, rest = PDF.split(b"\n", 1)
+    old = header + b"\n" + hidden + rest  # what an upload stored before the rewrite existed
+    (tmp_path / "proposals" / good.stored_filename).write_bytes(old)
+    linked = make_pdf(lambda w: _open_action(w, {"/S": "/Launch", "/F": "calc.exe"}))
+    (tmp_path / "proposals" / bad.stored_filename).write_bytes(linked)
+
+    rewritten, failed = proposal_service.recheck_stored_files(db)
+    assert rewritten == 1 and [vid for vid, _ in failed] == [bad.id]
+    data = (tmp_path / "proposals" / good.stored_filename).read_bytes()
+    assert b"app.alert" not in data and db.get(ProposalVersion, good.id).size_bytes == len(data)
+    assert (tmp_path / "proposals" / bad.stored_filename).read_bytes() == linked  # never deleted (SRS F11)
