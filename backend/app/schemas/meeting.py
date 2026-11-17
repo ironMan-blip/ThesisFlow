@@ -1,0 +1,82 @@
+from datetime import datetime
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.thesis import PersonOut, ThesisOut
+
+MAX_NOTES_CHARS = 5000
+MAX_TASKS = 20
+MAX_TASK_CHARS = 500
+
+
+def _text(v: str, limit: int) -> str:
+    v = v.strip()
+    if not v:
+        raise ValueError("can't be empty")
+    if len(v) > limit:
+        raise ValueError(f"must be at most {limit} characters")
+    return v
+
+
+class TaskIn(BaseModel):
+    # Set when editing a meeting: keeps that task, including whether it is done. Omit it for a new task.
+    id: int | None = None
+    description: str
+    due_at: AwareDatetime | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, v: str) -> str:
+        return _text(v, MAX_TASK_CHARS)
+
+
+class MeetingIn(BaseModel):
+    held_at: AwareDatetime
+    notes: str
+    supervisor_attended: bool = True
+    student_attended: bool = True
+    co_supervisor_attended: bool = False
+    tasks: list[TaskIn] = Field(default_factory=list, max_length=MAX_TASKS)
+
+    @field_validator("notes")
+    @classmethod
+    def _notes(cls, v: str) -> str:
+        return _text(v, MAX_NOTES_CHARS)
+
+
+class TaskDoneIn(BaseModel):
+    done: bool
+
+
+class TaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    description: str
+    due_at: datetime | None
+    done: bool
+
+
+class MeetingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    thesis_id: int
+    held_at: datetime
+    notes: str
+    supervisor_attended: bool
+    student_attended: bool
+    co_supervisor_attended: bool
+    recorded_by: PersonOut | None  # None once that account is deleted
+    tasks: list[TaskOut]
+
+
+class MeetingListOut(BaseModel):
+    thesis: ThesisOut | None  # None for a student who has no thesis group yet
+    meetings: list[MeetingOut]  # newest first
+    can_edit: bool  # the thesis's supervisor or joined co-supervisor, while the group is formed or active
+    log_block: str | None = None  # why they can't log right now; None means they can (or aren't allowed to anyway)
+    # Input limits for the form, same values MeetingIn enforces.
+    max_notes_chars: int = MAX_NOTES_CHARS
+    max_tasks: int = MAX_TASKS
+    max_task_chars: int = MAX_TASK_CHARS

@@ -17,6 +17,10 @@ export const TOOLS = {
     to: "/deadlines", title: "Deadlines", text: "P1, P2 and P3 due dates, grace time and countdowns.",
     icon: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   },
+  meetings: {
+    to: "/meetings", title: "Meetings", text: "Meeting notes, who came and the tasks agreed with your supervisor.",
+    icon: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
+  },
   accounts: {
     to: "/accounts", title: "Accounts", text: "View every account and schedule one for deletion if needed.",
     icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M17 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3" /></>,

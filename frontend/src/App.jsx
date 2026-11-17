@@ -11,6 +11,7 @@ import { DeletionRequestsPage, RegistrationRequestsPage, RestartRequestsPage } f
 import ThesesPage from "./pages/ThesesPage";
 import ThesisPage from "./pages/ThesisPage";
 import GroupPage from "./pages/GroupPage";
+import MeetingsPage from "./pages/MeetingsPage";
 import TeammatesPage from "./pages/TeammatesPage";
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/thesis" element={<ThesisPage />} />
         <Route path="/theses" element={<ThesesPage />} />
         <Route path="/proposal" element={<ProposalPage />} />
+        <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/deadlines" element={<DeadlinePage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/registration-requests" element={<RegistrationRequestsPage />} />
