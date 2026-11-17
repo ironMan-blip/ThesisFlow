@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from pypdf.generic import DictionaryObject, NameObject, TextStringObject
+from sqlalchemy import update
 
 from app import virus_scan
 from app.config import settings
@@ -195,6 +196,23 @@ def test_one_title_change_needs_the_supervisors_ok_within_3_days(client, db):
     versions = _upload_as(client, h, "b", "New abstract", content=PDF + b"2").json()["versions"]
     # Older versions keep the title they were uploaded with; the first one after the change is marked.
     assert [(v["title"], v["title_changed"], v["abstract_changed"]) for v in versions] == [("b", True, True), ("a", False, False)]
+
+
+def test_a_dot_only_file_name_falls_back(client, db, timelines):
+    h = student(client, db, "s@x.com")
+    assert upload(client, h, name="..").json()["versions"][0]["original_filename"] == "proposal.pdf"
+
+
+def test_a_title_change_cant_be_approved_once_the_thesis_isnt_active(client, db, timelines):
+    from app.models.thesis import Thesis, ThesisStatus
+    h, sup = supervised_student(client, db, "s@x.com")
+    _upload_as(client, h, "a")
+    change = _ask_title(client, h, "b").json()["title_change"]
+    db.execute(update(Thesis).values(status=ThesisStatus.dropped))
+    db.flush()
+    url = f"/api/proposals/title-changes/{change['id']}"
+    assert client.post(f"{url}/approve", headers=sup).status_code == 409
+    assert client.delete(url, headers=sup).status_code == 204  # rejecting still works
 
 
 def test_line_endings_dont_break_the_exact_title_match(client, db, timelines):

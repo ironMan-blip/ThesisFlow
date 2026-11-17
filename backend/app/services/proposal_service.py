@@ -251,9 +251,11 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             db.flush()
         gm = progress_service.group_milestone(db, user, create=True)
         last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.proposal_id == proposal.id))
+        name = Path(file.filename or "").name[:255]
         fields = dict(
             phase=user.phase,
-            original_filename=Path(file.filename or "proposal.pdf").name[:255],
+            # "..", "." or only dots and spaces is no file name: fall back to a plain one.
+            original_filename=name if name.strip(". ") else "proposal.pdf",
             uploaded_by_id=user.id,
         )
         # Same PDF with a different title or abstract is a real new version. Only this phase's uploads are
@@ -342,6 +344,9 @@ def decide_title_change(db: Session, supervisor: User, change_id: int, approve: 
         )
     if change.status != "pending":
         raise HTTPException(status.HTTP_409_CONFLICT, "This request is already decided")
+    if approve and thesis.status != ThesisStatus.active:
+        # Same rule as asking: a dropped or completed thesis keeps its title. Rejecting still clears the request.
+        raise HTTPException(status.HTTP_409_CONFLICT, "Only an active thesis can change its title and abstract")
     change.decided_at, change.approved = datetime.now(timezone.utc), approve
     if approve:
         thesis.title, thesis.abstract = change.title, change.abstract
