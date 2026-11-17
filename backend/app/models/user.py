@@ -21,6 +21,7 @@ class Role(str, enum.Enum):
 ROLE_TOOLS = {
     Role.student: ["thesis", "proposal", "deadlines", "account"],
     Role.faculty: ["theses", "deadlines", "account"],
+    Role.student: ["group", "teammates", "thesis", "proposal", "deadlines", "account"],
     Role.coordinator: ["theses", "deadlines", "accounts", "registration_requests", "deletion_requests", "restart_requests"],
 }
 

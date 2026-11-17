@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
-
+from app.services import group_service, progress_service, thesis_service   # add group_service
 from app.models.thesis import ThesisStatus
 from app.models.user import REVIEW_WINDOW, Role, User
 from app.services import progress_service, thesis_service

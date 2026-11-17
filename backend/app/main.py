@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+from backend.app.controllers import group_controller
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -65,6 +66,7 @@ app.include_router(account_controller.router)
 app.include_router(proposal_controller.router)
 app.include_router(milestone_controller.router)
 app.include_router(thesis_controller.router)
+app.include_router(group_controller.router)
 
 
 @app.exception_handler(RequestValidationError)

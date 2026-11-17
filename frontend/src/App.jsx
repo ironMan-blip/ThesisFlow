@@ -10,6 +10,8 @@ import ProposalPage from "./pages/ProposalPage";
 import { DeletionRequestsPage, RegistrationRequestsPage, RestartRequestsPage } from "./pages/RequestsPage";
 import ThesesPage from "./pages/ThesesPage";
 import ThesisPage from "./pages/ThesisPage";
+import GroupPage from "./pages/GroupPage";
+import TeammatesPage from "./pages/TeammatesPage";
 
 export default function App() {
   return (
@@ -28,6 +30,8 @@ export default function App() {
         <Route path="/restart-requests" element={<RestartRequestsPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<NotFoundPage />} />
+        <Route path="/group" element={<GroupPage />} />
+        <Route path="/teammates" element={<TeammatesPage />} />
       </Route>
     </Routes>
   );
