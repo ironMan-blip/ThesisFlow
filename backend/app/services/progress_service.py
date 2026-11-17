@@ -6,8 +6,9 @@
 - Grace ends with no upload: the group is frozen, and its members can ask the coordinator to restart at P1.
   An approved restart starts that student fresh (no group, no thesis) at the next semester rollover.
 - After P3 the supervisor may defer the thesis: once means P3 again next semester, twice cancels the thesis.
-- The semester rollover (semester feature) calls advance_phases to move every group on. Deadlines are set by hand
-  and only tagged with their semester: the rollover keeps them, since a semester's deadlines fall in the next one.
+- The semester rollover (semester feature) calls advance_phases to move every group on. Deadlines are set by hand,
+  one per phase and semester: a semester's deadlines fall in the next one, so the rollover keeps them, and each group
+  works to the deadline of its own semester (the one it registered for P1 in, or moved into its phase in).
 """
 
 import secrets
@@ -35,7 +36,7 @@ REGISTRATION_WINDOW = timedelta(weeks=1)
 class Standing:
     """Where a student stands in their current phase this semester."""
 
-    template: MilestoneTemplate | None  # this semester's deadline for their phase
+    template: MilestoneTemplate | None  # the deadline for their phase from their group's deadline semester
     group_milestone: GroupMilestone | None  # their group's own milestone this semester; None until they submit
     frozen_reason: str | None = None  # set when the account is frozen
 
@@ -116,6 +117,17 @@ def current_semester_id(db: Session) -> int | None:
     return db.scalar(select(func.max(Semester.id)))
 
 
+def deadline_semester_id(db: Session, thesis: Thesis) -> int | None:
+    """The semester whose deadline this group works to in its phase: pinned while it still works to an earlier one."""
+    return thesis.deadline_semester_id or current_semester_id(db)
+
+
+def _template(db: Session, thesis: Thesis | None) -> MilestoneTemplate | None:
+    if thesis is None or thesis.phase is None:
+        return None
+    return db.get(MilestoneTemplate, (thesis.phase, deadline_semester_id(db, thesis)))
+
+
 def group_milestone(db: Session, user: User, create: bool = False) -> GroupMilestone | None:
     """The student's group milestone for its current phase this semester. Earlier semesters (a deferred P3) don't count."""
     return _milestone(db, user.thesis, create) if user.phase else None
@@ -173,31 +185,36 @@ def _missed(thesis: Thesis | None, s: Standing, now: datetime) -> bool:
 
 
 def standing(db: Session, user: User, now: datetime | None = None) -> Standing:
-    template = db.get(MilestoneTemplate, user.phase) if user.phase else None
+    template = _template(db, user.thesis) if user.phase else None
     return _standing(user, template, group_milestone(db, user), now or _now())
 
 
 def thesis_standing(db: Session, thesis: Thesis, now: datetime | None = None) -> Standing:
     """The group's own standing: its deadline, submission and freeze. Members' restart requests don't count here."""
-    return _thesis_standing(thesis, db.get(MilestoneTemplate, thesis.phase), _milestone(db, thesis), now or _now())
+    return _thesis_standing(thesis, _template(db, thesis), _milestone(db, thesis), now or _now())
 
 
 def standings(db: Session, students: list[User]) -> dict[int, Standing]:
     """standing() for many students in three queries, not three per student. For pages that list or count many."""
-    templates = {t.phase: t for t in db.scalars(select(MilestoneTemplate))}
+    templates = {(t.phase, t.semester_id): t for t in db.scalars(select(MilestoneTemplate))}
+    current = current_semester_id(db)
     live = [u for u in students if u.thesis_id is not None and u.phase is not None]
     milestones = {
         (g.thesis_id, g.phase): g
         for g in db.scalars(
             select(GroupMilestone).where(
-                GroupMilestone.semester_id == current_semester_id(db),
+                GroupMilestone.semester_id == current,
                 GroupMilestone.thesis_id.in_({u.thesis_id for u in live}),
             )
         )
     } if live else {}
     now = _now()
     return {
-        u.id: _standing(u, templates.get(u.phase), milestones.get((u.thesis_id, u.phase)), now) for u in students
+        u.id: _standing(
+            u, u.phase and templates.get((u.phase, u.thesis.deadline_semester_id or current)),
+            milestones.get((u.thesis_id, u.phase)), now,
+        )
+        for u in students
     }
 
 
@@ -234,7 +251,7 @@ def next_semester(db: Session) -> dict[str, int]:
     """Coordinator: end the semester. Moves students on, applies P3 deferrals and saves freezes. Deadlines are
     independent of semesters: they are kept, and a group still working to an open deadline carries on with it."""
     now = _now()
-    templates = {t.phase: t for t in db.scalars(select(MilestoneTemplate).with_for_update())}
+    db.scalars(select(MilestoneTemplate).with_for_update()).all()  # no deadline edits mid-rollover
     extended = db.scalars(
         select(GroupMilestone).where(
             GroupMilestone.semester_id == current_semester_id(db), GroupMilestone.extended_due_at.is_not(None)
@@ -242,7 +259,10 @@ def next_semester(db: Session) -> dict[str, int]:
     )
     # shortcut: an extension lives on this semester's group milestone and isn't carried over, so wait for it;
     # carry extended_due_at to the new semester's milestone if extensions often outlast a semester.
-    still_open = {g.phase.value for g in extended if g.phase in templates and now <= Standing(templates[g.phase], g).closes_at}
+    still_open = {
+        g.phase.value for g in extended
+        if (closes := Standing(_template(db, db.get(Thesis, g.thesis_id)), g).closes_at) and now <= closes
+    }
     if still_open:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -261,6 +281,8 @@ def next_semester(db: Session) -> dict[str, int]:
         if not (s := thesis_standing(db, t, now)).frozen and s.submitted_at is None and s.closes_at and now <= s.closes_at
     ]
     db.execute(update(Thesis).where(Thesis.id.not_in(keep)).values(p1_registered=False))
+    # Unregistered P1 groups get the deadline of the semester they register in.
+    db.execute(update(Thesis).where(Thesis.id.not_in(keep), Thesis.phase == Phase.P1).values(deadline_semester_id=None))
     db.add(Semester(started_at=now))  # opens P1 registration for the new semester
     db.commit()
     return result
@@ -277,8 +299,12 @@ def advance_phases(db: Session, now: datetime | None = None) -> dict[str, int]:
     now = now or _now()
     result = {"advanced": 0, "completed": 0, "deferred": 0, "cancelled": 0, "frozen": 0}
     active = select(Thesis).where(Thesis.status == ThesisStatus.active, Thesis.frozen_at.is_(None))
+    current = current_semester_id(db)
     for thesis in db.scalars(active.order_by(Thesis.id).with_for_update()).all():
         s = thesis_standing(db, thesis, now)
+        # A group that stays in its phase keeps working to this semester's deadline after the rollover; one that
+        # moves on (or does P3 again) gets the new semester's (None).
+        thesis.deadline_semester_id = thesis.deadline_semester_id or current
         if s.frozen:
             thesis.frozen_at = now
             _withdraw_co_supervisor(thesis)
@@ -286,7 +312,7 @@ def advance_phases(db: Session, now: datetime | None = None) -> dict[str, int]:
         elif s.submitted_at is None:
             continue  # nothing due this semester: same phase again
         elif thesis.phase in NEXT_PHASE:
-            thesis.phase, thesis.phase_started_at = NEXT_PHASE[thesis.phase], now
+            thesis.phase, thesis.phase_started_at, thesis.deadline_semester_id = NEXT_PHASE[thesis.phase], now, None
             result["advanced"] += 1
         elif not thesis.defer_pending:
             thesis.status = ThesisStatus.completed
@@ -299,7 +325,8 @@ def advance_phases(db: Session, now: datetime | None = None) -> dict[str, int]:
                     m.thesis = None  # cancelled: kept as an archive, and the members can form a new thesis
                 result["cancelled"] += 1
             else:
-                thesis.phase_started_at = now  # P3 again; last semester's upload no longer counts
+                # P3 again; last semester's upload no longer counts
+                thesis.phase_started_at, thesis.deadline_semester_id = now, None
                 result["deferred"] += 1
     db.flush()
     return result

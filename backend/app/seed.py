@@ -107,7 +107,7 @@ def main():
         semester = db.get(Semester, progress_service.current_semester_id(db))
         due = semester.started_at + timedelta(weeks=17, days=3)
         for phase in (Phase.P1, Phase.P2, Phase.P3):
-            if db.get(MilestoneTemplate, phase) is None:
+            if db.get(MilestoneTemplate, (phase, semester.id)) is None:
                 db.add(MilestoneTemplate(phase=phase, due_at=due, grace_days=3, penalty_per_day=5, semester_id=semester.id))
 
         fac = {ini: user(name, Role.faculty, email, idn, initials=ini) for email, idn, name, ini in FACULTY}

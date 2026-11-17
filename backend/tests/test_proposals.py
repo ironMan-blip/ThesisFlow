@@ -11,9 +11,10 @@ from app import virus_scan
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.proposal import ProposalVersion
-from app.models.user import Role
+from app.models.user import Role, User
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from app.services import proposal_service
+from app.services.progress_service import current_semester_id
 from tests.helpers import ask_supervisor, PDF, REASON, make_pdf, auth, me, student, supervised_student, upload
 
 
@@ -239,7 +240,7 @@ def test_line_endings_dont_break_the_exact_title_match(client, db, timelines):
 
 def test_upload_needs_the_phase_timeline(client, db):
     h = student(client, db, "s@x.com")
-    db.delete(db.get(MilestoneTemplate, Phase.P1))
+    db.delete(db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))))
     db.flush()
     mine = client.get("/api/proposals/mine", headers=h).json()
     assert mine["upload_block"] == "The P1 timeline is not set yet"
@@ -249,7 +250,7 @@ def test_upload_needs_the_phase_timeline(client, db):
 
 def test_grace_period_warns_and_then_uploads_close(client, db):
     h = student(client, db, "s@x.com")
-    p1 = db.get(MilestoneTemplate, Phase.P1)
+    p1 = db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db)))
     p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 1  # past due, still in grace
     db.flush()
     mine = client.get("/api/proposals/mine", headers=h).json()
@@ -373,3 +374,19 @@ def test_recheck_rewrites_old_files_and_keeps_failures(client, db, tmp_path):
     data = (tmp_path / "proposals" / good.stored_filename).read_bytes()
     assert b"app.alert" not in data and db.get(ProposalVersion, good.id).size_bytes == len(data)
     assert (tmp_path / "proposals" / bad.stored_filename).read_bytes() == linked  # never deleted (SRS F11)
+
+
+def test_a_frozen_group_cannot_change_its_title(client, db):
+    h, sup = supervised_student(client, db, "s@x.com")
+    assert upload(client, h).status_code == 201
+    res = client.post("/api/proposals/mine/title-change", headers=h, json={"title": "New", "abstract": "New one"})
+    assert res.status_code == 201
+    change_id = res.json()["title_change"]["id"]
+    thesis = db.get(User, me(client, h)["id"]).thesis
+    thesis.frozen_at = datetime.now(timezone.utc)
+    db.flush()
+    assert client.post(f"/api/proposals/title-changes/{change_id}/approve", headers=sup).status_code == 409
+    assert client.get("/api/proposals/mine", headers=h).json()["can_request_title_change"] is False
+    assert client.delete(f"/api/proposals/title-changes/{change_id}", headers=sup).status_code == 204  # rejecting still works
+    res = client.post("/api/proposals/mine/title-change", headers=h, json={"title": "New", "abstract": "New one"})
+    assert (res.status_code, res.json()["detail"]) == (409, "Your group is frozen, so it can't change its title and abstract")

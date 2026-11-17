@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from app import rate_limit
-from app.config import settings
+from app.config import Settings, settings
 from app.database import get_db
 from app.main import app
 from app.models.user import Role, User
@@ -571,3 +571,10 @@ def test_deletion_request_for_a_vanished_account_is_a_401(client, db):
     with pytest.raises(HTTPException) as exc:
         account_service.request_deletion(db, User(id=me_id), REASON["reason"])
     assert exc.value.status_code == 401
+
+
+@pytest.mark.parametrize("bad", ["1234567", "123456789", "abcdefgh", "１２３４５６７８"])
+def test_coordinator_id_must_be_8_digits(bad):
+    # The login form only takes 8 digits, so any other coordinator ID would lock them out.
+    with pytest.raises(ValueError, match="ADMIN_ID_NUMBER must be exactly 8 digits"):
+        Settings(admin_id_number=bad)

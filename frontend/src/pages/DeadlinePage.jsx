@@ -34,6 +34,7 @@ export default function DeadlinePage() {
   const [data, setData] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [offset, setOffset] = useState(0); // server clock minus browser clock
+  const [semesterId, setSemesterId] = useState(null); // coordinator: whose deadlines to show; null = current semester
   const [now, setNow] = useState(Date.now());
   const { busy: saving, error, notice, setError, run, clear } = useAction(); // busy key is the phase being saved
 
@@ -42,7 +43,10 @@ export default function DeadlinePage() {
     setOffset(new Date(res.now) - Date.now());
   }, []);
 
-  const load = useCallback(() => api("/milestones").then(show).catch((err) => setError(err.message)), [show, setError]);
+  const load = useCallback(
+    () => api(semesterId ? `/milestones?semester_id=${semesterId}` : "/milestones").then(show).catch((err) => setError(err.message)),
+    [semesterId, show, setError],
+  );
 
   useEffect(() => {
     load();
@@ -66,7 +70,7 @@ export default function DeadlinePage() {
             due_local: `${f.get("due_date")}T${f.get("due_time")}`, // Dhaka time; the server converts it
             grace_days: Number(f.get("grace_days")),
             penalty_per_day: Number(f.get("penalty_per_day")),
-            semester_id: Number(f.get("semester_id")),
+            semester_id: data.semester_id,
           },
         }),
       );
@@ -100,6 +104,7 @@ export default function DeadlinePage() {
     setConfirming(false);
     run("semester", async () => {
       const r = await api("/milestones/next-semester", { method: "POST" });
+      setSemesterId(null);
       show(await api("/milestones"));
       return `New semester started. Thesis groups: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.cancelled} cancelled, ${r.frozen} frozen. Students restarted at P1: ${r.restarted}. Set the new deadlines below.`;
     });
@@ -119,7 +124,8 @@ export default function DeadlinePage() {
             <p className="mt-1 text-sm text-zinc-600">
               Thesis groups that submitted move to their next phase, P3 theses are completed or deferred (a second deferral
               cancels the thesis), groups that missed a closed deadline are frozen, and approved restarts start fresh.
-              Deadlines are kept: groups still working to an open deadline carry on with it. Set and tag new deadlines below.
+              Deadlines are kept: groups still working to last semester's deadline carry on with it. Set the new
+              semester's deadlines below.
               P1 registration then opens for one week, unless you set other dates below.
             </p>
           </div>
@@ -163,6 +169,21 @@ export default function DeadlinePage() {
         </section>
       )}
 
+      {data?.can_edit && (
+        <section className="card flex flex-wrap items-end justify-between gap-4 p-6">
+          <p className="max-w-prose text-sm text-zinc-600">
+            Each semester has its own deadlines. Groups work to the deadlines of the semester they registered for P1
+            in, or moved into their phase in, even after the next semester starts.
+          </p>
+          <label className="label">
+            Deadlines for
+            <select value={data.semester_id ?? ""} onChange={(e) => setSemesterId(Number(e.target.value))} className="input">
+              {data.semesters.map((s, i) => <option key={s.id} value={s.id}>{s.name}{i === 0 ? " (current)" : ""}</option>)}
+            </select>
+          </label>
+        </section>
+      )}
+
       {!data ? (
         <Skeleton rows={3} row="h-36 rounded-xl" className="space-y-4" />
       ) : (
@@ -170,7 +191,7 @@ export default function DeadlinePage() {
           {data.milestones.map((m) => {
             const [label, tone, dot] = STATUS[m.status];
             return (
-              <li key={m.phase} className={`card relative p-6 ${m.mine ? "ring-2 ring-teal-600/40" : ""}`}>
+              <li key={`${data.semester_id}-${m.phase}`} className={`card relative p-6 ${m.mine ? "ring-2 ring-teal-600/40" : ""}`}>
                 <span className={`absolute -left-[31px] top-8 size-3 rounded-full ring-4 ring-zinc-50 ${dot}`} aria-hidden="true" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -210,13 +231,7 @@ export default function DeadlinePage() {
                 )}
 
                 {data.can_edit && (
-                  <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
-                    <label className="label">
-                      For semester
-                      <select name="semester_id" required defaultValue={m.semester_id ?? data.semesters[0]?.id} className="input">
-                        {data.semesters.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </label>
+                  <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-4">
                     <label className="label">
                       Due date
                       <input name="due_date" type="date" required defaultValue={m.due_date ?? ""} className="input" />
@@ -233,7 +248,7 @@ export default function DeadlinePage() {
                       Penalty (%/day)
                       <input name="penalty_per_day" type="number" min={0} max={data.max_penalty_per_day} required defaultValue={m.penalty_per_day} className="input" />
                     </label>
-                    <button disabled={saving === m.phase} className="btn-primary sm:col-span-5 sm:justify-self-end">
+                    <button disabled={saving === m.phase} className="btn-primary sm:col-span-4 sm:justify-self-end">
                       {saving === m.phase ? "Saving…" : `Save ${m.phase}`}
                     </button>
                   </form>
@@ -246,7 +261,7 @@ export default function DeadlinePage() {
 
       <ConfirmDialog open={confirming} title="Start the next semester?" confirm="Yes, start it"
         onCancel={() => setConfirming(false)} onConfirm={nextSemester}>
-        This moves every student on. P1, P2 and P3 deadlines are kept. It cannot be undone.
+        This moves every student on. This semester's deadlines are kept for the groups still working to them. It cannot be undone.
       </ConfirmDialog>
     </div>
   );

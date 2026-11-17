@@ -14,17 +14,18 @@ class Phase(str, enum.Enum):
 
 
 class MilestoneTemplate(Base):
-    """Deadline for one thesis phase, set by the coordinator by hand. One row per phase."""
+    """Deadline for one thesis phase in one semester, set by the coordinator by hand. One row per phase and semester:
+    a semester's deadlines fall in week 2 of the next one, so two semesters' deadlines for a phase run at once.
+    Each group works to its own semester's deadline (Thesis.deadline_semester_id)."""
 
     __tablename__ = "milestone_templates"
 
     phase: Mapped[Phase] = mapped_column(Enum(Phase, name="phase"), primary_key=True)
+    # Which semester's groups this deadline is for. The rollover neither waits for nor clears deadlines.
+    semester_id: Mapped[int] = mapped_column(ForeignKey("semesters.id", ondelete="CASCADE"), primary_key=True)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     grace_days: Mapped[int] = mapped_column(Integer)
     penalty_per_day: Mapped[int] = mapped_column(Integer)  # percent of the phase mark
-    # Which semester this deadline is for: a tag the coordinator picks. Deadlines are independent of the semester
-    # rollover, which neither waits for nor clears them (a semester's deadlines fall in week 2 of the next one).
-    semester_id: Mapped[int | None] = mapped_column(ForeignKey("semesters.id", ondelete="SET NULL"))
     semester = relationship("Semester")
 
     @property

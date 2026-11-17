@@ -14,6 +14,7 @@ from app import rate_limit, virus_scan
 from app.main import app
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.semester import Semester
+from app.services.progress_service import current_semester_id
 
 # Tests use a separate database so they never touch dev data.
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
@@ -83,5 +84,5 @@ def client(db):
 def timelines(db):
     # Uploads need the phase's timeline set; tests that aren't about timelines get all of them.
     due = datetime.now(timezone.utc) + timedelta(days=30)
-    db.add_all(MilestoneTemplate(phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
+    db.add_all(MilestoneTemplate(semester_id=current_semester_id(db), phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
     db.flush()

@@ -8,6 +8,8 @@ from sqlalchemy import delete, event
 from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
+from app.schemas.milestone import DHAKA
+from app.services.progress_service import current_semester_id
 from tests.conftest import engine
 from tests.helpers import PDF, REASON, ask_supervisor, auth, close_registration, form_group, me, run_deletions_due, student, supervised_student, upload
 
@@ -41,7 +43,7 @@ def started_yesterday(client, db, h):
 
 
 def close(db, phase):
-    m = db.get(MilestoneTemplate, phase)
+    m = db.get(MilestoneTemplate, (phase, current_semester_id(db)))
     m.due_at, m.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 0
     db.flush()
 
@@ -50,7 +52,7 @@ def reopen(db):
     # A new semester's deadlines.
     due = datetime.now(timezone.utc) + timedelta(days=30)
     for p in Phase:  # the rollover keeps deadlines, so the coordinator replaces them
-        db.merge(MilestoneTemplate(phase=p, due_at=due, grace_days=0, penalty_per_day=0))
+        db.merge(MilestoneTemplate(semester_id=current_semester_id(db), phase=p, due_at=due, grace_days=0, penalty_per_day=0))
     db.flush()
 
 
@@ -193,7 +195,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     assert res.status_code == 409 and "frozen" in res.json()["detail"]
 
     # Extending the deadline lifts the freeze before the semester ends.
-    db.get(MilestoneTemplate, Phase.P1).grace_days = 2
+    db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).grace_days = 2
     db.flush()
     assert mine(client, s)["frozen_reason"] is None
     close(db, Phase.P1)
@@ -204,7 +206,7 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
     assert r.status_code == 200 and r.json()["restart_pending"] is True
     assert client.post("/api/auth/me/restart-request", headers=s).status_code == 409
     # No going back once asked: extending the deadline again doesn't reopen this thesis.
-    db.get(MilestoneTemplate, Phase.P1).grace_days = 2
+    db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).grace_days = 2
     db.flush()
     assert mine(client, s)["frozen_reason"] == "You asked to restart at P1"
     assert upload(client, s).status_code == 409
@@ -242,7 +244,7 @@ def test_extension_without_restart_request_lets_a_frozen_student_continue(client
     started_yesterday(client, db, s)
     close(db, Phase.P1)
     assert mine(client, s)["frozen_reason"] == "Your group missed the P1 deadline"
-    db.get(MilestoneTemplate, Phase.P1).grace_days = 2  # extended, and they never asked to restart
+    db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).grace_days = 2  # extended, and they never asked to restart
     db.flush()
     assert upload(client, s).status_code == 201
     assert close_all_and_roll(client, db, coord)["advanced"] == 1  # one thesis group
@@ -308,7 +310,7 @@ def test_groups_form_any_time_but_register_for_p1_only_in_the_first_week(client,
     assert client.post("/api/theses/mine/register", headers=late).status_code == 200
 
 
-def test_rollover_moves_students_on_and_saves_freezes(client, db):
+def test_rollover_moves_students_on_and_saves_freezes(client, db, semester):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     done, missed = student(client, db, "done@x.com"), student(client, db, "missed@x.com")
     upload(client, done)
@@ -322,7 +324,10 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
     }
     assert me(client, done)["phase"] == "P2"
     # Deadlines are independent of the rollover: kept, not cleared.
-    assert [m["status"] for m in client.get("/api/milestones", headers=coord).json()["milestones"]] == ["closed"] * 3
+    old = client.get(f"/api/milestones?semester_id={semester.id}", headers=coord).json()["milestones"]
+    assert [m["status"] for m in old] == ["closed"] * 3
+    # The coordinator's default view is the new semester, whose deadlines aren't set yet.
+    assert [m["status"] for m in client.get("/api/milestones", headers=coord).json()["milestones"]] == ["not_set"] * 3
     # The freeze is saved, so it outlives the deadline being replaced.
     assert mine(client, missed)["frozen_reason"] == "Your group missed the P1 deadline"
 
@@ -331,7 +336,7 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
     assert upload(client, done, content=PDF + b"p2").json()["versions"][0]["phase"] == "P2"
 
 
-def test_rollover_with_an_open_deadline_lets_groups_carry_on(client, db):
+def test_rollover_with_an_open_deadline_lets_groups_carry_on(client, db, semester):
     # A semester's deadlines fall in week 2 of the next one, so the rollover runs while they are still open.
     coord = auth(client, db, "c@x.com", Role.coordinator)
     done, working = student(client, db, "done@x.com"), student(client, db, "working@x.com")
@@ -342,10 +347,34 @@ def test_rollover_with_an_open_deadline_lets_groups_carry_on(client, db):
     assert me(client, done)["phase"] == "P2"
     # The group still working to the open P1 deadline keeps its registration and the deadline, and can still hand in.
     assert user_of(client, db, working).thesis.p1_registered
-    assert client.get("/api/milestones", headers=coord).json()["milestones"][0]["status"] == "open"
+    assert client.get(f"/api/milestones?semester_id={semester.id}", headers=coord).json()["milestones"][0]["status"] == "open"
     assert upload(client, working).status_code == 201
     # Groups that didn't register this time must register again next semester.
     assert not user_of(client, db, done).thesis.p1_registered
+
+
+def test_last_semesters_p1_groups_and_new_ones_each_get_their_own_deadline(client, db, semester):
+    # Last semester's P1 deadline falls in week 2 of this one, while this semester's new groups register in week 1.
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    working = student(client, db, "working@x.com")
+    old_due = client.get("/api/milestones", headers=working).json()["milestones"][0]["due_at"]
+    assert client.post("/api/milestones/next-semester", headers=coord).status_code == 200
+    new_semester = current_semester_id(db)
+    fresh = student(client, db, "fresh@x.com")  # registers in the new semester
+
+    # The new group isn't held to last semester's deadline: theirs isn't set yet.
+    p1 = lambda h: client.get("/api/milestones", headers=h).json()["milestones"][0]
+    assert (p1(fresh)["status"], p1(fresh)["mine"]) == ("not_set", True)
+    assert upload(client, fresh).json()["detail"] == "The P1 timeline is not set yet"
+    assert p1(working)["due_at"] == old_due and upload(client, working).status_code == 201
+
+    # Setting the new semester's P1 deadline leaves last semester's groups on theirs.
+    due = (datetime.now(timezone.utc) + timedelta(days=120)).astimezone(DHAKA).strftime("%Y-%m-%dT%H:%M")
+    res = client.put("/api/milestones/P1", headers=coord, json={
+        "due_local": due, "grace_days": 2, "penalty_per_day": 5, "semester_id": new_semester})
+    assert res.status_code == 200 and res.json()["semester_id"] == new_semester
+    assert p1(fresh)["due_date"] == due[:10] and p1(working)["due_at"] == old_due
+    assert upload(client, fresh).status_code == 201
 
 
 def p3_student(client, db, email):

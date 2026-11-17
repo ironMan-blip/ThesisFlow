@@ -59,15 +59,21 @@ def _row(m: MilestoneTemplate | None, phase: Phase, now: datetime, mine: progres
     return out
 
 
-def timeline(db: Session, user: User) -> TimelineOut:
+def timeline(db: Session, user: User, semester_id: int | None = None) -> TimelineOut:
+    """semester_id: whose deadlines to show, for the coordinator (default: the current semester's)."""
     now = datetime.now(timezone.utc)
-    templates = {m.phase: m for m in db.scalars(select(MilestoneTemplate))}
-    # A student only has a submission for the phase they are in this semester.
+    shown = (user.role == Role.coordinator and semester_id) or progress_service.current_semester_id(db)
+    templates = {m.phase: m for m in db.scalars(select(MilestoneTemplate).where(MilestoneTemplate.semester_id == shown))}
+    # A student only has a submission for the phase they are in, held to their own group's deadline semester.
     mine = progress_service.standing(db, user, now) if user.role == Role.student and user.phase else None
     opens, closes = progress_service.registration_window(db) or (None, None)
     return TimelineOut(
         now=now,
-        milestones=[_row(templates.get(p), p, now, mine if p == user.phase else None, user) for p in Phase],
+        milestones=[
+            _row(mine.template, p, now, mine, user) if mine and p == user.phase else _row(templates.get(p), p, now, None, user)
+            for p in Phase
+        ],
+        semester_id=shown,
         can_edit=user.role == Role.coordinator,
         semesters=list(db.scalars(select(Semester).order_by(Semester.id.desc()))) if user.role == Role.coordinator else [],
         registration_opens_at=opens,
@@ -80,9 +86,9 @@ def set_registration(db: Session, data: RegistrationIn) -> None:
     """Coordinator: this semester's P1 registration window. Groups already registered stay registered."""
     if data.closes_at <= data.opens_at:
         raise HTTPException(422, "P1 registration must close after it opens")
-    p1 = db.get(MilestoneTemplate, Phase.P1)
     semester = progress_service.ensure_semester(db)
-    if p1 and p1.semester_id == semester.id and p1.due_at <= data.closes_at:
+    p1 = db.get(MilestoneTemplate, (Phase.P1, semester.id))
+    if p1 and p1.due_at <= data.closes_at:
         # Same rule as set_milestone, from the other side.
         raise HTTPException(422, "P1 registration must close before P1 is due")
     semester.registration_opens_at, semester.registration_closes_at = data.opens_at, data.closes_at
@@ -91,8 +97,12 @@ def set_registration(db: Session, data: RegistrationIn) -> None:
 
 def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
     # No cross-phase order check: students in different phases have separate deadlines each semester.
+    # One deadline per phase and semester: editing another semester's leaves this one alone.
     now = datetime.now(timezone.utc)
-    current = db.get(MilestoneTemplate, phase)
+    semester = db.get(Semester, data.semester_id)
+    if semester is None:
+        raise HTTPException(422, "Pick the semester this deadline is for")
+    current = db.get(MilestoneTemplate, (phase, semester.id))
     due_at = data.due_at
     if current and current.due_at.replace(second=0, microsecond=0) == due_at.replace(second=0, microsecond=0):
         # The form only sends whole minutes, so the same minute means "keep this due date", even one set with seconds.
@@ -104,9 +114,6 @@ def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
         # A new due date in the past makes everyone late at once. Keeping a passed due date (to change grace or
         # penalty during grace) is fine.
         raise HTTPException(422, "The due date must be in the future")
-    semester = db.get(Semester, data.semester_id)
-    if semester is None:
-        raise HTTPException(422, "Pick the semester this deadline is for")
     registration_closes = progress_service.semester_registration_window(semester)[1]
     if phase == Phase.P1 and due_at <= registration_closes:
         # Groups can still register until then, so an earlier P1 deadline would catch them mid-registration.

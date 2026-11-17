@@ -12,8 +12,9 @@ router = APIRouter(prefix="/api/milestones", tags=["milestones"])
 
 
 @router.get("", response_model=TimelineOut)
-def timeline(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return milestone_service.timeline(db, user)
+def timeline(semester_id: int | None = None, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # semester_id: the coordinator picks whose deadlines to see; everyone else gets the current semester's.
+    return milestone_service.timeline(db, user, semester_id)
 
 
 # Declared before /{phase}, which would otherwise read "registration" as a phase.
@@ -30,7 +31,7 @@ def set_deadline(
     phase: Phase, data: MilestoneIn, user: User = Depends(require_roles(Role.coordinator)), db: Session = Depends(get_db)
 ):
     milestone_service.set_milestone(db, phase, data)
-    return milestone_service.timeline(db, user)
+    return milestone_service.timeline(db, user, data.semester_id)
 
 
 @router.post("/next-semester", dependencies=[Depends(require_roles(Role.coordinator))])

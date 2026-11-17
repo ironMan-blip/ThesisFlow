@@ -7,6 +7,7 @@ from app.models.proposal import Proposal
 from app.models.user import Role, User
 from app.schemas import milestone as milestone_schema
 from app.services import milestone_service
+from app.services.progress_service import current_semester_id
 from tests.helpers import PDF, auth, close_registration, form_group, me, student, supervised_student, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
@@ -31,7 +32,7 @@ def test_grace_countdown_targets_closes_at(client, db):
 
 def set_past(db, phase, due_at, grace=0, penalty=10):
     # The API refuses due dates in the past, so tests that start mid-grace write the deadline directly.
-    db.merge(MilestoneTemplate(phase=Phase(phase), due_at=due_at, grace_days=grace, penalty_per_day=penalty))
+    db.merge(MilestoneTemplate(semester_id=current_semester_id(db), phase=Phase(phase), due_at=due_at, grace_days=grace, penalty_per_day=penalty))
     db.flush()
 
 
@@ -131,7 +132,7 @@ def test_student_late_days_and_penalty(client, db):
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
     # Grace over and never submitted: a missed deadline, not a late one.
-    m = db.get(MilestoneTemplate, Phase.P1)
+    m = db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db)))
     m.due_at, m.grace_days, m.penalty_per_day = now - timedelta(days=3), 1, 15
     for h in (other, no_group):
         if thesis := db.get(User, me(client, h)["id"]).thesis:
@@ -186,7 +187,7 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     assert (other_row["status"], other_row["submission_status"]) == ("grace", "late")
 
     # Moving the deadline past the extension never leaves this group with less time than everyone else.
-    db.get(MilestoneTemplate, Phase.P1).due_at = now + timedelta(days=5)
+    db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).due_at = now + timedelta(days=5)
     db.flush()
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["due_at"] == by_phase(
         client.get("/api/milestones", headers=other))["P1"]["due_at"]
@@ -202,7 +203,7 @@ def test_an_on_time_submission_is_final_once_the_due_date_passes(client, db):
 
     thesis_id = db.get(User, me(client, s)["id"]).thesis_id
     gm = db.scalar(select(GroupMilestone).filter_by(thesis_id=thesis_id))
-    db.get(MilestoneTemplate, Phase.P1).due_at = gm.submitted_at  # due at the moment they submitted: now in grace
+    db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).due_at = gm.submitted_at  # due at the moment they submitted: now in grace
     db.flush()
     res = upload(client, s, content=PDF + b"3")
     assert (res.status_code, res.json()["detail"]) == (
@@ -221,7 +222,7 @@ def test_extension_keeps_upload_open_and_blocks_rollover_after_template_grace(cl
     close_registration(db)
     now = datetime.now(timezone.utc)
     put(client, coord, "P1", F, grace=1)
-    db.get(MilestoneTemplate, Phase.P1).due_at = now - timedelta(days=3)  # template grace ended yesterday
+    db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).due_at = now - timedelta(days=3)  # template grace ended yesterday
     user = db.get(User, me(client, s)["id"])
     # Extension granted before any submission: the group milestone is made for it.
     progress_service.group_milestone(db, user, create=True).extended_due_at = now + timedelta(days=1)
@@ -242,7 +243,7 @@ def test_keeping_a_passed_due_date_set_with_seconds(client, db):
     # The form sends whole minutes; the same minute keeps the stored due date.
     assert put(client, coord, "P1", due.replace(second=0, microsecond=0), grace=2).status_code == 200
     db.expire_all()
-    assert (db.get(MilestoneTemplate, Phase.P1).due_at, db.get(MilestoneTemplate, Phase.P1).grace_days) == (due, 2)
+    assert (db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).due_at, db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))).grace_days) == (due, 2)
 
 
 def test_coordinator_sets_the_p1_registration_window(client, db):

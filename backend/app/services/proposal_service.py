@@ -84,7 +84,7 @@ def get_mine(db: Session, user: User) -> ProposalOut:
         title=thesis and thesis.title,
         abstract=thesis and thesis.abstract,
         title_change=latest and TitleChangeOut.model_validate(latest),
-        can_request_title_change=thesis is not None and _title_change_block(thesis) is None,
+        can_request_title_change=thesis is not None and _title_change_block(db, thesis) is None,
     )
 
 
@@ -111,12 +111,14 @@ def _check_title(thesis: Thesis | None, title: str, abstract: str) -> None:
         )
 
 
-def _title_change_block(thesis: Thesis) -> str | None:
+def _title_change_block(db: Session, thesis: Thesis) -> str | None:
     """Why this thesis can't request a title and abstract change now (None means it can)."""
     if thesis.title is None:
         return "Upload your first version first: it sets your title and abstract"
     if thesis.status != ThesisStatus.active:
         return "Only an active thesis can change its title and abstract"
+    if progress_service.thesis_standing(db, thesis).frozen:
+        return "Your group is frozen, so it can't change its title and abstract"
     if thesis.supervisor_id is None:
         return "Your thesis has no supervisor to approve a change"
     statuses = {c.status for c in thesis.title_changes}
@@ -313,7 +315,7 @@ def request_title_change(db: Session, user: User, title: str, abstract: str) -> 
     thesis = _lock_thesis(db, user)
     if thesis is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Form a thesis group first")
-    if block := _title_change_block(thesis):
+    if block := _title_change_block(db, thesis):
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     if (title, abstract) == (thesis.title, thesis.abstract):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That is already your title and abstract")
@@ -339,6 +341,8 @@ def decide_title_change(db: Session, supervisor: User, change_id: int, approve: 
     if approve and thesis.status != ThesisStatus.active:
         # Same rule as asking: a dropped or completed thesis keeps its title. Rejecting still clears the request.
         raise HTTPException(status.HTTP_409_CONFLICT, "Only an active thesis can change its title and abstract")
+    if approve and progress_service.thesis_standing(db, thesis).frozen:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This group is frozen, so it can't change its title and abstract")
     change.decided_at, change.approved = datetime.now(timezone.utc), approve
     if approve:
         thesis.title, thesis.abstract = change.title, change.abstract

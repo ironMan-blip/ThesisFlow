@@ -21,7 +21,7 @@ class MilestoneIn(BaseModel):
     due_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
     grace_days: int = Field(ge=0, le=MAX_GRACE_DAYS)
     penalty_per_day: int = Field(ge=0, le=MAX_PENALTY_PER_DAY)
-    semester_id: int  # the semester this deadline is for (a tag; checked to exist by the service)
+    semester_id: int  # the semester whose groups this deadline is for (checked to exist by the service)
 
     @property
     def due_at(self) -> datetime:
@@ -92,6 +92,7 @@ class SemesterTagOut(BaseModel):
 class TimelineOut(BaseModel):
     now: datetime  # server clock, so countdowns don't trust the browser's
     milestones: list[MilestoneOut]
+    semester_id: int | None = None  # whose deadlines are shown (a student's own phase row is their group's semester)
     can_edit: bool  # coordinator only
     semesters: list[SemesterTagOut] = []  # coordinator only, newest (current) first: the tags a deadline can take
     registration_opens_at: datetime | None  # this semester's P1 registration window
