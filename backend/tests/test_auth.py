@@ -103,15 +103,24 @@ def test_coordinator_signup_rejected(client):
 
 
 def test_faculty_initials(client, db):
-    for bad in ["", "abc", "AB1", "A B", "ABCDEFGHIJK"]:
+    for bad in ["", "AB1", "A B", "ABCDEFGHIJK"]:
         assert register(client, role="faculty", initials=bad).status_code == 422
-    r = register(client, role="faculty", initials="MMR")
+    r = register(client, role="faculty", initials=" mmr ")  # stored uppercased
     assert r.status_code == 201 and r.json()["initials"] == "MMR"
     r = register(client, email="x@bracu.ac.bd", id_number="87654321", role="faculty", initials="MMR")
     assert r.status_code == 409 and r.json()["detail"] == "Initials already registered"
     # Students never carry initials.
     r = register(client, email="s@g.bracu.ac.bd", id_number="11111111", initials="ZZ")
     assert r.status_code == 201 and r.json()["initials"] is None
+
+
+def test_signup_options_match_rules(client):
+    opts = client.get("/api/auth/signup-options").json()
+    assert opts["roles"] == [
+        {"role": "student", "email_domain": "g.bracu.ac.bd", "needs_initials": False},
+        {"role": "faculty", "email_domain": "bracu.ac.bd", "needs_initials": True},
+    ]
+    assert opts["min_password"] == 8 and opts["review_hours"] == 48
 
 
 def test_expired_request_frees_initials(client, db):

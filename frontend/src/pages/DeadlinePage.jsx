@@ -173,11 +173,11 @@ export default function DeadlinePage() {
                   <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
                     <label className="label">
                       Due date
-                      <input name="due_date" type="date" required defaultValue={m.due_local?.slice(0, 10) ?? ""} className="input" />
+                      <input name="due_date" type="date" required defaultValue={m.due_date ?? ""} className="input" />
                     </label>
                     <label className="label">
                       Due time (Dhaka)
-                      <input name="due_time" type="time" required defaultValue={m.due_local?.slice(11) ?? "23:59"} className="input" />
+                      <input name="due_time" type="time" required defaultValue={m.due_time} className="input" />
                     </label>
                     <label className="label">
                       Grace (days)

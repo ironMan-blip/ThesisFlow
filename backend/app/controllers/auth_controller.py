@@ -5,11 +5,17 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import Token, UserCreate, UserOut
+from app.schemas.user import SignupOptionsOut, Token, UserCreate, UserOut
 from app.security import DEVICE_COOKIE, DEVICE_TTL, create_device_token, device_account
 from app.services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.get("/signup-options", response_model=SignupOptionsOut)
+def signup_options():
+    # Public: the sign-up form renders roles, email domains and password rules from here.
+    return SignupOptionsOut()
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)

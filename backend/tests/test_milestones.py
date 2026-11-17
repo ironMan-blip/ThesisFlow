@@ -58,8 +58,10 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     assert send({"due_local": "2099-11-01T23:59+00:00"}).status_code == 422
     # Grace days past year 9999 would overflow: a 422, not a 500.
     assert send({"due_local": "9999-12-31T23:59", "grace_days": 7}).status_code == 422
-    p1 = by_phase(send({"due_local": "2099-11-01T23:59"}))["P1"]
-    assert (p1["due_at"][:16], p1["due_local"]) == ("2099-11-01T17:59", "2099-11-01T23:59")
+    p1 = by_phase(send({"due_local": "2099-11-01T20:30"}))["P1"]
+    assert (p1["due_at"][:16], p1["due_date"], p1["due_time"]) == ("2099-11-01T14:30", "2099-11-01", "20:30")
+    p2 = by_phase(send({"due_local": "2099-11-01T20:30"}))["P2"]  # not set: form defaults to end of day
+    assert (p2["due_date"], p2["due_time"]) == (None, "23:59")
     # A deadline that is already over would freeze the whole phase.
     now = datetime.now(timezone.utc)
     res = put(client, coord, "P2", now - timedelta(days=2), grace=1)

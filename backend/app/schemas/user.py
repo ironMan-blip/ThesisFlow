@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, 
 from app.config import settings
 from app.models.milestone import Phase
 from app.models.user import DELETION_DAYS, REVIEW_HOURS, Role
-from app.passwords import MAX_PASSWORD, MIN_PASSWORD, check_strength
+from app.passwords import MAX_PASSWORD, MIN_PASSWORD, PASSWORD_HINT, check_strength
 
 
 # A reason in a sentence or more, never a single word: every delete is explained, by whoever asks for it.
@@ -14,6 +14,26 @@ MIN_REASON_CHARS, MAX_REASON_CHARS = 20, 2000
 
 # Sign-up is BRAC University only: students use the student domain, faculty the staff one.
 EMAIL_DOMAINS = {Role.student: "g.bracu.ac.bd", Role.faculty: "bracu.ac.bd"}
+MAX_INITIALS = 10  # faculty only
+
+
+class SignupRoleOut(BaseModel):
+    role: Role
+    email_domain: str
+    needs_initials: bool
+
+
+class SignupOptionsOut(BaseModel):
+    """What the sign-up form shows, from the same rules UserCreate enforces."""
+
+    roles: list[SignupRoleOut] = [
+        SignupRoleOut(role=r, email_domain=d, needs_initials=r == Role.faculty) for r, d in EMAIL_DOMAINS.items()
+    ]
+    min_password: int = MIN_PASSWORD
+    max_password: int = MAX_PASSWORD
+    password_hint: str = PASSWORD_HINT
+    max_initials: int = MAX_INITIALS
+    review_hours: int = REVIEW_HOURS
 
 
 class DeletionReasonIn(BaseModel):
@@ -61,10 +81,11 @@ class UserCreate(BaseModel):
     def faculty_initials(cls, v: str | None, info: ValidationInfo) -> str | None:
         if info.data.get("role") != Role.faculty:
             return None
+        v = (v or "").strip().upper()  # "mmr" and "MMR" are the same initials
         if not v:
             raise ValueError("Faculty must give their initials")
-        if not (len(v) <= 10 and v.isascii() and v.isalpha() and v.isupper()):
-            raise ValueError("Initials must be 1 to 10 capital letters")
+        if not (len(v) <= MAX_INITIALS and v.isascii() and v.isalpha()):
+            raise ValueError(f"Initials must be 1 to {MAX_INITIALS} letters")
         return v
 
 

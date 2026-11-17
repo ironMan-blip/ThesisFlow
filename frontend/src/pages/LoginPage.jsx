@@ -11,12 +11,24 @@ export default function LoginPage() {
   const [idNumber, setIdNumber] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState("student");
+  const [options, setOptions] = useState(null); // sign-up rules from the API: roles, email domains, password hint
+  const [role, setRole] = useState(null);
   const [initials, setInitials] = useState("");
   const { busy, error, notice, setError, setNotice, run } = useAction();
   const [showPassword, setShowPassword] = useState(false);
 
   const registering = mode === "register";
+  const roleRule = options?.roles.find((r) => r.role === role);
+
+  useEffect(() => {
+    if (!registering || options) return;
+    api("/auth/signup-options")
+      .then((o) => {
+        setOptions(o);
+        setRole(o.roles[0].role);
+      })
+      .catch((err) => setError(err.message));
+  }, [registering, options, setError]);
 
   useEffect(() => {
     document.title = `${registering ? "Register" : "Log in"} · ThesisFlow`;
@@ -75,34 +87,34 @@ export default function LoginPage() {
             <h1 className="text-xl font-semibold lg:text-2xl">{registering ? "Create an account" : "Welcome back"}</h1>
             <p className="mt-1 text-sm text-zinc-600">{registering ? "Register with your 8-digit university ID." : "Log in with your 8-digit university ID."}</p>
           </div>
-          {registering && (
+          {registering && roleRule && (
             <>
               <fieldset>
                 <legend className="label">I am a</legend>
                 <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  {["student", "faculty"].map((r) => (
+                  {options.roles.map(({ role: r }) => (
                     <label key={r} className={`btn cursor-pointer capitalize ring-1 ${role === r ? "bg-teal-50 text-teal-800 ring-teal-600" : "bg-white text-zinc-700 ring-zinc-300"}`}>
                       <input type="radio" name="role" value={r} checked={role === r} onChange={() => setRole(r)} className="sr-only" />
                       {r}
                     </label>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-zinc-500">New accounts need coordinator approval before you can log in.</p>
+                <p className="mt-2 text-xs text-zinc-500">New accounts need coordinator approval within {options.review_hours} hours before you can log in.</p>
               </fieldset>
               <label className="label">
                 Full name
                 <input required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="input" />
               </label>
-              {role === "faculty" && (
+              {roleRule.needs_initials && (
                 <label className="label">
                   Initials
-                  <input required pattern="[A-Z]{1,10}" maxLength={10} title="Capital letters only" placeholder="ABC" value={initials}
-                    onChange={(e) => setInitials(e.target.value.toUpperCase())} className="input" />
+                  <input required maxLength={options.max_initials} placeholder="ABC" value={initials}
+                    onChange={(e) => setInitials(e.target.value)} className="input uppercase" />
                 </label>
               )}
               <label className="label">
                 Email
-                <input type="email" required autoComplete="email" placeholder={role === "faculty" ? "you@bracu.ac.bd" : "you@g.bracu.ac.bd"} value={email}
+                <input type="email" required autoComplete="email" placeholder={`you@${roleRule.email_domain}`} value={email}
                   onChange={(e) => setEmail(e.target.value)} className="input" />
               </label>
             </>
@@ -120,13 +132,14 @@ export default function LoginPage() {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
-            <input id="password" type={showPassword ? "text" : "password"} required minLength={registering ? 8 : undefined}
+            <input id="password" type={showPassword ? "text" : "password"} required
+              minLength={registering ? options?.min_password : undefined} maxLength={registering ? options?.max_password : undefined}
               autoComplete={registering ? "new-password" : "current-password"} value={password}
               onChange={(e) => setPassword(e.target.value)} aria-describedby={registering ? "password-hint" : undefined} className="input" />
-            {registering && <p id="password-hint" className="mt-1 text-xs text-zinc-500">At least 8 characters, with an uppercase letter, a lowercase letter and a number. No spaces.</p>}
+            {registering && <p id="password-hint" className="mt-1 text-xs text-zinc-500">{options?.password_hint}</p>}
           </div>
           <Alerts error={error} notice={notice} />
-          <button disabled={loading} className="btn-primary w-full py-2.5">
+          <button disabled={loading || (registering && !roleRule)} className="btn-primary w-full py-2.5">
             {loading ? "Please wait…" : registering ? "Register" : "Log in"}
           </button>
           <p className="text-center text-sm text-zinc-600">

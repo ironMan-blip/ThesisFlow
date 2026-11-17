@@ -148,7 +148,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 ### 1. Accounts and login
 
 - Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator. The email must be a BRAC University one: `@g.bracu.ac.bd` for students, `@bracu.ac.bd` for faculty.
-- Faculty must also give their **initials** (1 to 10 capital letters, e.g. `ABK`), unique across faculty.
+- Faculty must also give their **initials** (1 to 10 letters, stored in capitals, e.g. `ABK`), unique across faculty.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
 - ID numbers are exactly 8 digits and must be unique across students and faculty. Log in with ID number and password.
@@ -291,7 +291,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 - `Layout` loads `/api/auth/me` and shows only the tools in `user.tools`. The API refuses calls for tools a role doesn't have.
 - Request badges refresh every 10 seconds while the tab is visible (`/api/auth/me/counts`).
 - The Deadlines page ticks its countdowns every second and reloads from the API every minute.
-- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC. `PUT /api/milestones/{phase}` takes `due_local` (Dhaka wall-clock time, no zone) and refuses anything else.
+- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC. `PUT /api/milestones/{phase}` takes `due_local` (Dhaka wall-clock time, no zone) and refuses anything else; `GET /api/milestones` returns each deadline as Dhaka `due_date` and `due_time` for the form.
 - Business rules live in the backend; the frontend only shows what the API returns (flags like `can_*`, statuses, choices).
 - Files are downloaded with `fetch` + a blob link, because a normal link can't send the JWT.
 - Delete actions ask for confirmation in a dialog first.
@@ -339,6 +339,7 @@ docs/           SRS, class diagram (draw.io source + exports), contribution trac
 
 | Method | Path | Who |
 |--------|------|-----|
+| GET | `/api/auth/signup-options` (roles, email domains, password rules for the sign-up form) | anyone |
 | POST | `/api/auth/register` | anyone |
 | POST | `/api/auth/login` | anyone |
 | POST | `/api/auth/logout` (ends all of this person's sessions) | logged in |

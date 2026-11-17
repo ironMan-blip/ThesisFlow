@@ -9,6 +9,7 @@ MAX_GRACE_DAYS = 7
 MAX_PENALTY_PER_DAY = 100
 # The SRS shows and takes every time in Dhaka time. Bangladesh has no daylight saving, so the offset is fixed.
 DHAKA = timezone(timedelta(hours=6))
+DEFAULT_DUE_TIME = "23:59"  # a new deadline's time is end of day unless the coordinator changes it
 
 
 class MilestoneIn(BaseModel):
@@ -30,11 +31,16 @@ class MilestoneOut(BaseModel):
     phase: Phase
     due_at: datetime | None  # None until the coordinator sets it
 
+    # due_at in Dhaka time, as the coordinator's date and time inputs hold it ("YYYY-MM-DD", "HH:MM").
     @computed_field
     @property
-    def due_local(self) -> str | None:
-        """due_at in Dhaka time as "YYYY-MM-DDTHH:MM", what the coordinator's date and time inputs hold."""
-        return self.due_at and self.due_at.astimezone(DHAKA).strftime("%Y-%m-%dT%H:%M")
+    def due_date(self) -> str | None:
+        return self.due_at and self.due_at.astimezone(DHAKA).strftime("%Y-%m-%d")
+
+    @computed_field
+    @property
+    def due_time(self) -> str:
+        return self.due_at.astimezone(DHAKA).strftime("%H:%M") if self.due_at else DEFAULT_DUE_TIME
 
     grace_days: int
     penalty_per_day: int
