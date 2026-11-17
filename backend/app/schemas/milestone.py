@@ -10,6 +10,8 @@ MAX_PENALTY_PER_DAY = 100
 # The SRS shows and takes every time in Dhaka time. Bangladesh has no daylight saving, so the offset is fixed.
 DHAKA = timezone(timedelta(hours=6))
 DEFAULT_DUE_TIME = "23:59"  # a new deadline's time is end of day unless the coordinator changes it
+# Lower bound: 0001-01-01 in Dhaka is 1 BC in UTC; Postgres stores it but psycopg can't read it back, breaking every page.
+EARLIEST = datetime(2000, 1, 1)
 
 
 class MilestoneIn(BaseModel):
@@ -38,8 +40,8 @@ class RegistrationIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    opens_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
-    closes_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
+    opens_local: NaiveDatetime = Field(ge=EARLIEST, lt=datetime(9999, 12, 1))
+    closes_local: NaiveDatetime = Field(ge=EARLIEST, lt=datetime(9999, 12, 1))
 
     @property
     def opens_at(self) -> datetime:

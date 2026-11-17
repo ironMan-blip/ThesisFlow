@@ -297,3 +297,8 @@ def test_an_empty_semesters_table_gets_a_current_semester(client, db):
     res = client.put("/api/milestones/registration", headers=coord,
                      json={"opens_local": "2099-01-01T09:00", "closes_local": "2099-01-08T23:59"})
     assert (res.status_code, res.json()["registration_status"]) == (200, "upcoming")
+    # Year 1 in Dhaka is BC in UTC: stored fine, unreadable after, so it's refused up front.
+    res = client.put("/api/milestones/registration", headers=coord,
+                     json={"opens_local": "0001-01-01T00:00", "closes_local": "2099-01-08T23:59"})
+    assert res.status_code == 422
+    assert client.get("/api/milestones", headers=coord).status_code == 200
