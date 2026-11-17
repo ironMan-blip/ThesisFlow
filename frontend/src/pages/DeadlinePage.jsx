@@ -21,9 +21,9 @@ function Countdown({ ms }) {
     <span className="flex gap-1.5">
       <span className="sr-only">{parts.map(([v, u]) => `${v} ${u}`).join(" ")}</span>
       {parts.map(([v, u]) => (
-        <span key={u} className="min-w-11 rounded-lg bg-zinc-900 px-1.5 py-1 text-center text-white" aria-hidden="true">
-          <span className="block text-sm font-semibold leading-tight tabular-nums">{v}</span>
-          <span className="block text-[10px] uppercase tracking-wide text-zinc-400">{u}</span>
+        <span key={u} className="min-w-11 rounded-lg bg-zinc-50 px-1.5 py-1 text-center ring-1 ring-zinc-200 ring-inset" aria-hidden="true">
+          <span className="block text-sm font-semibold leading-tight text-zinc-900 tabular-nums">{v}</span>
+          <span className="block text-[10px] uppercase tracking-wide text-zinc-500">{u}</span>
         </span>
       ))}
     </span>
@@ -73,6 +73,20 @@ export default function DeadlinePage() {
     });
   };
 
+  const saveRegistration = (e) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run("registration", async () => {
+      show(
+        await api("/milestones/registration", {
+          method: "PUT",
+          body: { opens_local: f.get("opens_local"), closes_local: f.get("closes_local") }, // Dhaka time
+        }),
+      );
+      return "P1 registration dates saved.";
+    });
+  };
+
   const serverNow = now + offset;
 
   // A countdown hit zero: fetch at once so open -> grace -> closed and late days update without waiting a minute.
@@ -86,7 +100,7 @@ export default function DeadlinePage() {
     run("semester", async () => {
       const r = await api("/milestones/next-semester", { method: "POST" });
       show(await api("/milestones"));
-      return `New semester started: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.frozen} frozen, ${r.restarted} restarted at P1. Set the new deadlines below.`;
+      return `New semester started. Thesis groups: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.cancelled} cancelled, ${r.frozen} frozen. Students restarted at P1: ${r.restarted}. Set the new deadlines below.`;
     });
   };
 
@@ -102,9 +116,10 @@ export default function DeadlinePage() {
           <div className="max-w-prose">
             <h2 className="font-semibold">End this semester</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Once every grace time has ended: students who submitted move to their next phase, P3 theses are completed
-              or deferred, students who missed are frozen, approved restarts start fresh at P1, and all deadlines are cleared for next semester.
-              P1 registration then opens for one week.
+              Once every grace time has ended: thesis groups that submitted move to their next phase, P3 theses are completed
+              or deferred (a second deferral cancels the thesis), groups that missed are frozen, approved restarts start fresh, and
+              all deadlines are cleared for next semester.
+              P1 registration then opens for one week, unless you set other dates below.
             </p>
           </div>
           <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">
@@ -115,12 +130,36 @@ export default function DeadlinePage() {
 
       <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
-      {data?.registration_closes_at && (
-        <p className="text-sm text-zinc-600">
-          {data.registration_open ? "P1 registration is open until " : "P1 registration closed on "}
-          <span className="font-medium tabular-nums">{when(data.registration_closes_at)}</span>.
-          {data.can_edit && " P1 can only be due after it closes."}
-        </p>
+      {data && (data.can_edit || data.registration_closes_at) && (
+        <section className="card p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">P1 registration</h2>
+            {(() => {
+              const [label, tone] = data.registration_status === "upcoming" ? ["Not open yet", STATUS.not_set[1]] : STATUS[data.registration_status];
+              return <span className={`badge ${tone}`}>{label}</span>;
+            })()}
+          </div>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div><dt className="text-zinc-500">Opens</dt><dd className="font-medium">{data.registration_opens_at ? when(data.registration_opens_at) : "Not set"}</dd></div>
+            <div><dt className="text-zinc-500">Closes</dt><dd className="font-medium">{data.registration_closes_at ? when(data.registration_closes_at) : "Not set"}</dd></div>
+          </dl>
+          {data.can_edit && (
+            <form onSubmit={saveRegistration} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-3">
+              <label className="label">
+                Opens (Dhaka)
+                <input name="opens_local" type="datetime-local" required defaultValue={data.registration_opens_local ?? ""} className="input" />
+              </label>
+              <label className="label">
+                Closes (Dhaka)
+                <input name="closes_local" type="datetime-local" required defaultValue={data.registration_closes_local ?? ""} className="input" />
+              </label>
+              <button disabled={saving === "registration"} className="btn-primary sm:justify-self-end">
+                {saving === "registration" ? "Saving…" : "Save registration"}
+              </button>
+              <p className="text-sm text-zinc-500 sm:col-span-3">P1 can only be due after registration closes.</p>
+            </form>
+          )}
+        </section>
       )}
 
       {!data ? (
@@ -130,13 +169,13 @@ export default function DeadlinePage() {
           {data.milestones.map((m) => {
             const [label, tone, dot] = STATUS[m.status];
             return (
-              <li key={m.phase} className="card relative p-6">
+              <li key={m.phase} className={`card relative p-6 ${m.mine ? "ring-2 ring-teal-600/40" : ""}`}>
                 <span className={`absolute -left-[31px] top-8 size-3 rounded-full ring-4 ring-zinc-50 ${dot}`} aria-hidden="true" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold">{m.phase}</h2>
                     <span className={`badge ${tone}`}>{label}</span>
-                    {m.mine && <span className="badge bg-zinc-900 text-white ring-zinc-900">Your phase</span>}
+                    {m.mine && <span className="badge bg-teal-700 text-white ring-teal-700">Your phase</span>}
                   </div>
                   {m.countdown_to && (
                     <div className="flex items-center gap-3 text-sm text-zinc-600">
@@ -172,11 +211,11 @@ export default function DeadlinePage() {
                   <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
                     <label className="label">
                       Due date
-                      <input name="due_date" type="date" required defaultValue={m.due_local?.slice(0, 10) ?? ""} className="input" />
+                      <input name="due_date" type="date" required defaultValue={m.due_date ?? ""} className="input" />
                     </label>
                     <label className="label">
                       Due time (Dhaka)
-                      <input name="due_time" type="time" required defaultValue={m.due_local?.slice(11) ?? "23:59"} className="input" />
+                      <input name="due_time" type="time" required defaultValue={m.due_time} className="input" />
                     </label>
                     <label className="label">
                       Grace (days)

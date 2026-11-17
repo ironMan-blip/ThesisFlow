@@ -2,6 +2,8 @@
 
 MIN_PASSWORD = 8
 MAX_PASSWORD = 128  # login refuses longer passwords without hashing them
+# Shown under the sign-up password field; keep in step with check_strength.
+PASSWORD_HINT = f"{MIN_PASSWORD} to {MAX_PASSWORD} characters, with an uppercase letter, a lowercase letter and a number. No spaces."
 
 
 def check_strength(v: str) -> str:

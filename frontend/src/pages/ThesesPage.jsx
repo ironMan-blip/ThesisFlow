@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, download } from "../api/client";
-import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, ReasonDialog, Skeleton, ThesisBadge, VersionInfo } from "../components/ui";
-import { personName, when } from "../format";
+import { Alerts, DecideButtons, EmptyState, GroupName, ICONS, PageHeader, Person, Skeleton, ThesisBadge, VersionInfo } from "../components/ui";
+import { memberNames, personName, when } from "../format";
 import { useAction } from "../useAction";
 
 const fullName = (p) => (p ? personName(p) : "Account deleted");
@@ -10,16 +10,17 @@ const fullName = (p) => (p ? personName(p) : "Account deleted");
 function Requests({ requests, decide, busy }) {
   if (!requests.length) return null;
   return (
-    <section className="card overflow-hidden">
+    <section className="card">
       <p className="border-b border-zinc-200 px-4 py-3 text-sm font-medium tabular-nums text-zinc-700 sm:px-6">
         {requests.length} supervision {requests.length === 1 ? "request" : "requests"}
       </p>
       <ul className="divide-y divide-zinc-100">
         {requests.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-            <Person user={r.student}>
+            {/* The member who asked may have deleted their account since; any member stands for the group then. */}
+            <Person user={r.student ?? r.members[0]}>
               {" "}· {r.slot === "supervisor"
-                ? "asks you to be their supervisor (accepting forms the group)"
+                ? <>asks, for their group <GroupName thesis={r} /> of {r.members.length}, for you to be their supervisor (accepting forms the group)</>
                 : r.slot === "co_supervisor"
                   ? `asks you to be co-supervisor of ${r.code ?? "their thesis"} (you join once ${fullName(r.supervisor)} also accepts)`
                   : `wants ${fullName(r.co_supervisor)} as co-supervisor of ${r.code ?? "their thesis"} (they join once you both accept)`}
@@ -34,11 +35,10 @@ function Requests({ requests, decide, busy }) {
 }
 
 export default function ThesesPage() {
-  const { user, refreshCounts } = useOutletContext();
+  const { refreshCounts } = useOutletContext();
   const [theses, setTheses] = useState(null);
   const [requests, setRequests] = useState([]);
   const { busy, error, notice, setError, run, clear } = useAction();
-  const [deleting, setDeleting] = useState(null); // version whose delete reason is being written
 
   const load = useCallback(async () => {
     setTheses(await api("/theses"));
@@ -58,7 +58,7 @@ export default function ThesesPage() {
       await load(); // a refused, stale request shows its current state
     }
     refreshCounts();
-    return `${r.student.full_name}: request ${accept ? "accepted" : "declined"}.`;
+    return `${r.group_name ?? memberNames(r)}: request ${accept ? "accepted" : "declined"}.`;
   });
 
   const defer = (t, on) => run(`defer-${t.id}`, async () => {
@@ -69,28 +69,18 @@ export default function ThesesPage() {
       : `${t.code ?? "The thesis"} will be completed at the end of the semester.`;
   });
 
-  const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
-
-  const scheduleDelete = (reason) => {
-    const v = deleting;
-    run("delete", async () => {
-      await api(`/proposals/versions/${v.id}/deletion`, { method: "POST", body: { reason } });
-      await load();
-      setDeleting(null);
-      return `v${v.version_no} will be deleted in ${user.deletion_days} days. The student is told, with your reason; you can still cancel it.`;
-    });
-  };
-
-  // The student's request: approve (starts the 7 days) or reject. A scheduled delete: cancel.
-  const decideDelete = (v, approve) => run(`del-${v.id}`, async () => {
-    const url = `/proposals/delete-requests/${v.id}`;
-    await api(approve ? `${url}/approve` : url, { method: approve ? "POST" : "DELETE" });
-    await load();
-    refreshCounts();
-    return approve
-      ? `v${v.version_no} will be deleted in ${user.deletion_days} days unless you cancel it.`
-      : v.delete_executes_at ? `The delete of v${v.version_no} is cancelled; it stays.` : `Request rejected: v${v.version_no} stays.`;
+  const decideTitle = (t, approve) => run(`title-${t.id}`, async () => {
+    const url = `/proposals/title-changes/${t.title_change_request.id}`;
+    try {
+      await api(approve ? `${url}/approve` : url, { method: approve ? "POST" : "DELETE" });
+    } finally {
+      await load(); // an expired request shows its current state
+      refreshCounts();
+    }
+    return `${t.code ?? "The thesis"}: title change ${approve ? "approved" : "rejected"}.`;
   });
+
+  const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
   return (
     <div className="space-y-8">
@@ -98,14 +88,13 @@ export default function ThesesPage() {
         title="Theses"
         intro="Supervision requests, and every thesis you supervise or co-supervise."
         help={[
-          "As the supervisor, you approve or reject a student's request to delete a proposal version.",
-          "You can also delete a version yourself, with a reason. A phase's final version can't be deleted.",
-          `Any delete runs ${user.deletion_days} days later. Until then you can cancel it.`,
+          "Every proposal version is kept: nobody can delete one.",
+          "A group can change its title and abstract once, and only if you, the supervisor, accept within 3 days.",
           "After the P3 submission you can defer a thesis: once means P3 again next semester, twice freezes the student.",
         ]}
       />
 
-      <Alerts error={deleting ? null : error} notice={notice} floating onDismiss={clear} />
+      <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
       <Requests requests={requests} decide={decide} busy={busy} />
 
@@ -132,12 +121,24 @@ export default function ThesesPage() {
                 )}
               </div>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                <div><dt className="text-zinc-500">Student</dt><dd className="font-medium">{t.student ? `${t.student.full_name} · ID ${t.student.id_number}` : "Account deleted"}</dd></div>
+                <div><dt className="text-zinc-500">Group</dt><dd><GroupName thesis={t} /></dd></div>
                 <div><dt className="text-zinc-500">Supervisor</dt><dd className="font-medium">{fullName(t.supervisor)}</dd></div>
                 <div><dt className="text-zinc-500">Co-supervisor</dt><dd className="font-medium">
                   {!t.co_supervisor ? "None" : t.co_supervisor_joined ? fullName(t.co_supervisor) : `${fullName(t.co_supervisor)} (not joined yet)`}
                 </dd></div>
               </dl>
+              {t.title && <p className="mt-3 text-sm"><span className="text-zinc-500">Title</span> <span className="font-medium">{t.title}</span></p>}
+              {t.title_change_request && (
+                <div className="mt-4 space-y-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-600/20 ring-inset">
+                  <p className="font-medium">The group asks to change the title to "{t.title_change_request.title}"</p>
+                  <p className="whitespace-pre-line break-words">New abstract: {t.title_change_request.abstract}</p>
+                  <p>{t.is_supervisor ? "Decide" : "The supervisor must decide"} by {when(t.title_change_request.expires_at)}. They can change it only once.</p>
+                  {t.is_supervisor && (
+                    <DecideButtons busy={busy === `title-${t.id}`} onReject={() => decideTitle(t, false)} onApprove={() => decideTitle(t, true)}
+                      approve="Approve change" />
+                  )}
+                </div>
+              )}
               {t.versions.length > 0 ? (
                 <ul className="mt-5 divide-y divide-zinc-100 border-t border-zinc-100">
                   {t.versions.map((v) => (
@@ -145,29 +146,9 @@ export default function ThesesPage() {
                       <div className="flex flex-wrap items-center justify-between gap-3">
                       <VersionInfo v={v} />
                       <div className="flex flex-wrap items-center gap-2">
-                        {v.delete_pending && (
-                          <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">
-                            {v.delete_executes_at ? `Deletes on ${when(v.delete_executes_at)}` : "Delete requested by the student"}
-                          </span>
-                        )}
                         <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
-                        {t.is_supervisor && v.delete_pending && (v.delete_executes_at ? (
-                          <button onClick={() => decideDelete(v, false)} disabled={busy === `del-${v.id}`} className="btn-secondary px-3 py-1.5">Cancel delete</button>
-                        ) : (
-                          <DecideButtons busy={busy === `del-${v.id}`} onReject={() => decideDelete(v, false)} onApprove={() => decideDelete(v, true)}
-                            approve="Approve delete" />
-                        ))}
-                        {v.can_schedule_delete && (
-                          <button onClick={() => { setError(null); setDeleting(v); }} aria-label={`Delete v${v.version_no}`}
-                            className="btn-ghost-danger px-3 py-1.5">Delete</button>
-                        )}
                       </div>
                       </div>
-                      {v.delete_pending && v.delete_reason && (
-                        <p className="whitespace-pre-line break-words rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-600/20 ring-inset">
-                          Reason{v.delete_by_staff ? (t.is_supervisor ? " (yours)" : " from the supervisor") : " from the student"}: {v.delete_reason}
-                        </p>
-                      )}
                     </li>
                   ))}
                 </ul>
@@ -178,12 +159,6 @@ export default function ThesesPage() {
           ))}
         </ul>
       )}
-
-      <ReasonDialog open={!!deleting} title={`Delete v${deleting?.version_no}?`} confirm="Schedule delete" busy={busy === "delete"}
-        error={error} min={user.min_reason_chars} max={user.max_reason_chars} onCancel={() => setDeleting(null)} onSubmit={scheduleDelete}>
-        The version and its PDF are deleted {user.deletion_days} days from now and later versions are renumbered. The student
-        sees your reason and can contact you; you can cancel it until then. A phase's final version can't be deleted.
-      </ReasonDialog>
     </div>
   );
 }

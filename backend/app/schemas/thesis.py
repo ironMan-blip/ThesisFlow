@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.models.milestone import Phase
 from app.models.thesis import ThesisStatus
 from app.models.user import Role
-from app.schemas.proposal import ProposalVersionOut
+from app.schemas.proposal import ProposalVersionOut, TitleChangeOut, mark_versions
 
 
 class PersonOut(BaseModel):
@@ -27,7 +27,9 @@ class ThesisOut(BaseModel):
     id: int
     code: str | None  # the thesis ID, e.g. T12345678; None until the supervisor accepts
     status: ThesisStatus
-    student: PersonOut | None  # None once the student's account is deleted
+    group_name: str | None  # None on theses made before groups, or once the group is gone
+    student: PersonOut | None  # the member who sent the supervisor request; None once their account is deleted
+    members: list[PersonOut]  # the group's students on this thesis now; may be empty once archived
     supervisor: PersonOut | None
     co_supervisor: PersonOut | None  # named on a formed group; a member once both flags below are true
     co_supervisor_accepted: bool  # by the co-supervisor
@@ -41,8 +43,16 @@ class ThesisOut(BaseModel):
 
 class ThesisDetailOut(ThesisOut):
     versions: list[ProposalVersionOut]  # newest first
-    is_supervisor: bool = False  # the viewer is the supervisor (not the co-supervisor): decides deletes and deferral
+    title: str | None
+    abstract: str | None
+    title_change_request: TitleChangeOut | None = None  # a change waiting for the supervisor
+    is_supervisor: bool = False  # the viewer is the supervisor (not the co-supervisor): decides title changes and deferral
     can_defer: bool = False  # supervisor only: can set (P3 submitted this semester) or undo a pending deferral
+
+    @model_validator(mode="after")
+    def _mark_versions(self):
+        mark_versions(self.versions)
+        return self
 
 
 class SupervisionRequestOut(ThesisOut):
@@ -53,14 +63,18 @@ class SupervisionRequestOut(ThesisOut):
 
 class MyThesisOut(BaseModel):
     thesis: ThesisOut | None
-    phase: Phase | None  # None once the thesis is completed
+    phase: Phase | None  # None before P1 registration and once the thesis is completed
     frozen_reason: str | None
     restart_pending: bool
     restart_approved: bool  # they start fresh at P1 at the next semester rollover
-    registration_closes_at: datetime | None  # end of this semester's one-week P1 registration
+    registration_opens_at: datetime | None  # this semester's P1 registration window, set by the coordinator
+    registration_closes_at: datetime | None
     registration_open: bool
+    registration_upcoming: bool  # the coordinator set it to open later this semester
     can_register: bool  # an accepted group in P1 that can register now
-    can_form_group: bool
+    register_block: str | None  # why an accepted P1 group can't register now
+    can_form_group: bool  # a member of a ready group with no thesis can ask a supervisor
+    form_group_block: str | None  # why not, while the student has no thesis
     can_cancel: bool  # the group request still waits for the supervisor
     can_add_co_supervisor: bool  # a formed group with no co-supervisor named
     can_cancel_co_supervisor: bool  # a co-supervisor was added but hasn't joined yet

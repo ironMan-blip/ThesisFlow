@@ -9,13 +9,16 @@ MAX_GRACE_DAYS = 7
 MAX_PENALTY_PER_DAY = 100
 # The SRS shows and takes every time in Dhaka time. Bangladesh has no daylight saving, so the offset is fixed.
 DHAKA = timezone(timedelta(hours=6))
+DEFAULT_DUE_TIME = "23:59"  # a new deadline's time is end of day unless the coordinator changes it
 
 
 class MilestoneIn(BaseModel):
     # Unknown fields are refused, so a client still sending due_at gets a 422 instead of a silently wrong deadline.
     model_config = ConfigDict(extra="forbid")
 
-    due_local: NaiveDatetime  # Dhaka wall-clock time as typed in the form, "YYYY-MM-DDTHH:MM"; no zone allowed
+    # Dhaka wall-clock time as typed in the form, "YYYY-MM-DDTHH:MM"; no zone allowed.
+    # Capped so adding grace days can't overflow past year 9999 (a 500).
+    due_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
     grace_days: int = Field(ge=0, le=MAX_GRACE_DAYS)
     penalty_per_day: int = Field(ge=0, le=MAX_PENALTY_PER_DAY)
 
@@ -24,15 +27,42 @@ class MilestoneIn(BaseModel):
         return self.due_local.replace(tzinfo=DHAKA)
 
 
+def _local(at: datetime | None) -> str | None:
+    # As a datetime-local input holds it, in Dhaka time ("YYYY-MM-DDTHH:MM").
+    return at and at.astimezone(DHAKA).strftime("%Y-%m-%dT%H:%M")
+
+
+class RegistrationIn(BaseModel):
+    """The P1 registration window, in Dhaka wall-clock time like MilestoneIn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    opens_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
+    closes_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
+
+    @property
+    def opens_at(self) -> datetime:
+        return self.opens_local.replace(tzinfo=DHAKA)
+
+    @property
+    def closes_at(self) -> datetime:
+        return self.closes_local.replace(tzinfo=DHAKA)
+
+
 class MilestoneOut(BaseModel):
     phase: Phase
     due_at: datetime | None  # None until the coordinator sets it
 
+    # due_at in Dhaka time, as the coordinator's date and time inputs hold it ("YYYY-MM-DD", "HH:MM").
     @computed_field
     @property
-    def due_local(self) -> str | None:
-        """due_at in Dhaka time as "YYYY-MM-DDTHH:MM", what the coordinator's date and time inputs hold."""
-        return self.due_at and self.due_at.astimezone(DHAKA).strftime("%Y-%m-%dT%H:%M")
+    def due_date(self) -> str | None:
+        return self.due_at and self.due_at.astimezone(DHAKA).strftime("%Y-%m-%d")
+
+    @computed_field
+    @property
+    def due_time(self) -> str:
+        return self.due_at.astimezone(DHAKA).strftime("%H:%M") if self.due_at else DEFAULT_DUE_TIME
 
     grace_days: int
     penalty_per_day: int
@@ -53,8 +83,28 @@ class TimelineOut(BaseModel):
     now: datetime  # server clock, so countdowns don't trust the browser's
     milestones: list[MilestoneOut]
     can_edit: bool  # coordinator only
-    registration_closes_at: datetime | None  # end of this semester's one-week P1 registration
+    registration_opens_at: datetime | None  # this semester's P1 registration window
+    registration_closes_at: datetime | None
     registration_open: bool
+
+    @computed_field
+    @property
+    def registration_status(self) -> Literal["not_set", "upcoming", "open", "closed"]:
+        if self.registration_opens_at is None:
+            return "not_set"
+        return "open" if self.registration_open else "upcoming" if self.now < self.registration_opens_at else "closed"
+
+    # The window as the coordinator's datetime-local inputs hold it.
+    @computed_field
+    @property
+    def registration_opens_local(self) -> str | None:
+        return _local(self.registration_opens_at)
+
+    @computed_field
+    @property
+    def registration_closes_local(self) -> str | None:
+        return _local(self.registration_closes_at)
+
     # Input limits for the coordinator form, same values MilestoneIn enforces.
     max_grace_days: int = MAX_GRACE_DAYS
     max_penalty_per_day: int = MAX_PENALTY_PER_DAY

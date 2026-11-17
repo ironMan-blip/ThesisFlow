@@ -11,13 +11,13 @@ from app.config import settings
 from app.database import get_db
 from app.main import app
 from app.models.user import Role, User
-from app.security import hash_password
+from app.security import DEVICE_COOKIE, device_account, hash_password
 from app.services import account_service, auth_service
 from app.services.auth_service import REGISTER_TAKEN
 from tests.helpers import REASON, auth, run_deletions_due, student as make_student, supervised_student, upload
 
 
-def register(client, email=None, password="Password123", id_number="12345678", role="student", initials=None):
+def register(client, email=None, password="Password123", id_number="12345678", role="student", initials=None, full_name="A"):
     if initials is None and role == "faculty":
         initials = "ABC"
     if email is None:
@@ -25,7 +25,7 @@ def register(client, email=None, password="Password123", id_number="12345678", r
     return client.post(
         "/api/auth/register",
         json={
-            "email": email, "id_number": id_number, "full_name": "A", "password": password, "role": role,
+            "email": email, "id_number": id_number, "full_name": full_name, "password": password, "role": role,
             "initials": initials,
         },
     )
@@ -46,7 +46,7 @@ def test_register_login_me(client, db):
     assert me.status_code == 200
     assert me.json()["role"] == "student"
     assert me.json()["tools"] == ["thesis", "teammates", "proposal", "deadlines", "meetings", "account"]
-    assert me.json()["phase"] == "P1"  # every student starts at P1
+    assert me.json()["phase"] is None  # the phase is the thesis group's: none before a thesis
     assert me.json()["review_hours"] == 48
 
 
@@ -103,15 +103,24 @@ def test_coordinator_signup_rejected(client):
 
 
 def test_faculty_initials(client, db):
-    for bad in ["", "abc", "AB1", "A B", "ABCDEFGHIJK"]:
+    for bad in ["", "AB1", "A B", "ABCDEFGHIJK"]:
         assert register(client, role="faculty", initials=bad).status_code == 422
-    r = register(client, role="faculty", initials="MMR")
+    r = register(client, role="faculty", initials=" mmr ")  # stored uppercased
     assert r.status_code == 201 and r.json()["initials"] == "MMR"
     r = register(client, email="x@bracu.ac.bd", id_number="87654321", role="faculty", initials="MMR")
     assert r.status_code == 409 and r.json()["detail"] == "Initials already registered"
     # Students never carry initials.
     r = register(client, email="s@g.bracu.ac.bd", id_number="11111111", initials="ZZ")
     assert r.status_code == 201 and r.json()["initials"] is None
+
+
+def test_signup_options_match_rules(client):
+    opts = client.get("/api/auth/signup-options").json()
+    assert opts["roles"] == [
+        {"role": "student", "email_domain": "g.bracu.ac.bd", "needs_initials": False},
+        {"role": "faculty", "email_domain": "bracu.ac.bd", "needs_initials": True},
+    ]
+    assert opts["min_password"] == 8 and opts["review_hours"] == 48
 
 
 def test_expired_request_frees_initials(client, db):
@@ -225,6 +234,9 @@ def test_register_rejects_bad_email_and_weak_password(client):
         r = register(client, password=weak)
         assert r.status_code == 422, weak
         assert r.json()["detail"].startswith("password:"), weak
+    # A name of only spaces would give an empty first name and avatar; padding is trimmed.
+    assert register(client, full_name="   ").status_code == 422
+    assert register(client, full_name="  Ada Byron ").json()["full_name"] == "Ada Byron"
 
 
 def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_path, timelines):
@@ -250,7 +262,7 @@ def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     assert [(p["email"], p["deletion_reason"]) for p in pending] == [("s@b.com", REASON["reason"])]
     uid = pending[0]["id"]
     assert client.get("/api/auth/me/counts", headers=coord).json()["deletion_requests"] == 1
-    assert run_deletions_due(db) == (0, 0)  # 7 days alone do nothing without approval
+    assert run_deletions_due(db) == 0  # 7 days alone do nothing without approval
     assert client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=student).status_code == 403
     approved = client.post(f"/api/auth/deletion-requests/{uid}/approve", headers=coord)
     assert approved.status_code == 200 and approved.json()["deletion_executes_at"] is not None
@@ -259,12 +271,13 @@ def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     assert account_service.run_due_deletions(db) == 0  # approved, but the 7 days aren't over
     assert client.get("/api/auth/me", headers=student).status_code == 200  # still usable while waiting
 
-    assert run_deletions_due(db) == (1, 0)
+    assert run_deletions_due(db) == 1
     assert db.get(User, uid) is None
     assert pdfs[0].exists()  # the thesis and its versions are kept as an archive
     assert client.get("/api/auth/me", headers=student).status_code == 401
     theses = client.get("/api/theses", headers=sup).json()
-    assert [(t["status"], t["student"], len(t["versions"])) for t in theses] == [("dropped", None, 1)]
+    # The teammates carry on with the thesis; only the requester's link is gone.
+    assert [(t["status"], t["student"], len(t["members"]), len(t["versions"])) for t in theses] == [("active", None, 2, 1)]
 
 
 def test_only_the_coordinator_cancels_a_deletion(client, db):
@@ -278,7 +291,7 @@ def test_only_the_coordinator_cancels_a_deletion(client, db):
     assert r.status_code == 200 and (r.json()["deletion_pending"], r.json()["deletion_reason"]) == (False, None)
     assert client.get("/api/auth/deletion-requests", headers=coord).json() == []
     assert client.delete(f"/api/auth/deletion-requests/{uid}", headers=coord).status_code == 404
-    assert run_deletions_due(db) == (0, 0) and db.get(User, uid) is not None
+    assert run_deletions_due(db) == 0 and db.get(User, uid) is not None
     # The user may ask again.
     assert client.post("/api/auth/me/deletion-request", headers=student, json=REASON).status_code == 200
 
@@ -293,10 +306,10 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     accounts = client.get("/api/auth/accounts", headers=coord).json()
     by_email = {a["email"]: a["id"] for a in accounts}
     supervisor_email = next(e for e in by_email if e.startswith("sup"))
-    assert set(by_email) == {"s@b.com", supervisor_email}  # coordinator is the admin login, not listed
+    assert {"s@b.com", supervisor_email} <= set(by_email) and "coord@b.com" not in by_email  # coordinator is the admin login
     student_id = db.scalar(select(User.id_number).where(User.email == "s@b.com"))
     emails = lambda q: [a["email"] for a in client.get(f"/api/auth/accounts?{q}", headers=coord).json()]
-    assert emails(f"role=student&id_prefix={student_id[:3]}") == ["s@b.com"]
+    assert emails(f"role=student&id_prefix={student_id}") == ["s@b.com"]
     assert emails("role=faculty") == [supervisor_email]
     assert emails("id_prefix=%25") == []  # LIKE wildcards are matched literally
     assert client.get("/api/auth/accounts?role=coordinator", headers=coord).status_code == 422
@@ -316,10 +329,10 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     assert mine["deletion_executes_at"] is not None
     assert schedule(by_email["s@b.com"]).status_code == 409  # already scheduled
     assert db.get(User, by_email["s@b.com"]) is not None  # nothing happens before the 7 days
-    assert run_deletions_due(db) == (1, 0)
+    assert run_deletions_due(db) == 1
     assert db.get(User, by_email["s@b.com"]) is None
     assert len(list(tmp_path.rglob("*.pdf"))) == 1  # versions are never lost
-    assert schedule(by_email[supervisor_email]).status_code == 200
+    assert schedule(by_email[supervisor_email]).status_code == 409  # the teammates' thesis is still active
     assert schedule(by_email["s@b.com"]).status_code == 404
 
 
@@ -361,6 +374,30 @@ def test_failed_logins_from_one_ip_do_not_lock_out_the_owner(client, db):
     assert exc.value.status_code == 429
     # The owner, from another IP, still gets in; right logins don't use up the budget.
     assert all(login(client).status_code == 200 for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1))
+
+
+def test_guessing_from_the_same_ip_does_not_lock_out_a_known_browser(client, db):
+    # Behind Docker Desktop everyone shares one IP, so the per-IP buckets alone let a guesser lock the owner out.
+    register(client)
+    db.scalar(select(User).where(User.id_number == "12345678")).approved = True
+    db.flush()
+    assert login(client).status_code == 200
+    cookie = client.cookies.get(DEVICE_COOKIE)
+    assert cookie and device_account(cookie) == "12345678"
+    client.cookies.clear()
+    assert all(login(client, password="Wrong1234").status_code == 401 for _ in range(rate_limit.LOGIN_PER_ACCOUNT))
+    assert login(client).status_code == 429  # a browser without the cookie is locked out with the guesser
+    for _ in range(rate_limit.LIMITS["/api/auth/login"]):
+        client.post("/api/auth/login", data={"username": "00000000", "password": "Wrong1234"})
+    client.cookies.set(DEVICE_COOKIE, cookie)
+    res = login(client)
+    assert res.status_code == 200  # the owner's browser has its own buckets
+    # The cookie only names its own account: it gives no fresh bucket for guessing another one.
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db, "12345678", "Wrong1234", ip="testclient", device="87654321")
+    assert exc.value.status_code == 429
+    assert device_account(res.cookies[DEVICE_COOKIE]) == "12345678"  # renewed
+    assert device_account(res.json()["access_token"]) is None  # an access token is no device cookie
 
 
 def test_guessing_from_many_ips_does_not_lock_out_a_known_ip(client, db, monkeypatch):

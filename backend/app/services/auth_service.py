@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app import rate_limit
 from app.config import settings
-from app.models.milestone import Phase
 from app.models.user import REVIEW_HOURS, REVIEW_WINDOW, Role, User
 from app.schemas.user import MAX_PASSWORD, UserCreate
 from app.security import create_access_token, hash_password, verify_password
@@ -52,7 +51,6 @@ def create_user(
         password_hash=hash_password(password),
         role=role,
         approved=approved,
-        phase=Phase.P1 if role == Role.student else None,  # every student starts at P1
     )
     db.add(user)
     try:
@@ -105,13 +103,18 @@ def ensure_admin(db: Session) -> User:
     return user
 
 
-def login(db: Session, id_number: str, password: str, ip: str) -> str:
+def login(db: Session, id_number: str, password: str, ip: str, device: str | None = None) -> str:
     # Per account, not just per IP: stops guessing one password from many IPs or behind one shared IP.
     # Only failed logins count (a right one is taken back), and recorded before hashing so parallel guesses can't slip past.
+    # device: the account this browser's device cookie names (security.device_account), if any.
     account = id_number[:32]
-    keys = [(("login", account, ip), rate_limit.LOGIN_PER_ACCOUNT)]
-    if not rate_limit.is_known_ip(account, ip):
-        keys.append((("login", account), rate_limit.LOGIN_PER_ACCOUNT_ALL_IPS))
+    if device == account:
+        # A browser that logged in to this account before: its own bucket, which a guesser without the cookie can't fill.
+        keys = [(("login", account, "device"), rate_limit.LOGIN_PER_ACCOUNT)]
+    else:
+        keys = [(("login", account, ip), rate_limit.LOGIN_PER_ACCOUNT)]
+        if not rate_limit.is_known_ip(account, ip):
+            keys.append((("login", account), rate_limit.LOGIN_PER_ACCOUNT_ALL_IPS))
     for i, (key, limit) in enumerate(keys):
         if retry := rate_limit.hit(key, limit):
             for done, _ in keys[:i]:

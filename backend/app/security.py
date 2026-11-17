@@ -30,6 +30,26 @@ def create_access_token(user_id: int, password_hash: str, session_epoch: int) ->
     return jwt.encode(claims, settings.jwt_secret, algorithm=ALGORITHM)
 
 
+# Marks a browser that logged in to an account. It signs nobody in: it only gives that browser its own login
+# rate-limit buckets, so someone guessing from the same IP can't lock the owner out (OWASP "device cookie").
+DEVICE_COOKIE = "tf_device"
+DEVICE_TTL = timedelta(days=180)
+
+
+def create_device_token(account: str) -> str:
+    return jwt.encode({"dev": account, "exp": datetime.now(timezone.utc) + DEVICE_TTL}, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def device_account(token: str | None) -> str | None:
+    """The account a device cookie was issued for, or None. Access tokens have no "dev", so they never pass."""
+    if not token:
+        return None
+    try:
+        return str(jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM], options={"require": ["exp", "dev"]})["dev"])
+    except jwt.PyJWTError:
+        return None
+
+
 def decode_access_token(token: str) -> tuple[int, str] | None:
     """(user id, password stamp), or None for a bad or expired token."""
     try:

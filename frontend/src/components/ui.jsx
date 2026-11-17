@@ -108,6 +108,32 @@ export function Person({ user, children }) {
   );
 }
 
+// A thesis group's name; hovering or focusing it lists each member's name, ID and email.
+export function GroupName({ thesis }) {
+  const tip = `group-members-${thesis.id}`;
+  return (
+    <span className="group/members relative inline-block">
+      <span tabIndex={0} aria-describedby={tip}
+        className="cursor-help font-medium underline decoration-zinc-400 decoration-dotted underline-offset-4 outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-teal-600">
+        {thesis.group_name ?? "Unnamed group"}
+      </span>
+      <span id={tip} role="tooltip"
+        className="invisible absolute left-0 top-full z-20 mt-1 w-72 max-w-[80vw] rounded-lg bg-white p-3 text-left text-sm font-normal text-zinc-700 opacity-0 shadow-lg ring-1 ring-zinc-200 transition-opacity group-hover/members:visible group-hover/members:opacity-100 group-focus-within/members:visible group-focus-within/members:opacity-100">
+        {thesis.members.length ? (
+          <span className="block space-y-2">
+            {thesis.members.map((m) => (
+              <span key={m.id} className="block">
+                <span className="block font-medium text-zinc-900">{m.full_name}</span>
+                <span className="block wrap-anywhere text-xs text-zinc-500"><span className="tabular-nums">ID {m.id_number}</span> · {m.email}</span>
+              </span>
+            ))}
+          </span>
+        ) : "No current members"}
+      </span>
+    </span>
+  );
+}
+
 export function EmptyState({ icon = ICONS.inbox, title, children }) {
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
@@ -139,10 +165,16 @@ export function VersionInfo({ v, abstract = false }) {
         <span className="badge bg-zinc-50 font-semibold tabular-nums text-zinc-700 ring-zinc-200">v{v.version_no}</span>
         <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">{v.phase}</span>
         {v.is_latest && <span className="badge bg-teal-50 text-teal-800 ring-teal-600/20">Latest</span>}
+        {(v.title_changed || v.abstract_changed) && (
+          // First upload after an approved change; older versions keep the text they were uploaded with.
+          <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">
+            {v.title_changed && v.abstract_changed ? "Title and abstract changed" : v.title_changed ? "Title changed" : "Abstract changed"}
+          </span>
+        )}
         <p className="truncate font-medium">{v.title}</p>
       </div>
       {abstract && <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>}
-      <p className="mt-1.5 break-words text-xs text-zinc-500">
+      <p className="mt-1.5 wrap-anywhere text-xs text-zinc-500">
         {v.original_filename} · {v.size_label} · {when(v.created_at)}
       </p>
     </div>

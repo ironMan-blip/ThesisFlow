@@ -1,9 +1,12 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
 from app.config import settings
 from app.models.milestone import Phase
+from app.models.thesis import TITLE_CHANGE_WINDOW
 
 MAX_ABSTRACT_CHARS = 5000
 
@@ -19,15 +22,10 @@ class ProposalVersionOut(BaseModel):
     original_filename: str
     size_bytes: int
     created_at: datetime
-    is_latest: bool = False  # set by ProposalOut
-    # Set by the service, student page only: they can ask their supervisor to delete it / they asked and it still can be.
-    can_request_delete: bool = False
-    delete_pending: bool = False
-    delete_executes_at: datetime | None = None  # when the requested delete runs, if one is pending
-    delete_by_staff: bool = False  # scheduled by the supervisor, not asked by the student
-    delete_reason: str | None = None  # shown to the group while a delete is pending
-    delete_rejected: bool = False  # student page: the supervisor rejected their last request for it
-    can_schedule_delete: bool = False  # Theses page: the thesis's supervisor may delete it (never a final version)
+    is_latest: bool = False  # set by mark_versions
+    # Set by mark_versions: differs from the version before it, i.e. the first upload after an approved title change.
+    title_changed: bool = False
+    abstract_changed: bool = False
 
     @computed_field
     @property
@@ -41,6 +39,30 @@ class ProposalVersionOut(BaseModel):
         return f"/proposals/versions/{self.id}/file"
 
 
+def mark_versions(versions: list[ProposalVersionOut]) -> None:
+    """versions: newest first. Older versions keep the title and abstract they were uploaded with."""
+    if versions:
+        versions[0].is_latest = True
+    for newer, older in zip(versions, versions[1:]):
+        newer.title_changed, newer.abstract_changed = newer.title != older.title, newer.abstract != older.abstract
+
+
+class TitleChangeIn(BaseModel):
+    title: str
+    abstract: str  # both checked like an upload's (proposal_service._clean)
+
+
+class TitleChangeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    abstract: str
+    created_at: datetime
+    expires_at: datetime  # the supervisor must accept before this
+    status: Literal["pending", "approved", "rejected", "expired"]
+
+
 class ProposalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,10 +74,14 @@ class ProposalOut(BaseModel):
     freeze_at: datetime | None = None
     max_upload_mb: int = settings.max_upload_mb
     max_abstract_chars: int = MAX_ABSTRACT_CHARS
-    supervisor_contact: str | None = None  # shown with a version the supervisor scheduled to delete: they can cancel it
+    # The thesis's title and abstract: set by the first upload, and every later upload must match them.
+    title: str | None = None
+    abstract: str | None = None
+    title_change: TitleChangeOut | None = None  # the latest change request, if any
+    can_request_title_change: bool = False  # the one approved change isn't used and no request is waiting
+    title_change_days: int = TITLE_CHANGE_WINDOW.days
 
     @model_validator(mode="after")
-    def _mark_latest(self):
-        if self.versions:
-            self.versions[0].is_latest = True
+    def _mark_versions(self):
+        mark_versions(self.versions)
         return self

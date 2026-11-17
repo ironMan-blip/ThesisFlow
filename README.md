@@ -50,7 +50,8 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Real PDF check (by content: starts with `%PDF-`, `%%EOF` in the last 1 KB) and size limit (`MAX_UPLOAD_MB`, 20 MB default; oversized requests get `413` early).
 - Numbered versions (v1, v2, …), newest first, with download links.
 - Identical re-upload reuses the existing version instead of storing a copy.
-- Every past version is kept (SRS F11). A student can ask to delete one, with a reason; if the coordinator approves, it runs 7 days later unless they cancel it. See below.
+- Every past version is kept (SRS F11). Nobody can delete a version: not the student, the supervisor or the coordinator.
+- The first upload fixes the thesis title and abstract. A later upload with a different title or abstract is refused with "Wrong title" / "Wrong abstract". The group can change them **once**, by a request the supervisor must accept within **3 days**.
 - Group members and coordinator can view and download versions.
 - Uploads on one thesis are locked so version numbers never clash.
 
@@ -93,6 +94,7 @@ git clone https://github.com/ironMan-blip/ThesisFlow.git && cd ThesisFlow
 cp .env.example .env                              # required: fill in every value
 docker compose up --build                         # starts db, backend and frontend
 docker compose exec backend python -m app.seed    # optional: fills the dev DB with test data (see app/seed.py)
+docker compose exec backend python -m app.recheck_uploads  # once, after updating: re-checks PDFs stored by older versions
 ```
 
 On start, the backend runs the database migrations (`alembic upgrade head`) and creates or updates the coordinator account.
@@ -146,7 +148,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 ### 1. Accounts and login
 
 - Register with full name, email, a 8-digit ID number and password, as a **student** or **faculty**. Nobody can sign up as coordinator. The email must be a BRAC University one: `@g.bracu.ac.bd` for students, `@bracu.ac.bd` for faculty.
-- Faculty must also give their **initials** (1 to 10 capital letters, e.g. `ABK`), unique across faculty.
+- Faculty must also give their **initials** (1 to 10 letters, stored in capitals, e.g. `ABK`), unique across faculty.
 - Password rules: 8 to 128 characters, at least one uppercase letter, one lowercase letter and one number, no spaces.
 - Emails are case-insensitive (stored lowercase) and must be unique.
 - ID numbers are exactly 8 digits and must be unique across students and faculty. Log in with ID number and password.
@@ -192,7 +194,8 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 ### 6. Thesis groups and phase progression
 
-- A student needs a **thesis group** to upload: the student and a **supervisor** (faculty). The student sends the request on the **Thesis group** page.
+- A student needs a **thesis group** to upload: a student group of 3 to 5 and a **supervisor** (faculty). Once the group has at least 3 members (all in the same phase, none frozen), **any member** sends the request on the **Thesis group** page; the thesis belongs to the whole group and every member shares it (uploads, deadlines, meetings). Any member can cancel the request or add a co-supervisor.
+- **Membership:** until the group registers for P1, students can join (they share the group's thesis) or leave (they lose it; the last one out removes an unregistered request). Registering needs at least 3 members. **After P1 registration nobody joins or leaves**; only an approved restart (the student starts fresh with no group) or an account deletion takes a member out, and the others keep the thesis.
 - **P1 registration:** students sign up, ask for a group, and faculty accept any time. But an accepted group can only **register for P1** (button on the Thesis group page) in the **first week of each semester** (from the semester rollover; the first one starts when the database is set up). Only a registered group can upload for P1. A P1 group that didn't register has nothing due that semester and stays at P1; registration is cleared at every rollover.
 - The supervisor accepts or declines under **Theses**. Accepting forms the group; groups can be formed at any time. The formed group then registers for P1, which makes it active and gives it its **thesis ID** (e.g. `T12345678`: "T" + 8 random digits, unique), kept from then on. Only then can it upload proposals. A decline, or the student cancelling while it waits, lets the student choose again.
 - A **co-supervisor** (optional, faculty) can only be added once the group is formed, from **Thesis group**. They join only when **both** they and the supervisor accept (in either order, each under **Theses**). If either declines, or the student withdraws it first, the group stays as it is without a co-supervisor and the student can pick someone else. A co-supervisor who joined sees the thesis and its versions, but decides nothing.
@@ -213,9 +216,8 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Only the student uploads. The group (the student, the supervisor, and the co-supervisor once joined) can view and download its versions; the coordinator can't.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
-- Versions are kept (SRS F11). A student can **ask to delete** a version of their current phase while uploads are open, writing a reason in a dialog. The thesis's **supervisor** approves or rejects it on **Theses** (with the reason). After approval the delete runs **7 days** later: the version and its PDF go and later versions are renumbered. Within those 7 days only the supervisor can cancel it. Approving is refused once the phase has closed, and if the phase closes during the wait, the version is the final submission and is kept. While a delete is pending, uploading the same file again stores a new version instead of reusing the one being deleted.
-- Only the thesis's **supervisor** (not the co-supervisor, not the coordinator) can delete a version directly from **Theses**, with a reason. It counts as approved, so it runs **7 days** later, and the supervisor can cancel it until then. The student sees the date, the reason and the supervisor's email to contact. They can never delete a phase's **final version** (the one that counts as the submission: a closed phase's final upload, or the open phase's latest); if a version becomes final during the wait, the delete is dropped.
-- The student is told: a badge on **Proposal**, and a message there with the date, the reason and the coordinator's email to contact within the 7 days if there is a problem. A request the coordinator rejects shows "Delete request rejected" on that version.
+- Title and abstract: set by the first upload and stored on the thesis; every later upload (any phase) must match them exactly. To change them the student sends a request (new title and abstract) from **Proposal**. Only the thesis's **supervisor** can accept or reject it on **Theses**, and only within 3 days; after that it expires. A rejected or expired request can be sent again; once one is accepted, no more changes. Versions uploaded before the change keep their old title and abstract; the first version after it shows a "Title changed" / "Abstract changed" badge. Waiting requests count in the supervisor's **Theses** badge.
+- Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions; re-uploading one unchanged still works at the cap.
 - Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
 
@@ -289,7 +291,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 - `Layout` loads `/api/auth/me` and shows only the tools in `user.tools`. The API refuses calls for tools a role doesn't have.
 - Request badges refresh every 10 seconds while the tab is visible (`/api/auth/me/counts`).
 - The Deadlines page ticks its countdowns every second and reloads from the API every minute.
-- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC. `PUT /api/milestones/{phase}` takes `due_local` (Dhaka wall-clock time, no zone) and refuses anything else.
+- All times are shown and entered in **Asia/Dhaka** time (UTC+6); the backend stores UTC. `PUT /api/milestones/{phase}` takes `due_local` (Dhaka wall-clock time, no zone) and refuses anything else; `GET /api/milestones` returns each deadline as Dhaka `due_date` and `due_time` for the form.
 - Business rules live in the backend; the frontend only shows what the API returns (flags like `can_*`, statuses, choices).
 - Files are downloaded with `fetch` + a blob link, because a normal link can't send the JWT.
 - Delete actions ask for confirmation in a dialog first.
@@ -301,7 +303,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 
 ### Migrations
 
-`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes → co-supervisors added after a group forms.
+`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes → co-supervisors added after a group forms → version deletes removed → thesis title and abstract with change requests.
 
 ## Project layout (MVC)
 
@@ -337,6 +339,7 @@ docs/           SRS, class diagram (draw.io source + exports), contribution trac
 
 | Method | Path | Who |
 |--------|------|-----|
+| GET | `/api/auth/signup-options` (roles, email domains, password rules for the sign-up form) | anyone |
 | POST | `/api/auth/register` | anyone |
 | POST | `/api/auth/login` | anyone |
 | POST | `/api/auth/logout` (ends all of this person's sessions) | logged in |
@@ -361,9 +364,8 @@ docs/           SRS, class diagram (draw.io source + exports), contribution trac
 | PUT | `/api/theses/{id}/defer` | the thesis's supervisor |
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
-| POST | `/api/proposals/versions/{id}/delete-request` (`{reason}`) | student (own) |
-| POST | `/api/proposals/versions/{id}/deletion` (`{reason}`: approved at once, runs in 7 days, never a final version) | the thesis's supervisor |
-| POST / DELETE | `/api/proposals/delete-requests/{id}[/approve]` (approve, reject or cancel) | the thesis's supervisor |
+| POST | `/api/proposals/mine/title-change` (`{title, abstract}`) | student (own thesis) |
+| POST / DELETE | `/api/proposals/title-changes/{id}[/approve]` (approve or reject within 3 days) | the thesis's supervisor |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisor and joined co-supervisor |
 
 Full request/response shapes are at http://localhost:5174/docs.

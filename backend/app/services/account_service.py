@@ -12,7 +12,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
-from app.models.thesis import UNREGISTERED, ThesisStatus
 from app.models.user import DELETION_DELAY, REVIEW_WINDOW, Role, User
 from app.services import group_service, progress_service, proposal_service, thesis_service
 
@@ -41,8 +40,7 @@ def _pending(db: Session, user_id: int) -> User:
 
 def approve_registration(db: Session, user_id: int) -> User:
     user = _pending(db, user_id)
-    # A student's phase starts when they can log in, so a sign-up approved late isn't counted as missing a deadline.
-    user.approved, user.phase_started_at = True, datetime.now(timezone.utc)
+    user.approved = True
     db.commit()
     db.refresh(user)
     return user
@@ -114,13 +112,12 @@ def _check_deletable(db: Session, user: User) -> None:
 
 
 def pending_counts(db: Session, user: User) -> dict[str, int]:
-    # Badge counts keyed by tool: the coordinator decides account requests, faculty answer supervision and delete requests.
+    # Badge counts keyed by tool: the coordinator decides account requests, faculty answer supervision and title requests.
     if user.role == Role.faculty:
-        # Supervision requests plus students' version delete requests waiting for this supervisor.
-        return {"theses": thesis_service.count_requests(db, user) + proposal_service.count_delete_requests(db, user)}
+        return {"theses": thesis_service.count_requests(db, user) + proposal_service.count_title_changes(db, user)}
     if user.role == Role.student:
-        counts = {"proposal": proposal_service.count_staff_deletes(db, user), "thesis": group_service.count_invitations(db, user)}
-        return {tool: n for tool, n in counts.items() if n}
+        n = group_service.count_invitations(db, user)
+        return {"thesis": n} if n else {}
     # Polled every 10s by the UI, so count in SQL instead of loading the rows.
     count = lambda q: db.scalar(q.with_only_columns(func.count()))
     return {
@@ -144,11 +141,7 @@ def list_accounts(db: Session, role: Role | None = None, id_prefix: str = "") ->
 def _delete(db: Session, user: User) -> None:
     # The thesis and every proposal version stay as an archive; the foreign keys only clear the user.
     group_service.drop_membership(db, user)  # hands leadership on before the user row goes
-    thesis, user.thesis = user.thesis, None
-    if thesis is not None and thesis.status in UNREGISTERED:
-        db.delete(thesis)  # never registered, so no thesis ID and no versions
-    elif thesis is not None and thesis.status == ThesisStatus.active:
-        thesis.status = ThesisStatus.dropped
+    progress_service.release_thesis(db, user)  # the other members keep the thesis; the last one out archives it
     if user.role == Role.faculty:
         thesis_service.drop_requests_to(db, user)  # supervises_live already ruled out any group they accepted
     db.delete(user)

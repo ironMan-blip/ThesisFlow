@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
 import { api, download, upload } from "../api/client";
-import { Alerts, EmptyState, Icon, ICONS, PageHeader, ReasonDialog, Skeleton, VersionInfo } from "../components/ui";
+import { Alerts, EmptyState, Icon, ICONS, PageHeader, Skeleton, VersionInfo } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
 export default function ProposalPage() {
-  const { user } = useOutletContext();
   const [proposal, setProposal] = useState(null);
   const [fileName, setFileName] = useState("");
-  const [asking, setAsking] = useState(null); // version the student is asking to delete
   const [progress, setProgress] = useState(0); // share of the file sent, 0 to 1
   const { busy, error, notice, setError, run } = useAction();
 
@@ -31,41 +28,14 @@ export default function ProposalPage() {
 
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
-  const askDelete = (reason) => {
-    const v = asking;
-    run("ask", async () => {
-      const res = await api(`/proposals/versions/${v.id}/delete-request`, { method: "POST", body: { reason } });
-      setProposal(res);
-      setAsking(null);
-      return `Delete requested for v${v.version_no}. Your supervisor decides; if approved it is deleted ${user.deletion_days} days later.`;
-    });
-  };
-
   const saving = busy === "upload";
 
   return (
     <div className="space-y-8">
       <PageHeader title="Proposal" intro="Upload a new version of your proposal and see everything you have handed in." help={[
         "Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept.",
-        "Your latest upload when the phase closes is your final submission.",
-        `To delete a version, give a reason. If your supervisor approves, it is deleted ${user.deletion_days} days later, unless they cancel it or the phase has closed by then.`,
+        "Your latest upload when the phase closes is your final submission. Versions can't be deleted.",
       ]} />
-
-      {proposal?.versions.filter((v) => v.delete_by_staff && v.delete_pending).map((v) => (
-        // The supervisor scheduled this: the student must get the chance to object in time.
-        <div key={v.id} role="alert" className="alert-error">
-          <Icon className="mt-px size-4">{ICONS.alert}</Icon>
-          <div className="space-y-1">
-            <p className="font-medium">v{v.version_no} ("{v.title}") is scheduled for deletion on {when(v.delete_executes_at)}.</p>
-            <p className="whitespace-pre-line break-words">Reason: {v.delete_reason}</p>
-            <p>
-              Your supervisor scheduled it. If this is a mistake or you have a problem with it, contact them
-              {proposal.supervisor_contact && <> at <a href={`mailto:${proposal.supervisor_contact}`} className="font-medium underline">{proposal.supervisor_contact}</a></>}{" "}
-              before then: they can cancel it.
-            </p>
-          </div>
-        </div>
-      ))}
 
       <div className="grid items-start gap-6 lg:grid-cols-5">
         <form onSubmit={submit} className="card space-y-5 p-6 lg:col-span-2">
@@ -79,27 +49,37 @@ export default function ProposalPage() {
             )}
           </div>
           {proposal?.upload_block && (
-            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200/70 ring-inset">{proposal.upload_block}.</p>
+            <p role="status" className="alert border-amber-200 bg-amber-50 text-amber-900">
+              <Icon className="mt-px size-4">{ICONS.alert}</Icon><span>{proposal.upload_block}.</span>
+            </p>
           )}
           {proposal?.freeze_at && (
             <p role="alert" className="alert-error">
               <Icon className="mt-px size-4">{ICONS.alert}</Icon>
-              <span>You haven't submitted {proposal.phase} yet. Upload before {when(proposal.freeze_at)} or your account will be frozen.</span>
+              <span>You haven't submitted {proposal.phase} yet. Upload before {when(proposal.freeze_at)} or your group will be frozen.</span>
             </p>
           )}
+          {proposal?.title && (
+            <p className="text-sm text-zinc-500">Your first upload set the title and abstract. Every upload must use them exactly.</p>
+          )}
+          {/* Fields stay visible but locked while uploads are blocked, so nobody fills a form they can't send. */}
+          <fieldset disabled={!!proposal?.upload_block} className="min-w-0 space-y-5">
           <label className="label">
             Title
-            <input name="title" required maxLength={255} placeholder="Working title of your thesis" className="input" />
+            <input key={`t-${proposal?.title}`} name="title" required maxLength={255} defaultValue={proposal?.title ?? ""}
+              placeholder="Working title of your thesis" className="input" />
           </label>
           <label className="label">
             Abstract
-            <textarea name="abstract" required maxLength={proposal?.max_abstract_chars} rows={5} placeholder="A short summary of the problem and approach" className="input resize-y" />
+            <textarea key={`a-${proposal?.abstract}`} name="abstract" required maxLength={proposal?.max_abstract_chars} rows={5}
+              defaultValue={proposal?.abstract ?? ""} placeholder="A short summary of the problem and approach" className="input resize-y" />
           </label>
           <div>
             <span className="label">PDF file</span>
             {/* The real input covers the box, so click and drag-and-drop both work natively. */}
             <div className={`relative mt-1.5 flex flex-col items-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition
-              focus-within:border-teal-600 focus-within:ring-3 focus-within:ring-teal-600/15 hover:border-teal-500 hover:bg-teal-50/40 ${
+              focus-within:border-teal-600 focus-within:ring-3 focus-within:ring-teal-600/15 hover:border-teal-500 hover:bg-teal-50/40
+              has-disabled:border-zinc-200 has-disabled:bg-zinc-50 has-disabled:opacity-60 has-disabled:pointer-events-none ${
                 fileName ? "border-teal-300 bg-teal-50/40" : "border-zinc-300"
               }`}>
               <span className="grid size-10 place-items-center rounded-lg bg-white text-teal-700 shadow-xs ring-1 ring-zinc-200">
@@ -109,9 +89,10 @@ export default function ProposalPage() {
               <p className="mt-0.5 text-xs text-zinc-500">{fileName ? "Click to choose a different file" : <>PDF only{proposal && `, up to ${proposal.max_upload_mb} MB`}</>}</p>
               <input name="file" type="file" accept="application/pdf" required aria-label="PDF file"
                 onChange={(e) => setFileName(e.target.files[0]?.name ?? "")}
-                className="absolute inset-0 cursor-pointer opacity-0" />
+                className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed" />
             </div>
           </div>
+          </fieldset>
           <Alerts error={error} notice={notice} />
           <button disabled={saving || !proposal || !!proposal.upload_block} className="btn-primary w-full">
             {/* After the last byte the server still scans and checks the file, so say so instead of sitting at 100%. */}
@@ -143,13 +124,7 @@ export default function ProposalPage() {
                 <li key={v.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <VersionInfo v={v} abstract />
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {v.delete_pending && <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">{v.delete_executes_at ? `Deletes on ${when(v.delete_executes_at)}` : "Delete requested"}</span>}
-                    {v.delete_rejected && <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">Delete request rejected</span>}
                     <button onClick={() => get(v)} className="btn-secondary px-3 py-1.5">Download</button>
-                    {v.can_request_delete && (
-                      <button onClick={() => { setError(null); setAsking(v); }} disabled={busy === "ask"} aria-label={`Ask to delete v${v.version_no}`}
-                        className="btn-ghost-danger px-3 py-1.5">Ask to delete</button>
-                    )}
                   </div>
                 </li>
               ))}
@@ -158,12 +133,65 @@ export default function ProposalPage() {
         </section>
       </div>
 
-      <ReasonDialog open={!!asking} title={`Delete v${asking?.version_no}?`} confirm="Schedule delete" busy={busy === "ask"} error={error}
-        min={user.min_reason_chars} max={user.max_reason_chars} onCancel={() => setAsking(null)} onSubmit={askDelete}>
-        If your supervisor approves, the version and its PDF are deleted {user.deletion_days} days after that, and later versions are
-        renumbered. You can't take this back: only your supervisor can reject or cancel it. If the phase closes first, the version is kept as a final submission.
-      </ReasonDialog>
+      {proposal?.title && <TitleChange proposal={proposal} setProposal={setProposal} />}
 
     </div>
+  );
+}
+
+const CHANGE_BADGE = {
+  pending: ["Waiting for your supervisor", "bg-amber-50 text-amber-800 ring-amber-600/20"],
+  approved: ["Approved", "bg-teal-50 text-teal-800 ring-teal-600/20"],
+  rejected: ["Rejected by your supervisor", "bg-zinc-50 text-zinc-700 ring-zinc-200"],
+  expired: ["Expired: not accepted in time", "bg-zinc-50 text-zinc-700 ring-zinc-200"],
+};
+
+function TitleChange({ proposal, setProposal }) {
+  const { busy, error, notice, run } = useAction();
+  const change = proposal.title_change;
+  const submit = (e) => {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(e.currentTarget));
+    run("title", async () => {
+      setProposal(await api("/proposals/mine/title-change", { method: "POST", body }));
+      return `Change requested. Your supervisor has ${proposal.title_change_days} days to accept it.`;
+    });
+  };
+  const [label, tone] = change ? CHANGE_BADGE[change.status] : [];
+  return (
+    <section className="card space-y-5 p-6">
+      <div>
+        <h2 className="font-semibold">Change title or abstract</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          You can change them once. Your supervisor must accept the request within {proposal.title_change_days} days; then upload with the new title and abstract.
+        </p>
+      </div>
+      {change && (
+        <div className="space-y-1 rounded-lg bg-zinc-50 px-4 py-3 text-sm ring-1 ring-zinc-200/70 ring-inset">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">Your request: "{change.title}"</span>
+            <span className={`badge ${tone}`}>{label}</span>
+          </div>
+          {change.status === "pending" && <p className="text-zinc-500">Your supervisor must accept by {when(change.expires_at)}.</p>}
+          <p className="whitespace-pre-line break-words text-zinc-600">{change.abstract}</p>
+        </div>
+      )}
+      {proposal.can_request_title_change ? (
+        <form onSubmit={submit} className="space-y-4">
+          <label className="label">
+            New title
+            <input name="title" required maxLength={255} defaultValue={proposal.title} className="input" />
+          </label>
+          <label className="label">
+            New abstract
+            <textarea name="abstract" required maxLength={proposal.max_abstract_chars} rows={4} defaultValue={proposal.abstract} className="input resize-y" />
+          </label>
+          <button disabled={!!busy} className="btn-secondary">{busy ? "Sending…" : "Ask supervisor to change"}</button>
+        </form>
+      ) : change?.status === "approved" && (
+        <p className="text-sm text-zinc-500">You have used your one change.</p>
+      )}
+      <Alerts error={error} notice={notice} />
+    </section>
   );
 }

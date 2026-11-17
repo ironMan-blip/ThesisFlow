@@ -12,5 +12,7 @@ class Semester(Base):
     __tablename__ = "semesters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # The P1 registration window runs for a week from here.
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # P1 registration window, set by the coordinator (deadlines feature). Unset: one week from started_at.
+    registration_opens_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registration_closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

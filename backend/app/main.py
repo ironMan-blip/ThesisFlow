@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import SessionLocal, get_db
 from app.deps import user_for_token
 from app.rate_limit import rate_limit
-from app.services import account_service, auth_service, proposal_service
+from app.services import account_service, auth_service, progress_service
 
 # Only uploads are bigger than this, and only signed-in students upload.
 ANONYMOUS_BODY_LIMIT = 64 * 1024
@@ -32,9 +32,8 @@ log = logging.getLogger(__name__)
 def _run_due_deletions() -> None:
     with SessionLocal() as db:
         accounts = account_service.run_due_deletions(db)
-        versions = proposal_service.run_due_deletions(db)
-    if accounts or versions:
-        log.info("Scheduled deletions ran: %s accounts, %s proposal versions", accounts, versions)
+    if accounts:
+        log.info("Scheduled deletions ran: %s accounts", accounts)
 
 
 async def _deletion_loop() -> None:
@@ -66,6 +65,7 @@ async def _warm_up_scanner() -> None:
 async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         auth_service.ensure_admin(db)
+        progress_service.ensure_semester(db)
     tasks = [asyncio.create_task(_deletion_loop()), asyncio.create_task(_warm_up_scanner())]
     yield
     for task in tasks:

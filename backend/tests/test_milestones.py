@@ -7,7 +7,7 @@ from app.models.proposal import Proposal
 from app.models.user import Role, User
 from app.schemas import milestone as milestone_schema
 from app.services import milestone_service
-from tests.helpers import PDF, REASON, auth, close_registration, me, run_deletions_due, student, supervised_student, upload
+from tests.helpers import PDF, auth, close_registration, form_group, me, student, supervised_student, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
 F = datetime(2099, 11, 1, 23, 59, tzinfo=timezone.utc)  # a deadline far in the future
@@ -56,8 +56,12 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     send = lambda body: client.put("/api/milestones/P1", headers=coord, json={"grace_days": 0, "penalty_per_day": 0, **body})
     assert send({"due_at": "2099-11-01T23:59"}).status_code == 422
     assert send({"due_local": "2099-11-01T23:59+00:00"}).status_code == 422
-    p1 = by_phase(send({"due_local": "2099-11-01T23:59"}))["P1"]
-    assert (p1["due_at"][:16], p1["due_local"]) == ("2099-11-01T17:59", "2099-11-01T23:59")
+    # Grace days past year 9999 would overflow: a 422, not a 500.
+    assert send({"due_local": "9999-12-31T23:59", "grace_days": 7}).status_code == 422
+    p1 = by_phase(send({"due_local": "2099-11-01T20:30"}))["P1"]
+    assert (p1["due_at"][:16], p1["due_date"], p1["due_time"]) == ("2099-11-01T14:30", "2099-11-01", "20:30")
+    p2 = by_phase(send({"due_local": "2099-11-01T20:30"}))["P2"]  # not set: form defaults to end of day
+    assert (p2["due_date"], p2["due_time"]) == (None, "23:59")
     # A deadline that is already over would freeze the whole phase.
     now = datetime.now(timezone.utc)
     res = put(client, coord, "P2", now - timedelta(days=2), grace=1)
@@ -122,32 +126,33 @@ def test_student_late_days_and_penalty(client, db):
     m = db.get(MilestoneTemplate, Phase.P1)
     m.due_at, m.grace_days, m.penalty_per_day = now - timedelta(days=3), 1, 15
     for h in (other, no_group):
-        db.get(User, me(client, h)["id"]).phase_started_at = now - timedelta(days=5)
+        if thesis := db.get(User, me(client, h)["id"]).thesis:
+            thesis.phase_started_at = now - timedelta(days=5)
     db.flush()
     rows = by_phase(client.get("/api/milestones", headers=other))
     assert (rows["P1"]["status"], rows["P1"]["submission_status"]) == ("closed", "not_submitted")
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (None, None)
     assert rows["P1"]["submitted_at"] is None  # another student's uploads don't count for this one
 
-    # No accepted group, so they couldn't upload: nothing was due.
+    # No thesis group, so no phase: nothing was due.
     rows = by_phase(client.get("/api/milestones", headers=no_group))
-    assert (rows["P1"]["mine"], rows["P1"]["submission_status"]) == (True, None)
+    assert (rows["P1"]["mine"], rows["P1"]["submission_status"]) == (False, None)
 
-    # Signed up after grace ended: nothing was due, so no late days or penalty.
+    # Signed up after grace ended: no thesis group yet, so nothing was due: no late days or penalty.
     late = by_phase(client.get("/api/milestones", headers=auth(client, db, "late@x.com")))["P1"]
-    assert (late["mine"], late["submission_status"], late["late_days"]) == (True, None, None)
+    assert (late["mine"], late["submission_status"], late["late_days"]) == (False, None, None)
 
 
 def test_each_group_gets_its_own_milestone_and_extension(client, db):
     # MilestoneTemplate is the coordinator's deadline; GroupMilestone is one group's copy; its Deliverable is the
     # version that counts (the latest upload).
-    (s, sup), other = supervised_student(client, db, "s@x.com"), student(client, db, "o@x.com")
+    (s, _), other = supervised_student(client, db, "s@x.com"), student(client, db, "o@x.com")
     close_registration(db)
     now = datetime.now(timezone.utc)
     set_past(db, "P1", now - timedelta(hours=1), grace=1, penalty=10)  # in grace
 
-    v1 = upload(client, s, title="v1").json()["versions"][0]
-    v2 = upload(client, s, content=PDF + b"2", title="v2").json()["versions"][0]
+    v1 = upload(client, s).json()["versions"][0]
+    v2 = upload(client, s, content=PDF + b"2").json()["versions"][0]
     thesis_id = db.get(User, me(client, s)["id"]).thesis_id
     gm = db.scalar(select(GroupMilestone).filter_by(thesis_id=thesis_id))
     assert gm.phase == Phase.P1 and gm.extended_due_at is None
@@ -159,17 +164,9 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
 
     # Re-submitting v1 unchanged makes it the deliverable again, with a new submit time.
     before = gm.submitted_at
-    upload(client, s, title="v1")
+    upload(client, s)
     db.refresh(gm)
     assert gm.deliverable.proposal_version_id == v1["id"] and gm.submitted_at > before
-
-    # Deleting the deliverable (asked for, then run after the wait) falls back to the other upload.
-    client.post(f"/api/proposals/versions/{v1['id']}/delete-request", headers=s, json=REASON)
-    assert run_deletions_due(db) == (0, 0)  # nothing runs until the supervisor approves
-    assert client.post(f"/api/proposals/delete-requests/{v1['id']}/approve", headers=sup).status_code == 204
-    assert run_deletions_due(db) == (0, 1)
-    db.refresh(gm)
-    assert gm.deliverable.proposal_version_id == v2["id"]
 
     # An extension moves only this group's due date: no late days for them, the other group is still late.
     gm.extended_due_at = now + timedelta(days=2)
@@ -210,3 +207,56 @@ def test_keeping_a_passed_due_date_set_with_seconds(client, db):
     assert put(client, coord, "P1", due.replace(second=0, microsecond=0), grace=2).status_code == 200
     db.expire_all()
     assert (db.get(MilestoneTemplate, Phase.P1).due_at, db.get(MilestoneTemplate, Phase.P1).grace_days) == (due, 2)
+
+
+def test_coordinator_sets_the_p1_registration_window(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    s = auth(client, db, "s@x.com")
+    now = datetime.now(timezone.utc)
+    local = lambda at: at.astimezone(milestone_schema.DHAKA).replace(tzinfo=None).isoformat(timespec="minutes")
+    send = lambda h, opens, closes: client.put(
+        "/api/milestones/registration", headers=h, json={"opens_local": local(opens), "closes_local": local(closes)}
+    )
+
+    # Unset: one week from the semester start, as before.
+    res = client.get("/api/milestones", headers=coord).json()
+    assert (res["registration_status"], res["registration_opens_local"] is not None) == ("open", True)
+
+    assert send(s, now, now + timedelta(days=3)).status_code == 403
+    res = send(coord, now + timedelta(days=3), now + timedelta(days=1))
+    assert (res.status_code, res.json()["detail"]) == (422, "P1 registration must close after it opens")
+    assert put(client, coord, "P1", now + timedelta(days=10)).status_code == 200
+    res = send(coord, now + timedelta(days=1), now + timedelta(days=11))
+    assert (res.status_code, res.json()["detail"]) == (422, "P1 registration must close before P1 is due")
+
+    # Opens later: not open yet, and the group is told so.
+    res = send(coord, now + timedelta(days=1), now + timedelta(days=3))
+    assert res.status_code == 200
+    assert (res.json()["registration_open"], res.json()["registration_closes_local"]) == (False, local(now + timedelta(days=3)))
+    form_group(client, db, s, sup)
+    assert client.get("/api/milestones", headers=s).json()["registration_status"] == "upcoming"
+    assert client.get("/api/theses/mine", headers=s).json()["registration_upcoming"] is True
+    res = client.post("/api/theses/mine/register", headers=s)
+    assert (res.status_code, res.json()["detail"]) == (409, "P1 registration hasn't opened yet")
+
+    # Open now: the group can register.
+    assert send(coord, now - timedelta(hours=1), now + timedelta(days=3)).status_code == 200
+    assert client.post("/api/theses/mine/register", headers=s).status_code == 200
+
+
+def test_an_empty_semesters_table_gets_a_current_semester(client, db):
+    # The migration makes the first semester; if the row is gone, startup makes one so registration and uploads work.
+    from sqlalchemy import delete as sql_delete
+    from app.models.semester import Semester
+    from app.services import progress_service
+
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    db.execute(sql_delete(Semester))
+    db.flush()
+    assert client.get("/api/milestones", headers=coord).json()["registration_status"] == "not_set"
+    progress_service.ensure_semester(db)
+    assert client.get("/api/milestones", headers=coord).json()["registration_status"] == "open"
+    res = client.put("/api/milestones/registration", headers=coord,
+                     json={"opens_local": "2099-01-01T09:00", "closes_local": "2099-01-08T23:59"})
+    assert (res.status_code, res.json()["registration_status"]) == (200, "upcoming")
