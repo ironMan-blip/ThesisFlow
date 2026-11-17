@@ -106,7 +106,7 @@ export default function DeadlinePage() {
       const r = await api("/milestones/next-semester", { method: "POST" });
       setSemesterId(null);
       show(await api("/milestones"));
-      return `New semester started. Thesis groups: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.cancelled} cancelled, ${r.frozen} frozen. Students restarted at P1: ${r.restarted}. Set the new deadlines below.`;
+      return `New semester started. Thesis groups: ${r.advanced} moved to the next phase, ${r.completed} completed, ${r.deferred} deferred, ${r.cancelled} cancelled, ${r.frozen} frozen. Students restarted at P1: ${r.restarted}. Set the new deadlines above.`;
     });
   };
 
@@ -116,24 +116,6 @@ export default function DeadlinePage() {
         title="Deadlines"
         intro="Each phase has a due date and a grace time. Work handed in during the grace time loses marks for every late day; after it ends, uploads close."
       />
-
-      {data?.can_edit && (
-        <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
-          <div className="max-w-prose">
-            <h2 className="font-semibold">End this semester</h2>
-            <p className="mt-1 text-sm text-zinc-600">
-              Thesis groups that submitted move to their next phase, P3 theses are completed or deferred (a second deferral
-              cancels the thesis), groups that missed a closed deadline are frozen, and approved restarts start fresh.
-              Deadlines are kept: groups still working to last semester's deadline carry on with it. Set the new
-              semester's deadlines below.
-              P1 registration then opens for one week, unless you set other dates below.
-            </p>
-          </div>
-          <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">
-            {saving === "semester" ? "Starting…" : "Start next semester"}
-          </button>
-        </section>
-      )}
 
       <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
@@ -259,7 +241,26 @@ export default function DeadlinePage() {
         </ol>
       )}
 
-      <ConfirmDialog open={confirming} title="Start the next semester?" confirm="Yes, start it"
+      {/* Last on the page: it can't be undone, so it shouldn't be the first thing a coordinator reaches. */}
+      {data?.can_edit && (
+        <section className="card flex flex-wrap items-center justify-between gap-4 p-6 ring-red-200">
+          <div className="max-w-prose">
+            <h2 className="font-semibold text-red-800">End this semester</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Thesis groups that submitted move to their next phase, P3 theses are completed or deferred (a second deferral
+              cancels the thesis), groups that missed a closed deadline are frozen, and approved restarts start fresh.
+              Deadlines are kept: groups still working to last semester's deadline carry on with it. Set the new
+              semester's deadlines afterwards.
+              P1 registration then opens for one week, unless you set other dates.
+            </p>
+          </div>
+          <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-danger">
+            {saving === "semester" ? "Starting…" : "Start next semester"}
+          </button>
+        </section>
+      )}
+
+      <ConfirmDialog open={confirming} title="Start the next semester?" confirm="Yes, start it" danger
         onCancel={() => setConfirming(false)} onConfirm={nextSemester}>
         This moves every student on. This semester's deadlines are kept for the groups still working to them. It cannot be undone.
       </ConfirmDialog>

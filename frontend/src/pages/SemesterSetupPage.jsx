@@ -5,12 +5,12 @@ import { when } from "../format";
 import { useAction } from "../useAction";
 
 const DEFAULT_STEPS = [
-  { key: "form_group", label: "Form Group", defaultOpen: true },
-  { key: "pick_supervisor", label: "Pick Supervisor", defaultOpen: true },
+  { key: "form_group", label: "Form group", defaultOpen: true },
+  { key: "pick_supervisor", label: "Pick supervisor", defaultOpen: true },
   { key: "P1", label: "Pre-Thesis 1 (P1)", defaultOpen: true },
   { key: "P2", label: "Pre-Thesis 2 (P2)", defaultOpen: true },
   { key: "P3", label: "Final Thesis (P3)", defaultOpen: true },
-  { key: "defense", label: "Final Defense", defaultOpen: false },
+  { key: "defense", label: "Final defense", defaultOpen: false },
 ];
 
 export default function SemesterSetupPage() {
