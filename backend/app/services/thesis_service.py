@@ -75,7 +75,8 @@ def mine(db: Session, user: User) -> MyThesisOut:
     choices = faculty(db) if can_form_group or can_add_co_supervisor else []
     return MyThesisOut(
         thesis=user.thesis and ThesisOut.model_validate(user.thesis),
-        phase=user.phase,
+        # Shown phase starts at P1 registration; pending/formed groups are still forming (user.phase is P1 for rules).
+        phase=user.phase if t is not None and t.status == ThesisStatus.active else None,
         frozen_reason=s.frozen_reason,
         restart_pending=user.restart_pending,
         restart_approved=user.restart_approved,

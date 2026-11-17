@@ -62,7 +62,7 @@ class SupervisionRequestOut(ThesisOut):
 
 class MyThesisOut(BaseModel):
     thesis: ThesisOut | None
-    phase: Phase | None  # None once the thesis is completed
+    phase: Phase | None  # None before P1 registration and once the thesis is completed
     frozen_reason: str | None
     restart_pending: bool
     restart_approved: bool  # they start fresh at P1 at the next semester rollover

@@ -78,8 +78,10 @@ def test_members_come_and_go_before_registration_only(client, db):
     assert thesis_state(client, b)["thesis"] is None
     state = thesis_state(client, lead)
     assert (state["can_register"], state["register_block"]) == (False, "Your group needs 1 more member to register")
+    assert state["phase"] is None  # still forming: P1 starts at registration
     assert join(client, lead, auth(client, db, "d@x.com")).status_code == 200
     assert client.post("/api/theses/mine/register", headers=a).status_code == 200  # any member registers
+    assert thesis_state(client, a)["phase"] == "P1"
 
     # Registered: nobody leaves or joins.
     group = client.get("/api/groups/mine", headers=a).json()
