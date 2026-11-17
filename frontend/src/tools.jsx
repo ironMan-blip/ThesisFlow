@@ -3,6 +3,12 @@
 const BOOK = <><path d="M4 19.5V5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2.5" /><path d="M8 7h6M8 11h4" /></>;
 
 export const TOOLS = {
+  semester: {
+    to: "/semester",
+    title: "Semester setup",
+    text: "Create a semester and open or close group formation, supervisor selection, P1, P2, P3, and defense.",
+    icon: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18M9 15l2 2 4-4" /></>,
+  },
   thesis: {
     to: "/thesis", title: "Thesis group", text: "Form your group of 3 to 5, answer invitations, choose your supervisor and see your phase.", icon: BOOK,
   },

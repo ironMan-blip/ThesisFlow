@@ -26,7 +26,7 @@ from app.models.thesis import FORMED, Thesis, ThesisStatus
 from app.models.user import Role, User
 from app.schemas.proposal import TitleChangeOut
 from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
-from app.services import group_service, progress_service
+from app.services import group_service, progress_service, semester_service
 
 
 def faculty(db: Session) -> list[User]:
@@ -51,6 +51,8 @@ def can_view(user: User, thesis: Thesis) -> bool:
 
 def _form_block(db: Session, user: User, frozen: bool) -> str | None:
     """Why this student can't send a supervisor request for their group now, or None if they can."""
+    if not semester_service.is_step_open(db, "pick_supervisor"):
+        return "Supervisor selection is currently closed by the coordinator"
     if user.thesis_id is not None or frozen:
         return "Your group already has a thesis" if user.thesis_id is not None else "You can't form a thesis group right now"
     member = group_service.membership(db, user.id)
@@ -146,6 +148,7 @@ def _release_all(db: Session, thesis: Thesis) -> None:
 
 def add_co_supervisor(db: Session, user: User, co_supervisor_id: int) -> MyThesisOut:
     """Any member: name a co-supervisor for their formed group. They join once they and the supervisor both accept."""
+    semester_service.require_step_open(db, "pick_supervisor")
     user = _lock_thesis(db, user)
     if not mine(db, user).can_add_co_supervisor:
         raise HTTPException(status.HTTP_409_CONFLICT, "A co-supervisor can only be added to a formed group that has none")

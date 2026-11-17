@@ -24,6 +24,7 @@ from app.models.semester import Semester
 from app.models.thesis import FORMED, UNREGISTERED, Thesis, ThesisStatus
 from app.models.user import Role, User
 
+
 NEXT_PHASE = {Phase.P1: Phase.P2, Phase.P2: Phase.P3}
 MAX_DEFERRALS = 2  # the second deferral cancels the thesis
 REGISTRATION_WINDOW = timedelta(weeks=1)
@@ -297,8 +298,11 @@ def advance_phases(db: Session, now: datetime | None = None) -> dict[str, int]:
 
 
 def register_block(db: Session, user: User) -> str | None:
+    from app.services import semester_service
     """Why this P1 student's accepted group can't register now, or None if it can."""
     thesis = user.thesis
+    if not semester_service.is_step_open(db, "P1"):
+        return "Pre-Thesis 1 (P1) is currently closed by the coordinator"
     if user.phase != Phase.P1 or thesis is None or thesis.status not in FORMED:  # active: registered earlier, still in P1
         return "Only a P1 student with an accepted thesis group can register"
     if thesis.p1_registered:

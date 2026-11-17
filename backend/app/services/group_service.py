@@ -5,6 +5,7 @@ count toward the size limit, so an accepted invitation always has room. Joining 
 student's other invitations. The teammate finder lists students without a group, searchable by interests and skills.
 """
 
+from app.services import semester_service
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -115,11 +116,12 @@ def mine(db: Session, user: User) -> MyGroupOut:
     locked = group is not None and _locked(thesis_of(db, group))
     sent = _live_invitations(db, group_id=group.id) if group else []
     slots = MAX_MEMBERS - len(group.members) - len(sent) if group else 0
+    form_group_open = semester_service.is_step_open(db, "form_group")
     return MyGroupOut(
         group=group and _group_out(group),
         is_leader=is_leader,
-        can_create=group is None,
-        can_invite=is_leader and slots > 0 and not locked,
+        can_create=form_group_open and group is None,
+        can_invite=form_group_open and is_leader and slots > 0 and not locked,
         can_leave=group is not None and not locked,
         locked=locked,
         open_slots=max(0, slots),
@@ -150,6 +152,7 @@ def _commit(db: Session) -> None:
 
 
 def create(db: Session, user: User, data: GroupCreate) -> MyGroupOut:
+    semester_service.require_step_open(db, "form_group")
     user = _lock_user(db, user)
     if membership(db, user.id):
         raise HTTPException(status.HTTP_409_CONFLICT, "You are already in a group")
@@ -162,6 +165,7 @@ def create(db: Session, user: User, data: GroupCreate) -> MyGroupOut:
 
 
 def invite(db: Session, user: User, student_id: int) -> MyGroupOut:
+    semester_service.require_step_open(db, "form_group")
     member = membership(db, user.id)
     if member is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Create a group first, then invite students")
@@ -202,6 +206,8 @@ def cancel_invitation(db: Session, user: User, invitation_id: int) -> MyGroupOut
 
 
 def decide(db: Session, user: User, invitation_id: int, accept: bool) -> MyGroupOut:
+    if accept:
+        semester_service.require_step_open(db, "form_group")
     user = _lock_user(db, user)
     invitation = db.get(Invitation, invitation_id)
     if invitation is None or invitation.invitee_id != user.id or not invitation.is_live:
@@ -242,6 +248,7 @@ def _remove(db: Session, user: User, member: GroupMember) -> None:
 
 
 def leave(db: Session, user: User) -> MyGroupOut:
+    semester_service.require_step_open(db, "form_group")
     user = _lock_user(db, user)
     member = membership(db, user.id)
     if member is None:
