@@ -23,7 +23,8 @@ from app.services import progress_service, thesis_service
 CHUNK = 1024 * 1024
 # Content a PDF viewer could run or hand to the OS: scripts, launch actions, attached files, XFA forms.
 ACTIVE_KEYS = {"/JS", "/JavaScript", "/EmbeddedFiles", "/EmbeddedFile", "/XFA", "/RichMedia"}
-ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToE", "/RichMediaExecute", "/SubmitForm"}
+# /GoToR opens another file: a UNC path (\\host\share) makes Windows send the reader's login hash to that host.
+ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToE", "/GoToR", "/RichMediaExecute", "/SubmitForm"}
 # Bounds the object walk, so a crafted file with millions of tiny objects can't tie up a worker.
 MAX_PDF_OBJECTS = 200_000
 log = logging.getLogger(__name__)
@@ -171,7 +172,8 @@ def _check_pdf(path: Path) -> None:
                     raise ValueError("too many objects")
                 stack.append(obj.get_object())
             elif isinstance(obj, DictionaryObject):
-                if ACTIVE_KEYS.intersection(obj) or obj.get("/S") in ACTIVE_ACTIONS:
+                # obj["/S"], not .get: it resolves an indirect /S, which viewers follow too.
+                if ACTIVE_KEYS.intersection(obj) or ("/S" in obj and obj["/S"] in ACTIVE_ACTIONS):
                     raise HTTPException(
                         status.HTTP_422_UNPROCESSABLE_CONTENT,
                         "PDF must not contain scripts, attached files or interactive forms",

