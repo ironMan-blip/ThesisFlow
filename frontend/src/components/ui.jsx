@@ -148,7 +148,7 @@ export function VersionInfo({ v, abstract = false }) {
         <p className="truncate font-medium">{v.title}</p>
       </div>
       {abstract && <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>}
-      <p className="mt-1.5 break-words text-xs text-zinc-500">
+      <p className="mt-1.5 wrap-anywhere text-xs text-zinc-500">
         {v.original_filename} · {v.size_label} · {when(v.created_at)}
       </p>
     </div>
