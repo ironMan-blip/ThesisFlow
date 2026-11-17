@@ -3,7 +3,6 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-
 from fastapi import HTTPException, UploadFile, status
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
@@ -18,7 +17,7 @@ from app.models.proposal import Proposal, ProposalVersion
 from app.models.thesis import TITLE_CHANGE_WINDOW, Thesis, ThesisStatus, TitleChange
 from app.models.user import User
 from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut, TitleChangeOut
-from app.services import progress_service, thesis_service
+from app.services import progress_service, semester_service, thesis_service
 
 CHUNK = 1024 * 1024
 # Content a PDF viewer could run or hand to the OS: scripts, launch actions, attached files, XFA forms.
@@ -53,6 +52,8 @@ def _upload_block(
         return "Form a thesis group first: choose a supervisor on the Thesis page", s
     if user.phase is None:  # the group's phase; none once the thesis is completed
         return "Your thesis is complete", s
+    if not semester_service.is_phase_open(db, user.phase):
+        return f"{user.phase.value} is currently closed by the coordinator", s
     if thesis.status == ThesisStatus.pending:
         return "Your supervisor has not accepted your thesis group yet", s
     if thesis.status != ThesisStatus.active or (user.phase == Phase.P1 and not thesis.p1_registered):

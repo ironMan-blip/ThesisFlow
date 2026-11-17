@@ -12,6 +12,7 @@ import ThesesPage from "./pages/ThesesPage";
 import ThesisPage from "./pages/ThesisPage";
 import MeetingsPage from "./pages/MeetingsPage";
 import TeammatesPage from "./pages/TeammatesPage";
+import SemesterSetupPage from "./pages/SemesterSetupPage";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       {/* Pages that need a logged-in user go inside Layout. */}
       <Route element={<Layout />}>
+        <Route path="/semester" element={<SemesterSetupPage />} />
         <Route path="/" element={<HomePage />} />
         <Route path="/thesis" element={<ThesisPage />} />
         <Route path="/theses" element={<ThesesPage />} />

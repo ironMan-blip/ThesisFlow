@@ -22,7 +22,7 @@ ROLE_TOOLS = {
     Role.student: ["thesis", "teammates", "proposal", "deadlines", "meetings", "account"],
     Role.faculty: ["theses", "deadlines", "meetings", "account"],
     # Semesters (deadlines and the rollover) and accounts only: the coordinator never sees individual theses.
-    Role.coordinator: ["deadlines", "accounts", "registration_requests", "deletion_requests", "restart_requests"],
+    Role.coordinator: ["semester", "deadlines", "accounts", "registration_requests", "deletion_requests", "restart_requests"],
 }
 
 # The coordinator has this long to decide a sign-up or an account deletion request.

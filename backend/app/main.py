@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DataError, OperationalError
 from starlette.concurrency import run_in_threadpool
 
-from app.controllers import account_controller, auth_controller, group_controller, meeting_controller, milestone_controller, proposal_controller, thesis_controller
+from app.controllers import account_controller, auth_controller, group_controller, meeting_controller, milestone_controller, proposal_controller, semester_controller, thesis_controller
 from app import virus_scan
 from app.config import settings
 from app.database import SessionLocal, get_db
@@ -131,6 +131,7 @@ app.include_router(milestone_controller.router)
 app.include_router(thesis_controller.router)
 app.include_router(group_controller.router)
 app.include_router(meeting_controller.router)
+app.include_router(semester_controller.router)
 
 
 @app.exception_handler(RequestValidationError)
