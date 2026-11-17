@@ -52,7 +52,8 @@ class GroupMilestone(Base):
     deliverable = relationship("Deliverable", back_populates="group_milestone", uselist=False, passive_deletes=True)
 
     def effective_due_at(self, template: MilestoneTemplate) -> datetime:
-        return self.extended_due_at or template.due_at
+        # An extension only adds time: if the coordinator later moves the deadline past it, the later date wins.
+        return max(self.extended_due_at, template.due_at) if self.extended_due_at else template.due_at
 
 
 class Deliverable(Base):

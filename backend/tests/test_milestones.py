@@ -185,6 +185,12 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     assert (mine_row["status"], mine_row["late_days"], mine_row["submission_status"]) == ("open", 0, "on_time")
     assert (other_row["status"], other_row["submission_status"]) == ("grace", "late")
 
+    # Moving the deadline past the extension never leaves this group with less time than everyone else.
+    db.get(MilestoneTemplate, Phase.P1).due_at = now + timedelta(days=5)
+    db.flush()
+    assert by_phase(client.get("/api/milestones", headers=s))["P1"]["due_at"] == by_phase(
+        client.get("/api/milestones", headers=other))["P1"]["due_at"]
+
 
 def test_an_on_time_submission_is_final_once_the_due_date_passes(client, db):
     (s, _) = supervised_student(client, db, "s@x.com")
