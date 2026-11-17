@@ -243,3 +243,16 @@ def test_coordinator_sets_the_p1_registration_window(client, db):
     # Open now: the group can register.
     assert send(coord, now - timedelta(hours=1), now + timedelta(days=3)).status_code == 200
     assert client.post("/api/theses/mine/register", headers=s).status_code == 200
+
+
+def test_setting_registration_with_no_semester_row_makes_one(client, db):
+    from sqlalchemy import delete as sql_delete
+    from app.models.semester import Semester
+
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    db.execute(sql_delete(Semester))
+    db.flush()
+    assert client.get("/api/milestones", headers=coord).json()["registration_status"] == "not_set"
+    res = client.put("/api/milestones/registration", headers=coord,
+                     json={"opens_local": "2099-01-01T09:00", "closes_local": "2099-01-08T23:59"})
+    assert (res.status_code, res.json()["registration_status"]) == (200, "upcoming")

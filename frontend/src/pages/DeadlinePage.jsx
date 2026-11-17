@@ -130,7 +130,7 @@ export default function DeadlinePage() {
 
       <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
-      {data?.registration_closes_at && (
+      {data && (data.can_edit || data.registration_closes_at) && (
         <section className="card p-6">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold">P1 registration</h2>
@@ -140,8 +140,8 @@ export default function DeadlinePage() {
             })()}
           </div>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-zinc-500">Opens</dt><dd className="font-medium">{when(data.registration_opens_at)}</dd></div>
-            <div><dt className="text-zinc-500">Closes</dt><dd className="font-medium">{when(data.registration_closes_at)}</dd></div>
+            <div><dt className="text-zinc-500">Opens</dt><dd className="font-medium">{data.registration_opens_at ? when(data.registration_opens_at) : "Not set"}</dd></div>
+            <div><dt className="text-zinc-500">Closes</dt><dd className="font-medium">{data.registration_closes_at ? when(data.registration_closes_at) : "Not set"}</dd></div>
           </dl>
           {data.can_edit && (
             <form onSubmit={saveRegistration} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-3">
