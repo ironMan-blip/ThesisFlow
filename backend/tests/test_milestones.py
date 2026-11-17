@@ -56,6 +56,8 @@ def test_only_coordinator_sets_deadlines_and_input_is_checked(client, db):
     send = lambda body: client.put("/api/milestones/P1", headers=coord, json={"grace_days": 0, "penalty_per_day": 0, **body})
     assert send({"due_at": "2099-11-01T23:59"}).status_code == 422
     assert send({"due_local": "2099-11-01T23:59+00:00"}).status_code == 422
+    # Grace days past year 9999 would overflow: a 422, not a 500.
+    assert send({"due_local": "9999-12-31T23:59", "grace_days": 7}).status_code == 422
     p1 = by_phase(send({"due_local": "2099-11-01T23:59"}))["P1"]
     assert (p1["due_at"][:16], p1["due_local"]) == ("2099-11-01T17:59", "2099-11-01T23:59")
     # A deadline that is already over would freeze the whole phase.

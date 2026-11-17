@@ -17,7 +17,7 @@ from app.services.auth_service import REGISTER_TAKEN
 from tests.helpers import REASON, auth, run_deletions_due, student as make_student, supervised_student, upload
 
 
-def register(client, email=None, password="Password123", id_number="12345678", role="student", initials=None):
+def register(client, email=None, password="Password123", id_number="12345678", role="student", initials=None, full_name="A"):
     if initials is None and role == "faculty":
         initials = "ABC"
     if email is None:
@@ -25,7 +25,7 @@ def register(client, email=None, password="Password123", id_number="12345678", r
     return client.post(
         "/api/auth/register",
         json={
-            "email": email, "id_number": id_number, "full_name": "A", "password": password, "role": role,
+            "email": email, "id_number": id_number, "full_name": full_name, "password": password, "role": role,
             "initials": initials,
         },
     )
@@ -225,6 +225,9 @@ def test_register_rejects_bad_email_and_weak_password(client):
         r = register(client, password=weak)
         assert r.status_code == 422, weak
         assert r.json()["detail"].startswith("password:"), weak
+    # A name of only spaces would give an empty first name and avatar; padding is trimmed.
+    assert register(client, full_name="   ").status_code == 422
+    assert register(client, full_name="  Ada Byron ").json()["full_name"] == "Ada Byron"
 
 
 def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_path, timelines):

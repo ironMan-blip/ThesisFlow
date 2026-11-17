@@ -195,6 +195,15 @@ def test_one_title_change_needs_the_supervisors_ok_within_3_days(client, db):
     versions = _upload_as(client, h, "b", "New abstract", content=PDF + b"2").json()["versions"]
     # Older versions keep the title they were uploaded with; the first one after the change is marked.
     assert [(v["title"], v["title_changed"], v["abstract_changed"]) for v in versions] == [("b", True, True), ("a", False, False)]
+
+
+def test_line_endings_dont_break_the_exact_title_match(client, db, timelines):
+    # Form uploads arrive with CRLF, the JSON title change with LF: both are stored and compared as LF.
+    h, sup = supervised_student(client, db, "s@x.com")
+    assert _upload_as(client, h, "a", "one\r\ntwo").json()["abstract"] == "one\ntwo"
+    change = _ask_title(client, h, "b", "three\nfour").json()["title_change"]
+    assert client.post(f"/api/proposals/title-changes/{change['id']}/approve", headers=sup).status_code == 204
+    assert _upload_as(client, h, "b", "three\r\nfour", content=PDF + b"2").status_code == 201
     assert client.get("/api/theses", headers=sup).json()[0]["versions"][0]["title_changed"] is True
     r = _ask_title(client, h, "c")
     assert r.status_code == 409 and "already used" in r.json()["detail"]

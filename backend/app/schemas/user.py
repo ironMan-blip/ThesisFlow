@@ -29,7 +29,8 @@ class UserCreate(BaseModel):
     role: Literal[Role.student, Role.faculty] = Role.student
     email: EmailStr
     id_number: str
-    full_name: str = Field(min_length=1, max_length=255)
+    # Stripped, so a name of only spaces (empty first name and avatar) is refused.
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
     password: str = Field(min_length=MIN_PASSWORD, max_length=MAX_PASSWORD)
     initials: str | None = None  # faculty only
 

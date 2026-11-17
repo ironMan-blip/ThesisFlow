@@ -15,7 +15,9 @@ class MilestoneIn(BaseModel):
     # Unknown fields are refused, so a client still sending due_at gets a 422 instead of a silently wrong deadline.
     model_config = ConfigDict(extra="forbid")
 
-    due_local: NaiveDatetime  # Dhaka wall-clock time as typed in the form, "YYYY-MM-DDTHH:MM"; no zone allowed
+    # Dhaka wall-clock time as typed in the form, "YYYY-MM-DDTHH:MM"; no zone allowed.
+    # Capped so adding grace days can't overflow past year 9999 (a 500).
+    due_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
     grace_days: int = Field(ge=0, le=MAX_GRACE_DAYS)
     penalty_per_day: int = Field(ge=0, le=MAX_PENALTY_PER_DAY)
 

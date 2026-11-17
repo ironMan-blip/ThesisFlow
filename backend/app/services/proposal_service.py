@@ -82,7 +82,8 @@ def get_mine(db: Session, user: User) -> ProposalOut:
 
 
 def _clean(title: str, abstract: str) -> tuple[str, str]:
-    title, abstract = title.strip(), abstract.strip()
+    # Browsers send form uploads with CRLF but JSON (title change) with LF; one form, so the exact-match check holds.
+    title, abstract = (s.replace("\r\n", "\n").replace("\r", "\n").strip() for s in (title, abstract))
     if not title or len(title) > 255:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Title must be 1 to 255 characters")
     if not abstract or len(abstract) > MAX_ABSTRACT_CHARS:
