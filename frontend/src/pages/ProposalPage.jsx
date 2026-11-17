@@ -63,7 +63,7 @@ export default function ProposalPage() {
             <p className="text-sm text-zinc-500">Your first upload set the title and abstract. Every upload must use them exactly.</p>
           )}
           {/* Fields stay visible but locked while uploads are blocked, so nobody fills a form they can't send. */}
-          <fieldset disabled={!!proposal?.upload_block} className="space-y-5">
+          <fieldset disabled={!!proposal?.upload_block} className="min-w-0 space-y-5">
           <label className="label">
             Title
             <input key={`t-${proposal?.title}`} name="title" required maxLength={255} defaultValue={proposal?.title ?? ""}
