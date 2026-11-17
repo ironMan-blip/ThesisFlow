@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.user import Role, User
-from app.schemas.milestone import MilestoneIn, MilestoneOut, TimelineOut
+from app.schemas.milestone import MilestoneIn, MilestoneOut, RegistrationIn, TimelineOut
 from app.services import progress_service
 
 DAY = timedelta(days=1)
@@ -61,14 +61,30 @@ def timeline(db: Session, user: User) -> TimelineOut:
     templates = {m.phase: m for m in db.scalars(select(MilestoneTemplate))}
     # A student only has a submission for the phase they are in this semester.
     mine = progress_service.standing(db, user, now) if user.role == Role.student and user.phase else None
-    closes = progress_service.registration_closes_at(db)
+    opens, closes = progress_service.registration_window(db) or (None, None)
     return TimelineOut(
         now=now,
         milestones=[_row(templates.get(p), p, now, mine if p == user.phase else None, user) for p in Phase],
         can_edit=user.role == Role.coordinator,
+        registration_opens_at=opens,
         registration_closes_at=closes,
-        registration_open=closes is not None and now <= closes,
+        registration_open=opens is not None and opens <= now <= closes,
     )
+
+
+def set_registration(db: Session, data: RegistrationIn) -> None:
+    """Coordinator: this semester's P1 registration window. Groups already registered stay registered."""
+    if data.closes_at <= data.opens_at:
+        raise HTTPException(422, "P1 registration must close after it opens")
+    p1 = db.get(MilestoneTemplate, Phase.P1)
+    if p1 and p1.due_at <= data.closes_at:
+        # Same rule as set_milestone, from the other side.
+        raise HTTPException(422, "P1 registration must close before P1 is due")
+    semester = progress_service.current_semester(db)
+    if semester is None:
+        raise HTTPException(409, "No semester has started yet")
+    semester.registration_opens_at, semester.registration_closes_at = data.opens_at, data.closes_at
+    db.commit()
 
 
 def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:

@@ -62,15 +62,39 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def registration_closes_at(db: Session) -> datetime | None:
+def current_semester(db: Session) -> Semester | None:
     # The latest semester is the current one; the migration creates the first.
-    started = db.scalar(select(func.max(Semester.started_at)))
-    return started and started + REGISTRATION_WINDOW
+    return db.scalar(select(Semester).order_by(Semester.id.desc()).limit(1))
+
+
+def registration_window(db: Session) -> tuple[datetime, datetime] | None:
+    """(opens, closes) of this semester's P1 registration: the coordinator's dates, else one week from its start."""
+    s = current_semester(db)
+    if s is None:
+        return None
+    if s.registration_opens_at and s.registration_closes_at:
+        return s.registration_opens_at, s.registration_closes_at
+    return s.started_at, s.started_at + REGISTRATION_WINDOW
+
+
+def registration_opens_at(db: Session) -> datetime | None:
+    window = registration_window(db)
+    return window and window[0]
+
+
+def registration_closes_at(db: Session) -> datetime | None:
+    window = registration_window(db)
+    return window and window[1]
 
 
 def registration_open(db: Session) -> bool:
-    closes = registration_closes_at(db)
-    return closes is not None and _now() <= closes
+    window = registration_window(db)
+    return window is not None and window[0] <= _now() <= window[1]
+
+
+def registration_upcoming(db: Session) -> bool:
+    window = registration_window(db)
+    return window is not None and _now() < window[0]
 
 
 def current_semester_id(db: Session) -> int | None:
@@ -270,6 +294,8 @@ def register_block(db: Session, user: User) -> str | None:
         return "Your group is already registered for P1 this semester"
     if standing(db, user).frozen:
         return "Your account is frozen"
+    if registration_upcoming(db):
+        return "P1 registration hasn't opened yet"
     if not registration_open(db):
         return "P1 registration is closed, register in the first week of next semester"
     if (needed := MIN_MEMBERS - len(thesis.members)) > 0:

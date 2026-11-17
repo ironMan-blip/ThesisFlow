@@ -66,8 +66,10 @@ class MyThesisOut(BaseModel):
     frozen_reason: str | None
     restart_pending: bool
     restart_approved: bool  # they start fresh at P1 at the next semester rollover
-    registration_closes_at: datetime | None  # end of this semester's one-week P1 registration
+    registration_opens_at: datetime | None  # this semester's P1 registration window, set by the coordinator
+    registration_closes_at: datetime | None
     registration_open: bool
+    registration_upcoming: bool  # the coordinator set it to open later this semester
     can_register: bool  # an accepted group in P1 that can register now
     register_block: str | None  # why an accepted P1 group can't register now
     can_form_group: bool  # a member of a ready group with no thesis can ask a supervisor

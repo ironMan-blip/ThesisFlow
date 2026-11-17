@@ -7,7 +7,7 @@ from app.models.proposal import Proposal
 from app.models.user import Role, User
 from app.schemas import milestone as milestone_schema
 from app.services import milestone_service
-from tests.helpers import PDF, auth, close_registration, me, student, supervised_student, upload
+from tests.helpers import PDF, auth, close_registration, form_group, me, student, supervised_student, upload
 
 T = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
 F = datetime(2099, 11, 1, 23, 59, tzinfo=timezone.utc)  # a deadline far in the future
@@ -207,3 +207,39 @@ def test_keeping_a_passed_due_date_set_with_seconds(client, db):
     assert put(client, coord, "P1", due.replace(second=0, microsecond=0), grace=2).status_code == 200
     db.expire_all()
     assert (db.get(MilestoneTemplate, Phase.P1).due_at, db.get(MilestoneTemplate, Phase.P1).grace_days) == (due, 2)
+
+
+def test_coordinator_sets_the_p1_registration_window(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    sup = auth(client, db, "sup@x.com", Role.faculty)
+    s = auth(client, db, "s@x.com")
+    now = datetime.now(timezone.utc)
+    local = lambda at: at.astimezone(milestone_schema.DHAKA).replace(tzinfo=None).isoformat(timespec="minutes")
+    send = lambda h, opens, closes: client.put(
+        "/api/milestones/registration", headers=h, json={"opens_local": local(opens), "closes_local": local(closes)}
+    )
+
+    # Unset: one week from the semester start, as before.
+    res = client.get("/api/milestones", headers=coord).json()
+    assert (res["registration_status"], res["registration_opens_local"] is not None) == ("open", True)
+
+    assert send(s, now, now + timedelta(days=3)).status_code == 403
+    res = send(coord, now + timedelta(days=3), now + timedelta(days=1))
+    assert (res.status_code, res.json()["detail"]) == (422, "P1 registration must close after it opens")
+    assert put(client, coord, "P1", now + timedelta(days=10)).status_code == 200
+    res = send(coord, now + timedelta(days=1), now + timedelta(days=11))
+    assert (res.status_code, res.json()["detail"]) == (422, "P1 registration must close before P1 is due")
+
+    # Opens later: not open yet, and the group is told so.
+    res = send(coord, now + timedelta(days=1), now + timedelta(days=3))
+    assert res.status_code == 200
+    assert (res.json()["registration_open"], res.json()["registration_closes_local"]) == (False, local(now + timedelta(days=3)))
+    form_group(client, db, s, sup)
+    assert client.get("/api/milestones", headers=s).json()["registration_status"] == "upcoming"
+    assert client.get("/api/theses/mine", headers=s).json()["registration_upcoming"] is True
+    res = client.post("/api/theses/mine/register", headers=s)
+    assert (res.status_code, res.json()["detail"]) == (409, "P1 registration hasn't opened yet")
+
+    # Open now: the group can register.
+    assert send(coord, now - timedelta(hours=1), now + timedelta(days=3)).status_code == 200
+    assert client.post("/api/theses/mine/register", headers=s).status_code == 200

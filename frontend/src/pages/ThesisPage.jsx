@@ -186,7 +186,9 @@ export default function ThesisPage() {
                     ? "Your group is registered for P1 this semester."
                     : state.registration_open
                       ? <>Register your group to work on P1 this semester. Open until <span className="font-medium tabular-nums">{when(state.registration_closes_at)}</span>. After that, nobody can join or leave the group.</>
-                      : "P1 registration is closed. Your group can register in the first week of next semester; nothing is due for you until then."}
+                      : state.registration_upcoming
+                        ? <>P1 registration opens on <span className="font-medium tabular-nums">{when(state.registration_opens_at)}</span> and closes on <span className="font-medium tabular-nums">{when(state.registration_closes_at)}</span>.</>
+                        : "P1 registration is closed. Your group can register in the first week of next semester; nothing is due for you until then."}
                 </p>
                 {state.registration_open && state.register_block && !t.p1_registered && (
                   <p className="mt-2 text-sm font-medium text-amber-800">{state.register_block}.</p>

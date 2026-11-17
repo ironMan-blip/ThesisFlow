@@ -73,6 +73,20 @@ export default function DeadlinePage() {
     });
   };
 
+  const saveRegistration = (e) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run("registration", async () => {
+      show(
+        await api("/milestones/registration", {
+          method: "PUT",
+          body: { opens_local: f.get("opens_local"), closes_local: f.get("closes_local") }, // Dhaka time
+        }),
+      );
+      return "P1 registration dates saved.";
+    });
+  };
+
   const serverNow = now + offset;
 
   // A countdown hit zero: fetch at once so open -> grace -> closed and late days update without waiting a minute.
@@ -105,7 +119,7 @@ export default function DeadlinePage() {
               Once every grace time has ended: thesis groups that submitted move to their next phase, P3 theses are completed
               or deferred (a second deferral cancels the thesis), groups that missed are frozen, approved restarts start fresh, and
               all deadlines are cleared for next semester.
-              P1 registration then opens for one week.
+              P1 registration then opens for one week, unless you set other dates below.
             </p>
           </div>
           <button onClick={() => setConfirming(true)} disabled={saving === "semester"} className="btn-primary">
@@ -117,11 +131,35 @@ export default function DeadlinePage() {
       <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
       {data?.registration_closes_at && (
-        <p className="text-sm text-zinc-600">
-          {data.registration_open ? "P1 registration is open until " : "P1 registration closed on "}
-          <span className="font-medium tabular-nums">{when(data.registration_closes_at)}</span>.
-          {data.can_edit && " P1 can only be due after it closes."}
-        </p>
+        <section className="card p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">P1 registration</h2>
+            {(() => {
+              const [label, tone] = data.registration_status === "upcoming" ? ["Not open yet", STATUS.not_set[1]] : STATUS[data.registration_status];
+              return <span className={`badge ${tone}`}>{label}</span>;
+            })()}
+          </div>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div><dt className="text-zinc-500">Opens</dt><dd className="font-medium">{when(data.registration_opens_at)}</dd></div>
+            <div><dt className="text-zinc-500">Closes</dt><dd className="font-medium">{when(data.registration_closes_at)}</dd></div>
+          </dl>
+          {data.can_edit && (
+            <form onSubmit={saveRegistration} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-3">
+              <label className="label">
+                Opens (Dhaka)
+                <input name="opens_local" type="datetime-local" required defaultValue={data.registration_opens_local ?? ""} className="input" />
+              </label>
+              <label className="label">
+                Closes (Dhaka)
+                <input name="closes_local" type="datetime-local" required defaultValue={data.registration_closes_local ?? ""} className="input" />
+              </label>
+              <button disabled={saving === "registration"} className="btn-primary sm:justify-self-end">
+                {saving === "registration" ? "Saving…" : "Save registration"}
+              </button>
+              <p className="text-sm text-zinc-500 sm:col-span-3">P1 can only be due after registration closes.</p>
+            </form>
+          )}
+        </section>
       )}
 
       {!data ? (
