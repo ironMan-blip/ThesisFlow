@@ -1,0 +1,53 @@
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, false, func, true
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class Meeting(Base):
+    """One supervision meeting of a thesis group, written up by its supervisor (F16). Newest first in every list."""
+
+    __tablename__ = "meetings"
+    # Also what stops a double click from logging the same meeting twice (meeting_service takes the thesis lock first).
+    __table_args__ = (UniqueConstraint("thesis_id", "held_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    thesis_id: Mapped[int] = mapped_column(ForeignKey("theses.id", ondelete="CASCADE"))
+    # Rounded down to the minute; never in the future.
+    held_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str] = mapped_column(Text)
+    # Who came. A thesis has one student, so "each member" in the plan is the student plus the faculty.
+    supervisor_attended: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    student_attended: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Only possible once the co-supervisor has joined the group.
+    co_supervisor_attended: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Null once that account is deleted; the meeting itself is kept, like proposal versions.
+    recorded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+
+    recorded_by = relationship("User", foreign_keys=[recorded_by_id])
+    tasks = relationship(
+        "MeetingTask",
+        back_populates="meeting",
+        order_by="MeetingTask.id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class MeetingTask(Base):
+    """Something the student must do before the next meeting, set during a meeting."""
+
+    __tablename__ = "meeting_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"), index=True)
+    description: Mapped[str] = mapped_column(String(500))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+
+    meeting: Mapped[Meeting] = relationship(back_populates="tasks")

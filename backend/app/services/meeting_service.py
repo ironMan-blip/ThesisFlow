@@ -1,0 +1,185 @@
+"""Meeting log (F16): the supervisor (or joined co-supervisor) records each meeting with a thesis group.
+
+Who can do what: the thesis's faculty log, edit and delete meetings and tick tasks, but only while the group is
+formed or active. The student can read. Everyone else, the coordinator too, gets 404, as if the thesis did not exist.
+Every change takes the thesis row lock first, so a double click can't log the same meeting twice.
+"""
+
+from datetime import datetime, timedelta, timezone
+
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.exc import InvalidRequestError
+from sqlalchemy.orm import Session, selectinload
+
+from app.models.meeting import Meeting, MeetingTask
+from app.models.thesis import FORMED, Thesis, ThesisStatus
+from app.models.user import Role, User
+from app.schemas.meeting import MeetingIn, MeetingListOut, MeetingOut
+from app.schemas.thesis import ThesisOut
+from app.services import thesis_service
+
+# Browser and server clocks differ a little; a meeting this far ahead still counts as "now".
+FUTURE_TOLERANCE = timedelta(minutes=1)
+
+_READ_ONLY = {
+    ThesisStatus.completed: "This thesis is completed, so its meeting log is read-only",
+    ThesisStatus.dropped: "This thesis is archived, so its meeting log is read-only",
+}
+
+
+def _missing(what: str) -> HTTPException:
+    return HTTPException(status.HTTP_404_NOT_FOUND, f"No {what} with that id")
+
+
+def _visible(db: Session, user: User, thesis_id: int) -> Thesis:
+    thesis = db.get(Thesis, thesis_id)
+    # A pending group has no supervisor yet, so it has no meetings.
+    if thesis is None or thesis.status == ThesisStatus.pending or not thesis_service.can_view(user, thesis):
+        raise _missing("thesis")
+    return thesis
+
+
+def _listing(db: Session, user: User, thesis: Thesis) -> MeetingListOut:
+    rows = db.scalars(
+        select(Meeting)
+        .where(Meeting.thesis_id == thesis.id)
+        .order_by(Meeting.held_at.desc(), Meeting.id.desc())
+        .options(selectinload(Meeting.tasks), selectinload(Meeting.recorded_by))
+    )
+    is_faculty = user.role == Role.faculty
+    open_ = thesis.status in FORMED
+    return MeetingListOut(
+        thesis=ThesisOut.model_validate(thesis),
+        meetings=[MeetingOut.model_validate(m) for m in rows],
+        can_edit=is_faculty and open_,
+        log_block=_READ_ONLY.get(thesis.status) if is_faculty else None,
+    )
+
+
+def mine(db: Session, user: User) -> MeetingListOut:
+    thesis = user.thesis
+    if thesis is None or thesis.status == ThesisStatus.pending:
+        return MeetingListOut(thesis=None, meetings=[], can_edit=False)
+    return _listing(db, user, thesis)
+
+
+def for_thesis(db: Session, user: User, thesis_id: int) -> MeetingListOut:
+    return _listing(db, user, _visible(db, user, thesis_id))
+
+
+def _lock_for_change(db: Session, user: User, thesis_id: int, what: str) -> Thesis:
+    """The thesis, row-locked, for a faculty member who may change its log right now."""
+    thesis = db.scalar(select(Thesis).where(Thesis.id == thesis_id).with_for_update())
+    if thesis is None or thesis.status == ThesisStatus.pending or not thesis_service.can_view(user, thesis):
+        raise _missing(what)
+    if thesis.status not in FORMED:
+        raise HTTPException(status.HTTP_409_CONFLICT, _READ_ONLY[thesis.status])
+    return thesis
+
+
+def _check(thesis: Thesis, data: MeetingIn) -> datetime:
+    """Business rules the schema can't see. Returns held_at rounded down to the minute."""
+    held_at = data.held_at.replace(second=0, microsecond=0)
+    if held_at > datetime.now(timezone.utc) + FUTURE_TOLERANCE:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "held_at: a meeting can't be in the future")
+    if not (data.supervisor_attended or data.student_attended or data.co_supervisor_attended):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "attendance: mark at least one person who came")
+    if data.co_supervisor_attended and not thesis.co_supervisor_joined:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "co_supervisor_attended: this thesis has no co-supervisor")
+    if any(t.due_at and t.due_at <= held_at for t in data.tasks):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "tasks: a task's due date must be after the meeting")
+    return held_at
+
+
+def _no_clash(db: Session, thesis_id: int, held_at: datetime, ignore_id: int | None = None) -> None:
+    query = select(Meeting.id).where(Meeting.thesis_id == thesis_id, Meeting.held_at == held_at)
+    if ignore_id is not None:
+        query = query.where(Meeting.id != ignore_id)
+    if db.scalar(query.limit(1)) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A meeting at that time is already logged for this thesis")
+
+
+def record(db: Session, user: User, thesis_id: int, data: MeetingIn) -> Meeting:
+    thesis = _lock_for_change(db, user, thesis_id, "thesis")
+    held_at = _check(thesis, data)
+    _no_clash(db, thesis.id, held_at)
+    meeting = Meeting(
+        thesis_id=thesis.id,
+        held_at=held_at,
+        notes=data.notes,
+        supervisor_attended=data.supervisor_attended,
+        student_attended=data.student_attended,
+        co_supervisor_attended=data.co_supervisor_attended,
+        recorded_by_id=user.id,
+        tasks=[MeetingTask(description=t.description, due_at=t.due_at) for t in data.tasks],
+    )
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
+
+def _get(db: Session, meeting_id: int) -> Meeting:
+    meeting = db.get(Meeting, meeting_id)
+    if meeting is None:
+        raise _missing("meeting")
+    return meeting
+
+
+def _lock_meeting(db: Session, user: User, meeting_id: int) -> tuple[Meeting, Thesis]:
+    meeting = _get(db, meeting_id)
+    thesis = _lock_for_change(db, user, meeting.thesis_id, "meeting")
+    try:
+        db.refresh(meeting)  # re-read under the lock: it may have been deleted since the request began
+    except InvalidRequestError:
+        raise _missing("meeting") from None
+    return meeting, thesis
+
+
+def update(db: Session, user: User, meeting_id: int, data: MeetingIn) -> Meeting:
+    meeting, thesis = _lock_meeting(db, user, meeting_id)
+    held_at = _check(thesis, data)
+    _no_clash(db, thesis.id, held_at, ignore_id=meeting.id)
+
+    ids = [t.id for t in data.tasks if t.id is not None]
+    existing = {t.id: t for t in meeting.tasks}
+    if len(ids) != len(set(ids)) or any(i not in existing for i in ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "tasks: unknown or repeated task")
+    kept = []
+    for item in data.tasks:
+        if item.id is None:
+            kept.append(MeetingTask(description=item.description, due_at=item.due_at))
+        else:
+            task = existing[item.id]  # keeps its done flag
+            task.description, task.due_at = item.description, item.due_at
+            kept.append(task)
+
+    meeting.held_at, meeting.notes = held_at, data.notes
+    meeting.supervisor_attended = data.supervisor_attended
+    meeting.student_attended = data.student_attended
+    meeting.co_supervisor_attended = data.co_supervisor_attended
+    meeting.tasks = kept  # tasks left out are deleted (delete-orphan)
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
+
+def delete(db: Session, user: User, meeting_id: int) -> None:
+    meeting, _ = _lock_meeting(db, user, meeting_id)
+    db.delete(meeting)
+    db.commit()
+
+
+def set_task_done(db: Session, user: User, task_id: int, done: bool) -> Meeting:
+    task = db.get(MeetingTask, task_id)
+    if task is None:
+        raise _missing("task")
+    meeting, _ = _lock_meeting(db, user, task.meeting_id)
+    task = db.get(MeetingTask, task_id)
+    if task is None:  # removed by an edit while we waited for the lock
+        raise _missing("task")
+    task.done = done
+    db.commit()
+    db.refresh(meeting)
+    return meeting

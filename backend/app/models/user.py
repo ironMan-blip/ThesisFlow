@@ -19,8 +19,8 @@ class Role(str, enum.Enum):
 # Pages each role can open; the frontend shows exactly these in nav and dashboard.
 # The coordinator has no "account" tool: that account can never be deleted.
 ROLE_TOOLS = {
-    Role.student: ["group", "teammates", "thesis", "proposal", "deadlines", "account"],
-    Role.faculty: ["theses", "deadlines", "account"],
+    Role.student: ["group", "teammates", "thesis", "proposal", "deadlines", "meetings", "account"],
+    Role.faculty: ["theses", "deadlines", "meetings", "account"],
     # Semesters (deadlines and the rollover) and accounts only: the coordinator never sees individual theses.
     Role.coordinator: ["deadlines", "accounts", "registration_requests", "deletion_requests", "restart_requests"],
 }
