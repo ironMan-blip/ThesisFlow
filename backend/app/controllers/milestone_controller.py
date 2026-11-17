@@ -23,7 +23,7 @@ def set_registration(
     data: RegistrationIn, user: User = Depends(require_roles(Role.coordinator)), db: Session = Depends(get_db)
 ):
     milestone_service.set_registration(db, data)
-    return milestone_service.timeline(db, user)
+    return milestone_service.timeline(db, user, data.semester_id)
 
 
 @router.put("/{phase}", response_model=TimelineOut)

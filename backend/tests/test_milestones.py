@@ -273,8 +273,10 @@ def test_coordinator_sets_the_p1_registration_window(client, db):
     s = auth(client, db, "s@x.com")
     now = datetime.now(timezone.utc)
     local = lambda at: at.astimezone(milestone_schema.DHAKA).replace(tzinfo=None).isoformat(timespec="minutes")
-    send = lambda h, opens, closes: client.put(
-        "/api/milestones/registration", headers=h, json={"opens_local": local(opens), "closes_local": local(closes)}
+    sid = client.get("/api/semesters/current", headers=coord).json()["id"]
+    send = lambda h, opens, closes, semester_id=sid: client.put(
+        "/api/milestones/registration", headers=h,
+        json={"opens_local": local(opens), "closes_local": local(closes), "semester_id": semester_id},
     )
 
     # Unset: one week from the semester start, as before.
@@ -282,6 +284,8 @@ def test_coordinator_sets_the_p1_registration_window(client, db):
     assert (res["registration_status"], res["registration_opens_local"] is not None) == ("open", True)
 
     assert send(s, now, now + timedelta(days=3)).status_code == 403
+    res = send(coord, now, now + timedelta(days=3), semester_id=10**6)
+    assert (res.status_code, res.json()["detail"]) == (422, "Pick the semester this registration is for")
     res = send(coord, now + timedelta(days=3), now + timedelta(days=1))
     assert (res.status_code, res.json()["detail"]) == (422, "P1 registration must close after it opens")
     assert put(client, coord, "P1", now + timedelta(days=10)).status_code == 200
@@ -303,6 +307,21 @@ def test_coordinator_sets_the_p1_registration_window(client, db):
     assert client.post("/api/theses/mine/register", headers=s).status_code == 200
 
 
+def test_each_semester_has_its_own_p1_registration_window(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    old = client.get("/api/semesters/current", headers=coord).json()["id"]
+    assert client.post("/api/milestones/next-semester", headers=coord).status_code == 200
+    new = client.get("/api/semesters/current", headers=coord).json()["id"]
+    body = {"opens_local": "2099-01-01T09:00", "closes_local": "2099-01-08T23:59", "semester_id": old}
+    res = client.put("/api/milestones/registration", headers=coord, json=body).json()
+    # Editing the old semester shows and changes only its window; the current one keeps its own.
+    assert (res["semester_id"], res["registration_closes_local"]) == (old, "2099-01-08T23:59")
+    current = client.get("/api/milestones", headers=coord).json()
+    assert (current["semester_id"], current["registration_status"]) == (new, "open")
+    assert current["registration_closes_local"] != "2099-01-08T23:59"
+    assert client.get(f"/api/milestones?semester_id={old}", headers=coord).json()["registration_opens_local"] == "2099-01-01T09:00"
+
+
 def test_an_empty_semesters_table_gets_a_current_semester(client, db):
     # The migration makes the first semester; if the row is gone, startup makes one so registration and uploads work.
     from sqlalchemy import delete as sql_delete
@@ -315,11 +334,12 @@ def test_an_empty_semesters_table_gets_a_current_semester(client, db):
     assert client.get("/api/milestones", headers=coord).json()["registration_status"] == "not_set"
     progress_service.ensure_semester(db)
     assert client.get("/api/milestones", headers=coord).json()["registration_status"] == "open"
+    sid = client.get("/api/semesters/current", headers=coord).json()["id"]
     res = client.put("/api/milestones/registration", headers=coord,
-                     json={"opens_local": "2099-01-01T09:00", "closes_local": "2099-01-08T23:59"})
+                     json={"opens_local": "2099-01-01T09:00", "closes_local": "2099-01-08T23:59", "semester_id": sid})
     assert (res.status_code, res.json()["registration_status"]) == (200, "upcoming")
     # Year 1 in Dhaka is BC in UTC: stored fine, unreadable after, so it's refused up front.
     res = client.put("/api/milestones/registration", headers=coord,
-                     json={"opens_local": "0001-01-01T00:00", "closes_local": "2099-01-08T23:59"})
+                     json={"opens_local": "0001-01-01T00:00", "closes_local": "2099-01-08T23:59", "semester_id": sid})
     assert res.status_code == 422
     assert client.get("/api/milestones", headers=coord).status_code == 200

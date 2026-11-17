@@ -67,7 +67,8 @@ def timeline(db: Session, user: User, semester_id: int | None = None) -> Timelin
     templates = {m.phase: m for m in db.scalars(select(MilestoneTemplate).where(MilestoneTemplate.semester_id == shown))}
     # A student only has a submission for the phase they are in, held to their own group's deadline semester.
     mine = progress_service.standing(db, user, now) if user.role == Role.student and user.phase else None
-    opens, closes = progress_service.registration_window(db) or (None, None)
+    shown_semester = shown and db.get(Semester, shown)
+    opens, closes = progress_service.semester_registration_window(shown_semester) if shown_semester else (None, None)
     return TimelineOut(
         now=now,
         milestones=[
@@ -85,10 +86,12 @@ def timeline(db: Session, user: User, semester_id: int | None = None) -> Timelin
 
 
 def set_registration(db: Session, data: RegistrationIn) -> None:
-    """Coordinator: this semester's P1 registration window. Groups already registered stay registered."""
+    """Coordinator: one semester's P1 registration window. Groups already registered stay registered."""
     if data.closes_at <= data.opens_at:
         raise HTTPException(422, "P1 registration must close after it opens")
-    semester = progress_service.ensure_semester(db)
+    semester = db.get(Semester, data.semester_id)
+    if semester is None:
+        raise HTTPException(422, "Pick the semester this registration is for")
     p1 = db.get(MilestoneTemplate, (Phase.P1, semester.id))
     if p1 and p1.due_at <= data.closes_at:
         # Same rule as set_milestone, from the other side.

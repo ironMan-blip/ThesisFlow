@@ -42,6 +42,7 @@ class RegistrationIn(BaseModel):
 
     opens_local: NaiveDatetime = Field(ge=EARLIEST, lt=datetime(9999, 12, 1))
     closes_local: NaiveDatetime = Field(ge=EARLIEST, lt=datetime(9999, 12, 1))
+    semester_id: int  # the semester whose P1 registration this is (checked to exist by the service)
 
     @property
     def opens_at(self) -> datetime:
@@ -98,7 +99,7 @@ class TimelineOut(BaseModel):
     can_edit: bool  # coordinator only
     semesters: list[SemesterTagOut] = []  # coordinator only, newest (current) first: the tags a deadline can take
     current_semester_id: int | None = None
-    registration_opens_at: datetime | None  # this semester's P1 registration window
+    registration_opens_at: datetime | None  # the shown semester's P1 registration window
     registration_closes_at: datetime | None
     registration_open: bool
 

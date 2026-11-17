@@ -86,7 +86,7 @@ export default function DeadlinePage() {
       show(
         await api("/milestones/registration", {
           method: "PUT",
-          body: { opens_local: f.get("opens_local"), closes_local: f.get("closes_local") }, // Dhaka time
+          body: { opens_local: f.get("opens_local"), closes_local: f.get("closes_local"), semester_id: data.semester_id }, // Dhaka time
         }),
       );
       return "P1 registration dates saved.";
@@ -120,6 +120,21 @@ export default function DeadlinePage() {
 
       <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
+      {data?.can_edit && (
+        <section className="card flex flex-wrap items-end justify-between gap-4 p-6">
+          <p className="max-w-prose text-sm text-zinc-600">
+            Each semester has its own P1 registration and deadlines. Groups work to the deadlines of the semester they registered for P1
+            in, or moved into their phase in, even after the next semester starts.
+          </p>
+          <label className="label">
+            Deadlines for
+            <select value={data.semester_id ?? ""} onChange={(e) => setSemesterId(Number(e.target.value))} className="input">
+              {data.semesters.map((s) => <option key={s.id} value={s.id}>{s.name}{s.id === data.current_semester_id ? " (current)" : ""}</option>)}
+            </select>
+          </label>
+        </section>
+      )}
+
       {data && (data.can_edit || data.registration_closes_at) && (
         <section className="card p-6">
           <div className="flex flex-wrap items-center gap-2">
@@ -131,7 +146,7 @@ export default function DeadlinePage() {
             <div><dt className="text-zinc-500">Closes</dt><dd className="font-medium">{data.registration_closes_at ? when(data.registration_closes_at) : "Not set"}</dd></div>
           </dl>
           {data.can_edit && (
-            <form onSubmit={saveRegistration} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-3">
+            <form key={data.semester_id} onSubmit={saveRegistration} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-3">
               <label className="label">
                 Opens (Dhaka)
                 <input name="opens_local" type="datetime-local" required defaultValue={data.registration_opens_local ?? ""} className="input" />
@@ -146,21 +161,6 @@ export default function DeadlinePage() {
               <p className="text-sm text-zinc-500 sm:col-span-3">P1 can only be due after registration closes.</p>
             </form>
           )}
-        </section>
-      )}
-
-      {data?.can_edit && (
-        <section className="card flex flex-wrap items-end justify-between gap-4 p-6">
-          <p className="max-w-prose text-sm text-zinc-600">
-            Each semester has its own deadlines. Groups work to the deadlines of the semester they registered for P1
-            in, or moved into their phase in, even after the next semester starts.
-          </p>
-          <label className="label">
-            Deadlines for
-            <select value={data.semester_id ?? ""} onChange={(e) => setSemesterId(Number(e.target.value))} className="input">
-              {data.semesters.map((s) => <option key={s.id} value={s.id}>{s.name}{s.id === data.current_semester_id ? " (current)" : ""}</option>)}
-            </select>
-          </label>
         </section>
       )}
 
