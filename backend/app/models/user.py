@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship

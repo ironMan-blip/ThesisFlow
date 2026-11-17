@@ -119,11 +119,6 @@ def sync_deliverable(db: Session, gm: GroupMilestone, user: User) -> None:
     db.expire(gm, ["deliverable"])
 
 
-def submitted_at(db: Session, user: User) -> datetime | None:
-    gm = group_milestone(db, user)
-    return gm and gm.submitted_at
-
-
 def held_to(thesis: Thesis | None, closes_at: datetime) -> bool:
     # Only groups that could upload have anything due: their phase started before the deadline closed, they are
     # accepted and, in P1, registered this semester. Everyone else waits for next semester.

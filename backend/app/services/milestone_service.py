@@ -61,12 +61,13 @@ def timeline(db: Session, user: User) -> TimelineOut:
     templates = {m.phase: m for m in db.scalars(select(MilestoneTemplate))}
     # A student only has a submission for the phase they are in this semester.
     mine = progress_service.standing(db, user, now) if user.role == Role.student and user.phase else None
+    closes = progress_service.registration_closes_at(db)
     return TimelineOut(
         now=now,
         milestones=[_row(templates.get(p), p, now, mine if p == user.phase else None, user) for p in Phase],
         can_edit=user.role == Role.coordinator,
-        registration_closes_at=progress_service.registration_closes_at(db),
-        registration_open=progress_service.registration_open(db),
+        registration_closes_at=closes,
+        registration_open=closes is not None and now <= closes,
     )
 
 

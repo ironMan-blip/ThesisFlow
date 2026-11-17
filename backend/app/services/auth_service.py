@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app import rate_limit
 from app.config import settings
-from app.models.milestone import Phase
 from app.models.user import REVIEW_HOURS, REVIEW_WINDOW, Role, User
 from app.schemas.user import MAX_PASSWORD, UserCreate
 from app.security import create_access_token, hash_password, verify_password
