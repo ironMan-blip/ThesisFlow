@@ -45,7 +45,7 @@ def test_register_login_me(client, db):
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
     assert me.json()["role"] == "student"
-    assert me.json()["tools"] == ["group", "teammates", "thesis", "proposal", "deadlines", "meetings", "account"]
+    assert me.json()["tools"] == ["thesis", "teammates", "proposal", "deadlines", "meetings", "account"]
     assert me.json()["phase"] == "P1"  # every student starts at P1
     assert me.json()["review_hours"] == 48
 

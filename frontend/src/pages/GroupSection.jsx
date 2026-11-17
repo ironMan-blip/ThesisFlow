@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { Alerts, ConfirmDialog, DecideButtons, Icon, ICONS, PageHeader, Person, Skeleton } from "../components/ui";
+import { Alerts, ConfirmDialog, DecideButtons, Icon, ICONS, Person, Skeleton } from "../components/ui";
 import { when } from "../format";
 import { useAction } from "../useAction";
 
-export default function GroupPage() {
+// Student group (3 to 5 students): shown on the Thesis group page.
+export default function GroupSection() {
   const { refreshCounts } = useOutletContext();
   const [state, setState] = useState(null);
   const [leaving, setLeaving] = useState(false);
@@ -38,10 +39,11 @@ export default function GroupPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="My group"
-        intro={state && `A thesis group has ${state.min_members} to ${state.max_members} students. Invitations expire after ${state.invite_days} days.`}
-      />
+      {state && (
+        <p className="text-sm text-zinc-600">
+          A thesis group has {state.min_members} to {state.max_members} students. Invitations expire after {state.invite_days} days.
+        </p>
+      )}
 
       <Alerts error={error} notice={notice} />
 
