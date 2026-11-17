@@ -6,7 +6,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.milestone import MilestoneTemplate, Phase
-from app.models.semester import Semester
 from app.models.user import Role, User
 from app.schemas.milestone import MilestoneIn, MilestoneOut, RegistrationIn, TimelineOut
 from app.services import progress_service
@@ -81,11 +80,7 @@ def set_registration(db: Session, data: RegistrationIn) -> None:
     if p1 and p1.due_at <= data.closes_at:
         # Same rule as set_milestone, from the other side.
         raise HTTPException(422, "P1 registration must close before P1 is due")
-    semester = progress_service.current_semester(db)
-    if semester is None:
-        # The migration makes the first semester; if that row is gone, nobody could ever register, so make it here.
-        semester = Semester(started_at=datetime.now(timezone.utc))
-        db.add(semester)
+    semester = progress_service.ensure_semester(db)
     semester.registration_opens_at, semester.registration_closes_at = data.opens_at, data.closes_at
     db.commit()
 

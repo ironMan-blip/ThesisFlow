@@ -67,6 +67,17 @@ def current_semester(db: Session) -> Semester | None:
     return db.scalar(select(Semester).order_by(Semester.id.desc()).limit(1))
 
 
+def ensure_semester(db: Session) -> Semester:
+    """The current semester, made (starting now) if the table is empty. The migration makes the first one, but
+    registration, uploads and group milestones all break without it, so startup calls this too."""
+    s = current_semester(db)
+    if s is None:
+        s = Semester(started_at=_now())
+        db.add(s)
+        db.commit()
+    return s
+
+
 def registration_window(db: Session) -> tuple[datetime, datetime] | None:
     """(opens, closes) of this semester's P1 registration: the coordinator's dates, else one week from its start."""
     s = current_semester(db)

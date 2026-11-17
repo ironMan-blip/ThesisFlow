@@ -245,14 +245,18 @@ def test_coordinator_sets_the_p1_registration_window(client, db):
     assert client.post("/api/theses/mine/register", headers=s).status_code == 200
 
 
-def test_setting_registration_with_no_semester_row_makes_one(client, db):
+def test_an_empty_semesters_table_gets_a_current_semester(client, db):
+    # The migration makes the first semester; if the row is gone, startup makes one so registration and uploads work.
     from sqlalchemy import delete as sql_delete
     from app.models.semester import Semester
+    from app.services import progress_service
 
     coord = auth(client, db, "c@x.com", Role.coordinator)
     db.execute(sql_delete(Semester))
     db.flush()
     assert client.get("/api/milestones", headers=coord).json()["registration_status"] == "not_set"
+    progress_service.ensure_semester(db)
+    assert client.get("/api/milestones", headers=coord).json()["registration_status"] == "open"
     res = client.put("/api/milestones/registration", headers=coord,
                      json={"opens_local": "2099-01-01T09:00", "closes_local": "2099-01-08T23:59"})
     assert (res.status_code, res.json()["registration_status"]) == (200, "upcoming")

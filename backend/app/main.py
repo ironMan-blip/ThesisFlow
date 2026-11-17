@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import SessionLocal, get_db
 from app.deps import user_for_token
 from app.rate_limit import rate_limit
-from app.services import account_service, auth_service
+from app.services import account_service, auth_service, progress_service
 
 # Only uploads are bigger than this, and only signed-in students upload.
 ANONYMOUS_BODY_LIMIT = 64 * 1024
@@ -65,6 +65,7 @@ async def _warm_up_scanner() -> None:
 async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         auth_service.ensure_admin(db)
+        progress_service.ensure_semester(db)
     tasks = [asyncio.create_task(_deletion_loop()), asyncio.create_task(_warm_up_scanner())]
     yield
     for task in tasks:
