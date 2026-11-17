@@ -15,9 +15,9 @@ from app import virus_scan
 from app.config import settings
 from app.models.milestone import Phase
 from app.models.proposal import Proposal, ProposalVersion
-from app.models.thesis import Thesis, ThesisStatus
+from app.models.thesis import TITLE_CHANGE_WINDOW, Thesis, ThesisStatus, TitleChange
 from app.models.user import User
-from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut
+from app.schemas.proposal import MAX_ABSTRACT_CHARS, ProposalOut, TitleChangeOut
 from app.services import progress_service, thesis_service
 
 CHUNK = 1024 * 1024
@@ -67,13 +67,56 @@ def _upload_block(
 def get_mine(db: Session, user: User) -> ProposalOut:
     block, s = _upload_block(db, user)
     thesis = user.thesis
+    latest = thesis.title_changes[0] if thesis and thesis.title_changes else None
     return ProposalOut(
         versions=thesis.versions if thesis else [],
         thesis_code=thesis and thesis.code,
         phase=user.phase,
         upload_block=block,
         freeze_at=s.closes_at if block is None and s.submitted_at is None and datetime.now(timezone.utc) > s.due_at else None,
+        title=thesis and thesis.title,
+        abstract=thesis and thesis.abstract,
+        title_change=latest and TitleChangeOut.model_validate(latest),
+        can_request_title_change=thesis is not None and _title_change_block(thesis) is None,
     )
+
+
+def _clean(title: str, abstract: str) -> tuple[str, str]:
+    title, abstract = title.strip(), abstract.strip()
+    if not title or len(title) > 255:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Title must be 1 to 255 characters")
+    if not abstract or len(abstract) > MAX_ABSTRACT_CHARS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Abstract must be 1 to {MAX_ABSTRACT_CHARS} characters")
+    return title, abstract
+
+
+def _check_title(thesis: Thesis | None, title: str, abstract: str) -> None:
+    # The first upload sets them (thesis.title is None until then); after that only an approved change moves them.
+    if thesis is None or thesis.title is None:
+        return
+    wrong = [name for name, given, kept in (("title", title, thesis.title), ("abstract", abstract, thesis.abstract)) if given != kept]
+    if wrong:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Wrong {' and '.join(wrong)}: uploads must use your thesis's {' and '.join(wrong)} exactly. "
+            "To change them, request it from your supervisor on this page (allowed once)",
+        )
+
+
+def _title_change_block(thesis: Thesis) -> str | None:
+    """Why this thesis can't request a title and abstract change now (None means it can)."""
+    if thesis.title is None:
+        return "Upload your first version first: it sets your title and abstract"
+    if thesis.status != ThesisStatus.active:
+        return "Only an active thesis can change its title and abstract"
+    if thesis.supervisor_id is None:
+        return "Your thesis has no supervisor to approve a change"
+    statuses = {c.status for c in thesis.title_changes}
+    if "approved" in statuses:
+        return "You've already used your one title and abstract change"
+    if "pending" in statuses:
+        return "Your change request is still waiting for your supervisor"
+    return None
 
 
 def _lock_thesis(db: Session, user: User) -> Thesis | None:
@@ -186,11 +229,8 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
     # Uploads always go to the student's current phase, under their thesis ID.
     if block := _upload_block(db, user)[0]:
         raise HTTPException(status.HTTP_409_CONFLICT, block)
-    title, abstract = title.strip(), abstract.strip()
-    if not title or len(title) > 255:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Title must be 1 to 255 characters")
-    if not abstract or len(abstract) > MAX_ABSTRACT_CHARS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Abstract must be 1 to {MAX_ABSTRACT_CHARS} characters")
+    title, abstract = _clean(title, abstract)
+    _check_title(user.thesis, title, abstract)  # before storing the file, so a wrong title fails fast
 
     stored, size, sha256 = _save_pdf(file)
     keep_new_file = True
@@ -200,6 +240,9 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         _refresh_user(db, user)
         if block := _upload_block(db, user)[0]:
             raise HTTPException(status.HTTP_409_CONFLICT, block)
+        _check_title(thesis, title, abstract)  # again under the lock: a change may have been approved meanwhile
+        if thesis.title is None:
+            thesis.title, thesis.abstract = title, abstract
         proposal = thesis.proposal
         if proposal is None:
             proposal = Proposal(thesis_id=thesis.id)
@@ -266,6 +309,53 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
             (_upload_dir() / stored).unlink(missing_ok=True)
     db.refresh(thesis)
     return get_mine(db, user)
+
+
+def request_title_change(db: Session, user: User, title: str, abstract: str) -> ProposalOut:
+    """Student: ask the supervisor to change the thesis title and abstract. Only one change is ever approved, and the
+    supervisor has TITLE_CHANGE_WINDOW to accept it."""
+    title, abstract = _clean(title, abstract)
+    thesis = _lock_thesis(db, user)
+    if thesis is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Form a thesis group first")
+    if block := _title_change_block(thesis):
+        raise HTTPException(status.HTTP_409_CONFLICT, block)
+    if (title, abstract) == (thesis.title, thesis.abstract):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That is already your title and abstract")
+    db.add(TitleChange(thesis_id=thesis.id, title=title, abstract=abstract))
+    db.commit()
+    db.refresh(thesis)
+    return get_mine(db, user)
+
+
+def decide_title_change(db: Session, supervisor: User, change_id: int, approve: bool) -> None:
+    """The thesis's supervisor (not the co-supervisor): accept or reject a waiting change request."""
+    change = db.get(TitleChange, change_id)
+    thesis = change and db.scalar(select(Thesis).where(Thesis.id == change.thesis_id).with_for_update())
+    if thesis is None or thesis.supervisor_id != supervisor.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No title change request with that id")
+    db.refresh(change)
+    if change.status == "expired":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"This request expired: it had to be accepted within {TITLE_CHANGE_WINDOW.days} days. The group can ask again"
+        )
+    if change.status != "pending":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This request is already decided")
+    change.decided_at, change.approved = datetime.now(timezone.utc), approve
+    if approve:
+        thesis.title, thesis.abstract = change.title, change.abstract
+    db.commit()
+
+
+def count_title_changes(db: Session, supervisor: User) -> int:
+    """Supervisor badge: change requests waiting for their decision. Polled every 10s, so counted in SQL."""
+    return db.scalar(
+        select(func.count(TitleChange.id)).join(Thesis).where(
+            Thesis.supervisor_id == supervisor.id,
+            TitleChange.decided_at.is_(None),
+            TitleChange.created_at > datetime.now(timezone.utc) - TITLE_CHANGE_WINDOW,
+        )
+    )
 
 
 def get_version_file(db: Session, user: User, version_id: int) -> tuple[Path, str]:

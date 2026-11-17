@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.user import Role, User
-from app.schemas.proposal import ProposalOut
+from app.schemas.proposal import ProposalOut, TitleChangeIn
 from app.services import proposal_service
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
@@ -31,3 +31,19 @@ def upload(
 def download(version_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     path, filename = proposal_service.get_version_file(db, user, version_id)
     return FileResponse(path, media_type="application/pdf", filename=filename)
+
+
+@router.post("/mine/title-change", response_model=ProposalOut, status_code=status.HTTP_201_CREATED)
+def request_title_change(data: TitleChangeIn, user: User = Depends(require_roles(Role.student)), db: Session = Depends(get_db)):
+    # One approved change per thesis; the supervisor has 3 days to accept it.
+    return proposal_service.request_title_change(db, user, data.title, data.abstract)
+
+
+@router.post("/title-changes/{change_id}/approve", status_code=status.HTTP_204_NO_CONTENT)
+def approve_title_change(change_id: int, user: User = Depends(require_roles(Role.faculty)), db: Session = Depends(get_db)):
+    proposal_service.decide_title_change(db, user, change_id, approve=True)
+
+
+@router.delete("/title-changes/{change_id}", status_code=status.HTTP_204_NO_CONTENT)
+def reject_title_change(change_id: int, user: User = Depends(require_roles(Role.faculty)), db: Session = Depends(get_db)):
+    proposal_service.decide_title_change(db, user, change_id, approve=False)

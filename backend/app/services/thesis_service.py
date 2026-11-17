@@ -21,6 +21,7 @@ from app.models.milestone import Phase
 from app.models.proposal import Proposal
 from app.models.thesis import FORMED, Thesis, ThesisStatus
 from app.models.user import Role, User
+from app.schemas.proposal import TitleChangeOut
 from app.schemas.thesis import MyThesisOut, PersonOut, SupervisionRequestOut, ThesisDetailOut, ThesisOut, ThesisRequestIn
 from app.services import progress_service
 
@@ -206,6 +207,7 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
             selectinload(Thesis.student),
             selectinload(Thesis.supervisor),
             selectinload(Thesis.co_supervisor),
+            selectinload(Thesis.title_changes),
         )
     )
     query = query.where(
@@ -220,6 +222,8 @@ def list_theses(db: Session, user: User) -> list[ThesisDetailOut]:
     for t in theses:
         row = ThesisDetailOut.model_validate(t)
         row.is_supervisor = t.supervisor_id == user.id
+        pending = [c for c in t.title_changes if c.status == "pending"]
+        row.title_change_request = pending and TitleChangeOut.model_validate(pending[0]) or None
         # Deferral is the supervisor's call for now (panel members later).
         row.can_defer = row.is_supervisor and (t.defer_pending or progress_service.can_defer(db, t, t.student and standings.get(t.student.id)))
         out.append(row)

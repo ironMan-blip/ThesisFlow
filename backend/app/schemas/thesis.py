@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from app.models.milestone import Phase
 from app.models.thesis import ThesisStatus
 from app.models.user import Role
-from app.schemas.proposal import ProposalVersionOut
+from app.schemas.proposal import ProposalVersionOut, TitleChangeOut
 
 
 class PersonOut(BaseModel):
@@ -41,7 +41,10 @@ class ThesisOut(BaseModel):
 
 class ThesisDetailOut(ThesisOut):
     versions: list[ProposalVersionOut]  # newest first
-    is_supervisor: bool = False  # the viewer is the supervisor (not the co-supervisor): decides deletes and deferral
+    title: str | None
+    abstract: str | None
+    title_change_request: TitleChangeOut | None = None  # a change waiting for the supervisor
+    is_supervisor: bool = False  # the viewer is the supervisor (not the co-supervisor): decides title changes and deferral
     can_defer: bool = False  # supervisor only: can set (P3 submitted this semester) or undo a pending deferral
 
 

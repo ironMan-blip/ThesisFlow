@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, download } from "../api/client";
 import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, Skeleton, ThesisBadge, VersionInfo } from "../components/ui";
-import { personName } from "../format";
+import { personName, when } from "../format";
 import { useAction } from "../useAction";
 
 const fullName = (p) => (p ? personName(p) : "Account deleted");
@@ -68,6 +68,17 @@ export default function ThesesPage() {
       : `${t.code ?? "The thesis"} will be completed at the end of the semester.`;
   });
 
+  const decideTitle = (t, approve) => run(`title-${t.id}`, async () => {
+    const url = `/proposals/title-changes/${t.title_change_request.id}`;
+    try {
+      await api(approve ? `${url}/approve` : url, { method: approve ? "POST" : "DELETE" });
+    } finally {
+      await load(); // an expired request shows its current state
+      refreshCounts();
+    }
+    return `${t.code ?? "The thesis"}: title change ${approve ? "approved" : "rejected"}.`;
+  });
+
   const get = (v) => download(v.download_path, v.original_filename).catch((err) => setError(err.message));
 
   return (
@@ -77,6 +88,7 @@ export default function ThesesPage() {
         intro="Supervision requests, and every thesis you supervise or co-supervise."
         help={[
           "Every proposal version is kept: nobody can delete one.",
+          "A group can change its title and abstract once, and only if you, the supervisor, accept within 3 days.",
           "After the P3 submission you can defer a thesis: once means P3 again next semester, twice freezes the student.",
         ]}
       />
@@ -114,6 +126,18 @@ export default function ThesesPage() {
                   {!t.co_supervisor ? "None" : t.co_supervisor_joined ? fullName(t.co_supervisor) : `${fullName(t.co_supervisor)} (not joined yet)`}
                 </dd></div>
               </dl>
+              {t.title && <p className="mt-3 text-sm"><span className="text-zinc-500">Title</span> <span className="font-medium">{t.title}</span></p>}
+              {t.title_change_request && (
+                <div className="mt-4 space-y-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-600/20 ring-inset">
+                  <p className="font-medium">The group asks to change the title to "{t.title_change_request.title}"</p>
+                  <p className="whitespace-pre-line break-words">New abstract: {t.title_change_request.abstract}</p>
+                  <p>{t.is_supervisor ? "Decide" : "The supervisor must decide"} by {when(t.title_change_request.expires_at)}. They can change it only once.</p>
+                  {t.is_supervisor && (
+                    <DecideButtons busy={busy === `title-${t.id}`} onReject={() => decideTitle(t, false)} onApprove={() => decideTitle(t, true)}
+                      approve="Approve change" />
+                  )}
+                </div>
+              )}
               {t.versions.length > 0 ? (
                 <ul className="mt-5 divide-y divide-zinc-100 border-t border-zinc-100">
                   {t.versions.map((v) => (

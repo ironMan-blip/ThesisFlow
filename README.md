@@ -51,6 +51,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Numbered versions (v1, v2, …), newest first, with download links.
 - Identical re-upload reuses the existing version instead of storing a copy.
 - Every past version is kept (SRS F11). Nobody can delete a version: not the student, the supervisor or the coordinator.
+- The first upload fixes the thesis title and abstract. A later upload with a different title or abstract is refused with "Wrong title" / "Wrong abstract". The group can change them **once**, by a request the supervisor must accept within **3 days**.
 - Group members and coordinator can view and download versions.
 - Uploads on one thesis are locked so version numbers never clash.
 
@@ -213,6 +214,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Only the student uploads. The group (the student, the supervisor, and the co-supervisor once joined) can view and download its versions; the coordinator can't.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
+- Title and abstract: set by the first upload and stored on the thesis; every later upload (any phase) must match them exactly. To change them the student sends a request (new title and abstract) from **Proposal**. Only the thesis's **supervisor** can accept or reject it on **Theses**, and only within 3 days; after that it expires. A rejected or expired request can be sent again; once one is accepted, no more changes. Waiting requests count in the supervisor's **Theses** badge.
 - Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions; re-uploading one unchanged still works at the cap.
 - Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
@@ -299,7 +301,7 @@ Then it deletes all phase deadlines, clears every group's P1 registration and ad
 
 ### Migrations
 
-`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes → co-supervisors added after a group forms → version deletes removed.
+`backend/alembic/versions/` holds the schema history, run in order on every backend start: users → proposals → milestones → user approval → proposal SHA-256 → deletion requests → ID numbers (8 digits) → faculty initials → grace days → theses and phases → restart approval → semesters → SRS milestone models (group milestones and deliverables) → random thesis IDs → session epoch → version delete requests → deletion reasons and the 7-day wait → wait starts at approval → supervisor and coordinator version deletes → co-supervisors added after a group forms → version deletes removed → thesis title and abstract with change requests.
 
 ## Project layout (MVC)
 
@@ -359,6 +361,8 @@ docs/           SRS, class diagram (draw.io source + exports), contribution trac
 | PUT | `/api/theses/{id}/defer` | the thesis's supervisor |
 | GET | `/api/proposals/mine` | student |
 | POST | `/api/proposals/mine/versions` | student |
+| POST | `/api/proposals/mine/title-change` (`{title, abstract}`) | student (own thesis) |
+| POST / DELETE | `/api/proposals/title-changes/{id}[/approve]` (approve or reject within 3 days) | the thesis's supervisor |
 | GET | `/api/proposals/versions/{id}/file` | student (own), the thesis's supervisor and joined co-supervisor |
 
 Full request/response shapes are at http://localhost:5174/docs.

@@ -57,13 +57,18 @@ export default function ProposalPage() {
               <span>You haven't submitted {proposal.phase} yet. Upload before {when(proposal.freeze_at)} or your account will be frozen.</span>
             </p>
           )}
+          {proposal?.title && (
+            <p className="text-sm text-zinc-500">Your first upload set the title and abstract. Every upload must use them exactly.</p>
+          )}
           <label className="label">
             Title
-            <input name="title" required maxLength={255} placeholder="Working title of your thesis" className="input" />
+            <input key={`t-${proposal?.title}`} name="title" required maxLength={255} defaultValue={proposal?.title ?? ""}
+              placeholder="Working title of your thesis" className="input" />
           </label>
           <label className="label">
             Abstract
-            <textarea name="abstract" required maxLength={proposal?.max_abstract_chars} rows={5} placeholder="A short summary of the problem and approach" className="input resize-y" />
+            <textarea key={`a-${proposal?.abstract}`} name="abstract" required maxLength={proposal?.max_abstract_chars} rows={5}
+              defaultValue={proposal?.abstract ?? ""} placeholder="A short summary of the problem and approach" className="input resize-y" />
           </label>
           <div>
             <span className="label">PDF file</span>
@@ -122,6 +127,65 @@ export default function ProposalPage() {
         </section>
       </div>
 
+      {proposal?.title && <TitleChange proposal={proposal} setProposal={setProposal} />}
+
     </div>
+  );
+}
+
+const CHANGE_BADGE = {
+  pending: ["Waiting for your supervisor", "bg-amber-50 text-amber-800 ring-amber-600/20"],
+  approved: ["Approved", "bg-teal-50 text-teal-800 ring-teal-600/20"],
+  rejected: ["Rejected by your supervisor", "bg-zinc-50 text-zinc-700 ring-zinc-200"],
+  expired: ["Expired: not accepted in time", "bg-zinc-50 text-zinc-700 ring-zinc-200"],
+};
+
+function TitleChange({ proposal, setProposal }) {
+  const { busy, error, notice, run } = useAction();
+  const change = proposal.title_change;
+  const submit = (e) => {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(e.currentTarget));
+    run("title", async () => {
+      setProposal(await api("/proposals/mine/title-change", { method: "POST", body }));
+      return `Change requested. Your supervisor has ${proposal.title_change_days} days to accept it.`;
+    });
+  };
+  const [label, tone] = change ? CHANGE_BADGE[change.status] : [];
+  return (
+    <section className="card space-y-5 p-6">
+      <div>
+        <h2 className="font-semibold">Change title or abstract</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          You can change them once. Your supervisor must accept the request within {proposal.title_change_days} days; then upload with the new title and abstract.
+        </p>
+      </div>
+      {change && (
+        <div className="space-y-1 rounded-lg bg-zinc-50 px-4 py-3 text-sm ring-1 ring-zinc-200/70 ring-inset">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">Your request: "{change.title}"</span>
+            <span className={`badge ${tone}`}>{label}</span>
+          </div>
+          {change.status === "pending" && <p className="text-zinc-500">Your supervisor must accept by {when(change.expires_at)}.</p>}
+          <p className="whitespace-pre-line break-words text-zinc-600">{change.abstract}</p>
+        </div>
+      )}
+      {proposal.can_request_title_change ? (
+        <form onSubmit={submit} className="space-y-4">
+          <label className="label">
+            New title
+            <input name="title" required maxLength={255} defaultValue={proposal.title} className="input" />
+          </label>
+          <label className="label">
+            New abstract
+            <textarea name="abstract" required maxLength={proposal.max_abstract_chars} rows={4} defaultValue={proposal.abstract} className="input resize-y" />
+          </label>
+          <button disabled={!!busy} className="btn-secondary">{busy ? "Sending…" : "Ask supervisor to change"}</button>
+        </form>
+      ) : change?.status === "approved" && (
+        <p className="text-sm text-zinc-500">You have used your one change.</p>
+      )}
+      <Alerts error={error} notice={notice} />
+    </section>
   );
 }

@@ -1,7 +1,8 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from typing import Literal
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, false, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -47,11 +48,17 @@ class Thesis(Base):
     # Registered for P1 this semester (only possible in the first week); cleared at every semester rollover.
     p1_registered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Set by the first proposal upload; every later upload must use them. Changed only by an approved TitleChange.
+    title: Mapped[str | None] = mapped_column(String(255))
+    abstract: Mapped[str | None] = mapped_column(Text)
 
     student = relationship("User", foreign_keys=[student_id])
     supervisor = relationship("User", foreign_keys=[supervisor_id])
     co_supervisor = relationship("User", foreign_keys=[co_supervisor_id])
     proposal = relationship("Proposal", back_populates="thesis", uselist=False)
+    title_changes = relationship(
+        "TitleChange", back_populates="thesis", order_by="TitleChange.id.desc()", passive_deletes=True
+    )
 
     @property
     def co_supervisor_joined(self) -> bool:
@@ -64,3 +71,36 @@ class Thesis(Base):
     def versions(self) -> list:
         # Newest first; empty until the group's first upload makes its proposal.
         return self.proposal.versions if self.proposal else []
+
+
+# The supervisor has this long to accept a title and abstract change; after that the request lapses.
+TITLE_CHANGE_WINDOW = timedelta(days=3)
+
+
+class TitleChange(Base):
+    """A group's request to change its thesis title and abstract. Only one can ever be approved per thesis."""
+
+    __tablename__ = "title_changes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    thesis_id: Mapped[int] = mapped_column(ForeignKey("theses.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    abstract: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+    # Set when the supervisor approves or rejects it; None while it waits (or after it lapsed).
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+
+    thesis = relationship("Thesis", back_populates="title_changes")
+
+    @property
+    def expires_at(self) -> datetime:
+        return self.created_at + TITLE_CHANGE_WINDOW
+
+    @property
+    def status(self) -> Literal["pending", "approved", "rejected", "expired"]:
+        if self.decided_at is not None:
+            return "approved" if self.approved else "rejected"
+        return "pending" if datetime.now(timezone.utc) < self.expires_at else "expired"

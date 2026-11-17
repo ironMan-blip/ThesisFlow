@@ -21,12 +21,12 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     assert (empty["versions"], empty["phase"], empty["upload_block"]) == ([], "P1", None)
     assert re.fullmatch(r"T\d{8}", empty["thesis_code"])
 
-    assert upload(client, h, title="v1").status_code == 201
-    res = upload(client, h, content=PDF + b"v2", title="v2", name="p2.pdf")
+    assert upload(client, h).status_code == 201
+    res = upload(client, h, content=PDF + b"v2", name="p2.pdf")
     assert res.status_code == 201
     versions = res.json()["versions"]
     assert [v["version_no"] for v in versions] == [2, 1]
-    assert [v["title"] for v in versions] == ["v2", "v1"]
+    assert [v["original_filename"] for v in versions] == ["p2.pdf", "p.pdf"]
     assert [v["is_latest"] for v in versions] == [True, False]
     assert versions[0]["phase"] == "P1"
     assert versions[0]["size_label"].endswith(" KB")
@@ -109,38 +109,92 @@ def test_only_students_upload(client, db):
 def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
     h = student(client, db, "s@x.com")
     for t in ("a", "b", "c"):
-        upload(client, h, content=PDF + t.encode(), title=t)
+        upload(client, h, content=PDF + t.encode(), name=f"{t}.pdf")
     a_id = client.get("/api/proposals/mine", headers=h).json()["versions"][2]["id"]
 
-    res = upload(client, h, content=PDF + b"a", title="a")
+    res = upload(client, h, content=PDF + b"a", name="a.pdf")
     assert res.status_code == 201
     versions = res.json()["versions"]
-    assert [(v["title"], v["version_no"]) for v in versions] == [("a", 3), ("c", 2), ("b", 1)]
+    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
     assert (versions[0]["id"], versions[0]["is_latest"]) == (a_id, True)
     assert len(list((tmp_path / "proposals").iterdir())) == 3
     assert client.get(f"/api/proposals/versions/{a_id}/file", headers=h).content == PDF + b"a"
 
     # Re-submitting the current latest keeps the order.
-    versions = upload(client, h, content=PDF + b"a", title="a").json()["versions"]
-    assert [(v["title"], v["version_no"]) for v in versions] == [("a", 3), ("c", 2), ("b", 1)]
+    versions = upload(client, h, content=PDF + b"a", name="a.pdf").json()["versions"]
+    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
 
 
-def test_same_pdf_with_new_title_or_abstract_is_a_new_version(client, db):
-    h = student(client, db, "s@x.com")
-    upload(client, h, title="a")
-    upload(client, h, title="a renamed")
-    res = client.post(
-        "/api/proposals/mine/versions",
-        headers=h,
-        data={"title": "a renamed", "abstract": "New abstract"},
-        files={"file": ("p.pdf", PDF, "application/pdf")},
+def _upload_as(client, h, title, abstract="About it", content=PDF):
+    return client.post(
+        "/api/proposals/mine/versions", headers=h, data={"title": title, "abstract": abstract},
+        files={"file": ("p.pdf", content, "application/pdf")},
     )
-    versions = res.json()["versions"]
-    assert [(v["title"], v["abstract"], v["version_no"]) for v in versions] == [
-        ("a renamed", "New abstract", 3),
-        ("a renamed", "About it", 2),
-        ("a", "About it", 1),
-    ]
+
+
+def test_the_first_upload_fixes_the_title_and_abstract(client, db):
+    h = student(client, db, "s@x.com")
+    assert _upload_as(client, h, "  a  ").status_code == 201  # stored stripped
+    mine = client.get("/api/proposals/mine", headers=h).json()
+    assert (mine["title"], mine["abstract"]) == ("a", "About it")
+
+    r = _upload_as(client, h, "a renamed", content=PDF + b"2")
+    assert r.status_code == 422 and r.json()["detail"].startswith("Wrong title:")
+    r = _upload_as(client, h, "a", "New abstract", content=PDF + b"2")
+    assert r.status_code == 422 and r.json()["detail"].startswith("Wrong abstract:")
+    r = _upload_as(client, h, "b", "New abstract", content=PDF + b"2")
+    assert r.status_code == 422 and r.json()["detail"].startswith("Wrong title and abstract:")
+    assert len(_upload_as(client, h, "a", content=PDF + b"2").json()["versions"]) == 2
+
+
+def _ask_title(client, h, title, abstract="New abstract"):
+    return client.post("/api/proposals/mine/title-change", headers=h, json={"title": title, "abstract": abstract})
+
+
+def test_one_title_change_needs_the_supervisors_ok_within_3_days(client, db):
+    from app.models.thesis import TitleChange
+    h, sup = supervised_student(client, db, "s@x.com")
+    other = auth(client, db, "f@x.com", Role.faculty)
+    r = _ask_title(client, h, "b")
+    assert r.status_code == 409 and "first version" in r.json()["detail"]
+    _upload_as(client, h, "a")
+    assert client.get("/api/proposals/mine", headers=h).json()["can_request_title_change"] is True
+    assert _ask_title(client, h, "a", "About it").status_code == 422  # nothing would change
+
+    res = _ask_title(client, h, "b")
+    assert res.status_code == 201
+    body = res.json()
+    change = body["title_change"]
+    assert (change["title"], change["status"], body["can_request_title_change"], body["title"]) == ("b", "pending", False, "a")
+    assert _ask_title(client, h, "c").status_code == 409  # one request at a time
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 1}
+    assert client.get("/api/theses", headers=sup).json()[0]["title_change_request"]["id"] == change["id"]
+
+    url = f"/api/proposals/title-changes/{change['id']}"
+    assert client.post(f"{url}/approve", headers=h).status_code == 403
+    assert client.post(f"{url}/approve", headers=other).status_code == 404
+    assert client.delete(url, headers=sup).status_code == 204  # rejected: the change isn't used up
+    body = client.get("/api/proposals/mine", headers=h).json()
+    assert (body["title_change"]["status"], body["can_request_title_change"]) == ("rejected", True)
+    assert client.delete(url, headers=sup).status_code == 409
+
+    # Not accepted within 3 days: it lapses, and the group can ask again.
+    change = _ask_title(client, h, "b").json()["title_change"]
+    db.get(TitleChange, change["id"]).created_at -= timedelta(days=3)
+    db.flush()
+    assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 0}
+    r = client.post(f"/api/proposals/title-changes/{change['id']}/approve", headers=sup)
+    assert r.status_code == 409 and "expired" in r.json()["detail"]
+    assert client.get("/api/proposals/mine", headers=h).json()["title_change"]["status"] == "expired"
+
+    change = _ask_title(client, h, "b").json()["title_change"]
+    assert client.post(f"/api/proposals/title-changes/{change['id']}/approve", headers=sup).status_code == 204
+    body = client.get("/api/proposals/mine", headers=h).json()
+    assert (body["title"], body["abstract"], body["can_request_title_change"]) == ("b", "New abstract", False)
+    assert _upload_as(client, h, "a", content=PDF + b"2").status_code == 422  # the old title is gone
+    assert _upload_as(client, h, "b", "New abstract", content=PDF + b"2").status_code == 201
+    r = _ask_title(client, h, "c")
+    assert r.status_code == 409 and "already used" in r.json()["detail"]
 
 
 def test_upload_needs_the_phase_timeline(client, db):
@@ -210,12 +264,12 @@ def test_only_real_pdfs_without_active_content_are_stored(client, db, tmp_path):
 def test_uploads_per_phase_are_capped(client, db, monkeypatch):
     monkeypatch.setattr(proposal_service, "MAX_VERSIONS_PER_PHASE", 2)
     h = student(client, db, "cap@b.com")
-    assert upload(client, h, title="one").status_code == 201
-    assert upload(client, h, title="two").status_code == 201
-    r = upload(client, h, title="three")
+    assert upload(client, h, content=PDF + b"1").status_code == 201
+    assert upload(client, h, content=PDF + b"2").status_code == 201
+    r = upload(client, h, content=PDF + b"3")
     assert r.status_code == 409 and "2 versions" in r.json()["detail"]
     # Re-sending a stored version adds nothing, so it still works at the cap.
-    assert upload(client, h, title="one").status_code == 201
+    assert upload(client, h, content=PDF + b"1").status_code == 201
 
 
 def test_infected_uploads_are_refused_and_uploads_pause_without_a_scanner(client, db, tmp_path, monkeypatch):

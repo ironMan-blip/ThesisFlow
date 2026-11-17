@@ -146,8 +146,8 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
     now = datetime.now(timezone.utc)
     set_past(db, "P1", now - timedelta(hours=1), grace=1, penalty=10)  # in grace
 
-    v1 = upload(client, s, title="v1").json()["versions"][0]
-    v2 = upload(client, s, content=PDF + b"2", title="v2").json()["versions"][0]
+    v1 = upload(client, s).json()["versions"][0]
+    v2 = upload(client, s, content=PDF + b"2").json()["versions"][0]
     thesis_id = db.get(User, me(client, s)["id"]).thesis_id
     gm = db.scalar(select(GroupMilestone).filter_by(thesis_id=thesis_id))
     assert gm.phase == Phase.P1 and gm.extended_due_at is None
@@ -159,7 +159,7 @@ def test_each_group_gets_its_own_milestone_and_extension(client, db):
 
     # Re-submitting v1 unchanged makes it the deliverable again, with a new submit time.
     before = gm.submitted_at
-    upload(client, s, title="v1")
+    upload(client, s)
     db.refresh(gm)
     assert gm.deliverable.proposal_version_id == v1["id"] and gm.submitted_at > before
 

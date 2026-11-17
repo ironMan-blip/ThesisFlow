@@ -448,8 +448,8 @@ def test_faculty_pages_use_the_same_queries_for_any_number_of_theses(client, db,
             h = auth(client, db, f"s{next(_ids)}@x.com")
             form_group(client, db, h, sup)
             assert client.post("/api/theses/mine/register", headers=h).status_code == 200
-            upload(client, h, content=PDF + b"a", title="a")
-            upload(client, h, content=PDF + b"b", title="b")
+            upload(client, h, content=PDF + b"a")
+            upload(client, h, content=PDF + b"b")
 
     def cost():
         out = []
