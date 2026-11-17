@@ -97,9 +97,17 @@ class TimelineOut(BaseModel):
     semester_id: int | None = None  # whose deadlines are shown (a student's own phase row is their group's semester)
     can_edit: bool  # coordinator only
     semesters: list[SemesterTagOut] = []  # coordinator only, newest (current) first: the tags a deadline can take
+    current_semester_id: int | None = None
     registration_opens_at: datetime | None  # this semester's P1 registration window
     registration_closes_at: datetime | None
     registration_open: bool
+
+    # The dashboard's "up next": the student's own running phase, else the countdown that ends soonest.
+    @computed_field
+    @property
+    def next_deadline(self) -> MilestoneOut | None:
+        running = [m for m in self.milestones if m.countdown_to]
+        return next((m for m in running if m.mine), None) or min(running, key=lambda m: m.countdown_to, default=None)
 
     @computed_field
     @property

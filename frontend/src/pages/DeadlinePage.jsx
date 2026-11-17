@@ -7,6 +7,7 @@ import { useAction } from "../useAction";
 // status -> [label, badge tone, timeline dot]
 const STATUS = {
   not_set: ["Not set", "bg-zinc-50 text-zinc-600 ring-zinc-200", "bg-zinc-300"],
+  upcoming: ["Not open yet", "bg-zinc-50 text-zinc-600 ring-zinc-200", "bg-zinc-300"], // P1 registration only
   open: ["Open", "bg-teal-50 text-teal-800 ring-teal-600/20", "bg-teal-600"],
   grace: ["Grace time", "bg-amber-50 text-amber-800 ring-amber-600/20", "bg-amber-500"],
   closed: ["Closed", "bg-zinc-100 text-zinc-700 ring-zinc-300", "bg-zinc-400"],
@@ -123,10 +124,7 @@ export default function DeadlinePage() {
         <section className="card p-6">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold">P1 registration</h2>
-            {(() => {
-              const [label, tone] = data.registration_status === "upcoming" ? ["Not open yet", STATUS.not_set[1]] : STATUS[data.registration_status];
-              return <span className={`badge ${tone}`}>{label}</span>;
-            })()}
+            <span className={`badge ${STATUS[data.registration_status][1]}`}>{STATUS[data.registration_status][0]}</span>
           </div>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <div><dt className="text-zinc-500">Opens</dt><dd className="font-medium">{data.registration_opens_at ? when(data.registration_opens_at) : "Not set"}</dd></div>
@@ -160,7 +158,7 @@ export default function DeadlinePage() {
           <label className="label">
             Deadlines for
             <select value={data.semester_id ?? ""} onChange={(e) => setSemesterId(Number(e.target.value))} className="input">
-              {data.semesters.map((s, i) => <option key={s.id} value={s.id}>{s.name}{i === 0 ? " (current)" : ""}</option>)}
+              {data.semesters.map((s) => <option key={s.id} value={s.id}>{s.name}{s.id === data.current_semester_id ? " (current)" : ""}</option>)}
             </select>
           </label>
         </section>

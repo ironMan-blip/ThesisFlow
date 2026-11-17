@@ -32,11 +32,7 @@ function UpNext({ user, counts }) {
   useEffect(() => {
     if (!hasDeadlines) return;
     api("/milestones")
-      .then((d) => {
-        const due = d.milestones.filter((m) => m.countdown_to);
-        // The user's own phase first; else the deadline the server counts down to soonest.
-        setNext(due.find((m) => m.mine) ?? due.sort((a, b) => new Date(a.countdown_to) - new Date(b.countdown_to))[0] ?? null);
-      })
+      .then((d) => setNext(d.next_deadline))
       .catch(() => setNext(null)); // the panel is a shortcut; the Deadlines page shows any error
   }, [hasDeadlines]);
 

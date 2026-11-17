@@ -188,8 +188,8 @@ function TitleChange({ proposal, setProposal }) {
           </label>
           <button disabled={!!busy} className="btn-secondary">{busy ? "Sending…" : "Ask supervisor to change"}</button>
         </form>
-      ) : change?.status === "approved" && (
-        <p className="text-sm text-zinc-500">You have used your one change.</p>
+      ) : proposal.title_change_block && (
+        <p className="text-sm text-zinc-500">{proposal.title_change_block}.</p>
       )}
       <Alerts error={error} notice={notice} />
     </section>

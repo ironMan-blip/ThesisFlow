@@ -62,7 +62,8 @@ def _row(m: MilestoneTemplate | None, phase: Phase, now: datetime, mine: progres
 def timeline(db: Session, user: User, semester_id: int | None = None) -> TimelineOut:
     """semester_id: whose deadlines to show, for the coordinator (default: the current semester's)."""
     now = datetime.now(timezone.utc)
-    shown = (user.role == Role.coordinator and semester_id) or progress_service.current_semester_id(db)
+    current = progress_service.current_semester_id(db)
+    shown = (user.role == Role.coordinator and semester_id) or current
     templates = {m.phase: m for m in db.scalars(select(MilestoneTemplate).where(MilestoneTemplate.semester_id == shown))}
     # A student only has a submission for the phase they are in, held to their own group's deadline semester.
     mine = progress_service.standing(db, user, now) if user.role == Role.student and user.phase else None
@@ -74,6 +75,7 @@ def timeline(db: Session, user: User, semester_id: int | None = None) -> Timelin
             for p in Phase
         ],
         semester_id=shown,
+        current_semester_id=current,
         can_edit=user.role == Role.coordinator,
         semesters=list(db.scalars(select(Semester).order_by(Semester.id.desc()))) if user.role == Role.coordinator else [],
         registration_opens_at=opens,

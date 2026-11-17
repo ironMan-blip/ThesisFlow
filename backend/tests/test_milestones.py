@@ -134,6 +134,12 @@ def test_student_late_days_and_penalty(client, db):
     assert (rows["P1"]["countdown_to"], rows["P1"]["submission_status"]) == (rows["P1"]["closes_at"], "late")
     assert (rows["P2"]["status"], rows["P2"]["late_days"], rows["P2"]["submission_status"]) == ("open", None, None)
     assert (rows["P2"]["countdown_to"], rows["P2"]["countdown_label"]) == (rows["P2"]["due_at"], "Due in")
+    # Dashboard "up next": the student's own phase wins; staff get the countdown that ends soonest.
+    assert client.get("/api/milestones", headers=s).json()["next_deadline"]["phase"] == "P1"
+    put(client, coord, "P3", now + timedelta(days=2))
+    timeline = client.get("/api/milestones", headers=coord).json()
+    assert timeline["next_deadline"]["phase"] == "P1"  # P1 grace ends in ~1 day, before P3 and P2
+    assert timeline["current_semester_id"] == timeline["semesters"][0]["id"]
 
     assert upload(client, s).status_code == 201  # late upload in grace is accepted
     rows = by_phase(client.get("/api/milestones", headers=s))

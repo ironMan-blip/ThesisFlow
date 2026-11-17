@@ -81,6 +81,7 @@ def get_mine(db: Session, user: User) -> ProposalOut:
     block, s = _upload_block(db, user)
     thesis = user.thesis
     latest = thesis.title_changes[0] if thesis and thesis.title_changes else None
+    title_block = _title_change_block(db, thesis) if thesis else None
     return ProposalOut(
         versions=thesis.versions if thesis else [],
         thesis_code=thesis and thesis.code,
@@ -90,7 +91,8 @@ def get_mine(db: Session, user: User) -> ProposalOut:
         title=thesis and thesis.title,
         abstract=thesis and thesis.abstract,
         title_change=latest and TitleChangeOut.model_validate(latest),
-        can_request_title_change=thesis is not None and _title_change_block(db, thesis) is None,
+        can_request_title_change=thesis is not None and title_block is None,
+        title_change_block=title_block,
     )
 
 
