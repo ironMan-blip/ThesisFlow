@@ -103,11 +103,11 @@ def main():
         if progress_service.current_semester_id(db) is None:
             db.add(Semester(started_at=now - timedelta(days=2)))  # P1 registration still open
             db.flush()
-        # Each group works on one phase per semester, so every phase is due at semester end (~4 months in).
-        semester_end = db.get(Semester, progress_service.current_semester_id(db)).started_at + timedelta(weeks=16)
+        # A semester is ~16 weeks; every phase is due in the 2nd week of the next one, after its P1 registration week.
+        due = db.get(Semester, progress_service.current_semester_id(db)).started_at + timedelta(weeks=17, days=3)
         for phase in (Phase.P1, Phase.P2, Phase.P3):
             if db.get(MilestoneTemplate, phase) is None:
-                db.add(MilestoneTemplate(phase=phase, due_at=semester_end, grace_days=3, penalty_per_day=5))
+                db.add(MilestoneTemplate(phase=phase, due_at=due, grace_days=3, penalty_per_day=5))
 
         fac = {ini: user(name, Role.faculty, email, idn, initials=ini) for email, idn, name, ini in FACULTY}
 
