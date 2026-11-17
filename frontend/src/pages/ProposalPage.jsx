@@ -34,7 +34,7 @@ export default function ProposalPage() {
     <div className="space-y-8">
       <PageHeader title="Proposal" intro="Upload a new version of your proposal and see everything you have handed in." help={[
         "Each upload is saved as a new version of your current phase, under your thesis ID. Every version is kept.",
-        "Your latest upload when the phase closes is your final submission. Versions can't be deleted.",
+        "Your latest upload is your submission. If it was on time, it is final once the due date passes; otherwise you can still upload during grace. Versions can't be deleted.",
       ]} />
 
       <div className="grid items-start gap-6 lg:grid-cols-5">

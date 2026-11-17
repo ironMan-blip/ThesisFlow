@@ -119,23 +119,21 @@ def test_only_students_upload(client, db):
     assert upload(client, faculty).status_code == 403
 
 
-def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
+def test_resubmitting_identical_upload_is_a_new_version(client, db, tmp_path):
     h = student(client, db, "s@x.com")
-    for t in ("a", "b", "c"):
+    for t in ("a", "b"):
         upload(client, h, content=_tagged(t), name=f"{t}.pdf")
-    a_id = client.get("/api/proposals/mine", headers=h).json()["versions"][2]["id"]
+    a = client.get("/api/proposals/mine", headers=h).json()["versions"][1]
 
     res = upload(client, h, content=_tagged("a"), name="a.pdf")
     assert res.status_code == 201
     versions = res.json()["versions"]
-    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
-    assert (versions[0]["id"], versions[0]["is_latest"]) == (a_id, True)
+    # Every upload is kept as its own version, with its own upload time; the older ones are untouched.
+    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("b.pdf", 2), ("a.pdf", 1)]
+    assert versions[0]["is_latest"] and versions[0]["id"] != a["id"]
+    assert (versions[2]["id"], versions[2]["created_at"]) == (a["id"], a["created_at"])
     assert len(list((tmp_path / "proposals").iterdir())) == 3
-    assert _tag(client.get(f"/api/proposals/versions/{a_id}/file", headers=h).content) == "a"
-
-    # Re-submitting the current latest keeps the order.
-    versions = upload(client, h, content=_tagged("a"), name="a.pdf").json()["versions"]
-    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
+    assert _tag(client.get(f"/api/proposals/versions/{versions[0]['id']}/file", headers=h).content) == "a"
 
 
 def _upload_as(client, h, title, abstract="About it", content=PDF):
@@ -338,8 +336,8 @@ def test_uploads_per_phase_are_capped(client, db, monkeypatch):
     assert upload(client, h, content=PDF + b"2").status_code == 201
     r = upload(client, h, content=PDF + b"3")
     assert r.status_code == 409 and "2 versions" in r.json()["detail"]
-    # Re-sending a stored version adds nothing, so it still works at the cap.
-    assert upload(client, h, content=PDF + b"1").status_code == 201
+    # Re-sending a stored file is a new version too, so the cap holds it back.
+    assert upload(client, h, content=PDF + b"1").status_code == 409
 
 
 def test_infected_uploads_are_refused_and_uploads_pause_without_a_scanner(client, db, tmp_path, monkeypatch):

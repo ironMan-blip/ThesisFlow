@@ -22,7 +22,6 @@ class SemesterCreateIn(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     registration_opens_local: str | None = None
     registration_closes_local: str | None = None
-    rollover: bool = False
     form_group_open: bool = True
     pick_supervisor_open: bool = True
     p1_open: bool = True

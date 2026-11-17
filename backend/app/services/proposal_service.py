@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.orm import Session
 
@@ -62,8 +62,12 @@ def _upload_block(
         return "Your group isn't registered for P1, and P1 registration is closed, so wait for next semester", s
     if s.template is None:
         return f"The {user.phase.value} timeline is not set yet", s
-    if datetime.now(timezone.utc) > s.closes_at:
+    now = datetime.now(timezone.utc)
+    if now > s.closes_at:
         return f"The {user.phase.value} deadline and grace period have passed", s
+    if s.submitted_at is not None and s.submitted_at <= s.due_at < now:
+        # Grace is for groups that are late; a new upload now would turn an on-time submission late.
+        return f"You submitted {user.phase.value} on time, so it is final now that the due date has passed", s
     return None, s
 
 
@@ -237,20 +241,8 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     except BaseException:
         path.unlink(missing_ok=True)
         raise
-    # sha256 stays the upload's, so re-uploading the same file is still recognised; size is what is stored.
+    # sha256 is the upload's (as sent); size is what is stored.
     return stored, path.stat().st_size, digest.hexdigest()
-
-
-def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
-    # Later versions move down by one. Two steps through negatives because
-    # Postgres checks the (proposal_id, version_no) unique constraint row by row.
-    later = (ProposalVersion.proposal_id == proposal_id) & (ProposalVersion.version_no > removed_no)
-    db.execute(update(ProposalVersion).where(later).values(version_no=1 - ProposalVersion.version_no))
-    db.execute(
-        update(ProposalVersion)
-        .where(ProposalVersion.proposal_id == proposal_id, ProposalVersion.version_no < 0)
-        .values(version_no=-ProposalVersion.version_no)
-    )
 
 
 def upload_version(db: Session, user: User, title: str, abstract: str, file: UploadFile) -> ProposalOut:
@@ -279,53 +271,26 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         gm = progress_service.group_milestone(db, user, create=True)
         last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.proposal_id == proposal.id))
         name = Path(file.filename or "").name[:255]
-        fields = dict(
+        # Every upload is a new version (SRS F11), even an identical file. Counted under the thesis lock,
+        # so parallel uploads can't both slip under the cap.
+        if db.scalar(select(func.count()).where(progress_service.phase_uploads(user))) >= MAX_VERSIONS_PER_PHASE:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"You've uploaded {MAX_VERSIONS_PER_PHASE} versions this phase, the most allowed",
+            )
+        db.add(ProposalVersion(
+            proposal_id=proposal.id,
+            version_no=(last or 0) + 1,
             phase=user.phase,
+            title=title,
+            abstract=abstract,
             # "..", "." or only dots and spaces is no file name: fall back to a plain one.
             original_filename=name if name.strip(". ") else "proposal.pdf",
+            stored_filename=stored,
+            size_bytes=size,
+            sha256=sha256,
             uploaded_by_id=user.id,
-        )
-        # Same PDF with a different title or abstract is a real new version. Only this phase's uploads are
-        # reused, so a final submission from an earlier phase or semester is never rewritten.
-        same = db.scalar(
-            select(ProposalVersion).where(
-                progress_service.phase_uploads(user),
-                ProposalVersion.sha256 == sha256,
-                ProposalVersion.title == title,
-                ProposalVersion.abstract == abstract,
-            )
-        )
-        if same is None:
-            # Counted under the thesis lock, so parallel uploads can't both slip under the cap.
-            if db.scalar(select(func.count()).where(progress_service.phase_uploads(user))) >= MAX_VERSIONS_PER_PHASE:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    f"You've uploaded {MAX_VERSIONS_PER_PHASE} versions this phase, the most allowed. "
-                    "Re-upload one of them unchanged to make it the latest again",
-                )
-            version = ProposalVersion(
-                proposal_id=proposal.id,
-                version_no=(last or 0) + 1,
-                title=title,
-                abstract=abstract,
-                stored_filename=stored,
-                size_bytes=size,
-                sha256=sha256,
-                **fields,
-            )
-            db.add(version)
-        else:
-            # Identical submission already stored: reuse its file and move that version to the top.
-            keep_new_file = False
-            moved_from = same.version_no
-            same.version_no = 0
-            db.flush()
-            _close_gap(db, proposal.id, moved_from)
-            db.execute(
-                update(ProposalVersion)
-                .where(ProposalVersion.id == same.id)
-                .values(version_no=last, created_at=datetime.now(timezone.utc), **fields)
-            )
+        ))
         progress_service.sync_deliverable(db, gm, user)
         db.commit()
     except BaseException as exc:

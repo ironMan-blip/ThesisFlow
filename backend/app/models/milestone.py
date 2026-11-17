@@ -14,7 +14,7 @@ class Phase(str, enum.Enum):
 
 
 class MilestoneTemplate(Base):
-    """Deadline for one thesis phase this semester, set by the coordinator. One row per phase."""
+    """Deadline for one thesis phase, set by the coordinator by hand. One row per phase."""
 
     __tablename__ = "milestone_templates"
 
@@ -22,6 +22,10 @@ class MilestoneTemplate(Base):
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     grace_days: Mapped[int] = mapped_column(Integer)
     penalty_per_day: Mapped[int] = mapped_column(Integer)  # percent of the phase mark
+    # Which semester this deadline is for: a tag the coordinator picks. Deadlines are independent of the semester
+    # rollover, which neither waits for nor clears them (a semester's deadlines fall in week 2 of the next one).
+    semester_id: Mapped[int | None] = mapped_column(ForeignKey("semesters.id", ondelete="SET NULL"))
+    semester = relationship("Semester")
 
     @property
     def closes_at(self) -> datetime:

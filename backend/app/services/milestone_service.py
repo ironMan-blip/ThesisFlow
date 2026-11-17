@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.milestone import MilestoneTemplate, Phase
+from app.models.semester import Semester
 from app.models.user import Role, User
 from app.schemas.milestone import MilestoneIn, MilestoneOut, RegistrationIn, TimelineOut
 from app.services import progress_service
@@ -32,6 +33,8 @@ def _row(m: MilestoneTemplate | None, phase: Phase, now: datetime, mine: progres
         due_at=due_at,
         grace_days=m.grace_days,
         penalty_per_day=m.penalty_per_day,
+        semester_id=m.semester_id,
+        semester_name=m.semester and m.semester.name,
         closes_at=closes_at,
         status=status,
         mine=is_mine,
@@ -66,6 +69,7 @@ def timeline(db: Session, user: User) -> TimelineOut:
         now=now,
         milestones=[_row(templates.get(p), p, now, mine if p == user.phase else None, user) for p in Phase],
         can_edit=user.role == Role.coordinator,
+        semesters=list(db.scalars(select(Semester).order_by(Semester.id.desc()))) if user.role == Role.coordinator else [],
         registration_opens_at=opens,
         registration_closes_at=closes,
         registration_open=opens is not None and opens <= now <= closes,
@@ -77,10 +81,10 @@ def set_registration(db: Session, data: RegistrationIn) -> None:
     if data.closes_at <= data.opens_at:
         raise HTTPException(422, "P1 registration must close after it opens")
     p1 = db.get(MilestoneTemplate, Phase.P1)
-    if p1 and p1.due_at <= data.closes_at:
+    semester = progress_service.ensure_semester(db)
+    if p1 and p1.semester_id == semester.id and p1.due_at <= data.closes_at:
         # Same rule as set_milestone, from the other side.
         raise HTTPException(422, "P1 registration must close before P1 is due")
-    semester = progress_service.ensure_semester(db)
     semester.registration_opens_at, semester.registration_closes_at = data.opens_at, data.closes_at
     db.commit()
 
@@ -100,9 +104,15 @@ def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
         # A new due date in the past makes everyone late at once. Keeping a passed due date (to change grace or
         # penalty during grace) is fine.
         raise HTTPException(422, "The due date must be in the future")
-    registration_closes = progress_service.registration_closes_at(db)
-    if phase == Phase.P1 and registration_closes and due_at <= registration_closes:
+    semester = db.get(Semester, data.semester_id)
+    if semester is None:
+        raise HTTPException(422, "Pick the semester this deadline is for")
+    registration_closes = progress_service.semester_registration_window(semester)[1]
+    if phase == Phase.P1 and due_at <= registration_closes:
         # Groups can still register until then, so an earlier P1 deadline would catch them mid-registration.
-        raise HTTPException(422, "P1 can't be due before P1 registration closes")
-    db.merge(MilestoneTemplate(phase=phase, due_at=due_at, grace_days=data.grace_days, penalty_per_day=data.penalty_per_day))
+        raise HTTPException(422, f"P1 can't be due before {semester.name}'s P1 registration closes")
+    db.merge(MilestoneTemplate(
+        phase=phase, due_at=due_at, grace_days=data.grace_days, penalty_per_day=data.penalty_per_day,
+        semester_id=semester.id,
+    ))
     db.commit()

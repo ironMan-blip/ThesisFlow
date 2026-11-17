@@ -6,7 +6,8 @@
 - Grace ends with no upload: the group is frozen, and its members can ask the coordinator to restart at P1.
   An approved restart starts that student fresh (no group, no thesis) at the next semester rollover.
 - After P3 the supervisor may defer the thesis: once means P3 again next semester, twice cancels the thesis.
-- The semester rollover (semester feature) calls advance_phases to move every group on, then clears the deadlines.
+- The semester rollover (semester feature) calls advance_phases to move every group on. Deadlines are set by hand
+  and only tagged with their semester: the rollover keeps them, since a semester's deadlines fall in the next one.
 """
 
 import secrets
@@ -44,7 +45,7 @@ class Standing:
 
     @property
     def submitted_at(self) -> datetime | None:
-        # Latest upload that counts for their phase; a late re-upload is late.
+        # Latest upload that counts for their phase. After an on-time upload, uploads close at the due date.
         return self.group_milestone and self.group_milestone.submitted_at
 
     @property
@@ -82,8 +83,10 @@ def ensure_semester(db: Session) -> Semester:
 def registration_window(db: Session) -> tuple[datetime, datetime] | None:
     """(opens, closes) of this semester's P1 registration: the coordinator's dates, else one week from its start."""
     s = current_semester(db)
-    if s is None:
-        return None
+    return s and semester_registration_window(s)
+
+
+def semester_registration_window(s: Semester) -> tuple[datetime, datetime]:
     if s.registration_opens_at and s.registration_closes_at:
         return s.registration_opens_at, s.registration_closes_at
     return s.started_at, s.started_at + REGISTRATION_WINDOW
@@ -145,7 +148,6 @@ def sync_deliverable(db: Session, gm: GroupMilestone, user: User) -> None:
         .where(phase_uploads(user))
         .order_by(ProposalVersion.created_at.desc())
         .limit(1)
-        .execution_options(populate_existing=True)  # a re-submit bumps created_at with a bulk UPDATE
     )
     db.execute(delete(Deliverable).where(Deliverable.group_milestone_id == gm.id))
     if latest is not None:
@@ -229,7 +231,8 @@ def _withdraw_co_supervisor(thesis: Thesis | None) -> None:
 
 
 def next_semester(db: Session) -> dict[str, int]:
-    """Coordinator: end the semester. Moves students on, applies P3 deferrals, saves freezes and clears the deadlines."""
+    """Coordinator: end the semester. Moves students on, applies P3 deferrals and saves freezes. Deadlines are
+    independent of semesters: they are kept, and a group still working to an open deadline carries on with it."""
     now = _now()
     templates = {t.phase: t for t in db.scalars(select(MilestoneTemplate).with_for_update())}
     extended = db.scalars(
@@ -237,13 +240,13 @@ def next_semester(db: Session) -> dict[str, int]:
             GroupMilestone.semester_id == current_semester_id(db), GroupMilestone.extended_due_at.is_not(None)
         )
     )
-    still_open = {t.phase.value for t in templates.values() if now <= t.closes_at}
-    # A group with an extension can still upload after the phase's own grace ends.
-    still_open |= {g.phase.value for g in extended if g.phase in templates and now <= Standing(templates[g.phase], g).closes_at}
+    # shortcut: an extension lives on this semester's group milestone and isn't carried over, so wait for it;
+    # carry extended_due_at to the new semester's milestone if extensions often outlast a semester.
+    still_open = {g.phase.value for g in extended if g.phase in templates and now <= Standing(templates[g.phase], g).closes_at}
     if still_open:
-        # Moving on now would cut off students who can still upload.
         raise HTTPException(
-            status.HTTP_409_CONFLICT, f"{', '.join(sorted(still_open))} is still open, wait until its grace period ends"
+            status.HTTP_409_CONFLICT,
+            f"A deadline extension for {', '.join(sorted(still_open))} is still running, wait until it ends",
         )
     restarted = 0
     for user in _students(db):
@@ -251,8 +254,13 @@ def next_semester(db: Session) -> dict[str, int]:
             _restart(db, user, now)
             restarted += 1
     result = {**advance_phases(db, now), "restarted": restarted}
-    db.execute(delete(MilestoneTemplate))
-    db.execute(update(Thesis).values(p1_registered=False))  # P1 registration is per semester
+    # P1 registration is per semester, except for groups that haven't submitted to a P1 deadline that is still open.
+    still_p1 = select(Thesis).where(Thesis.p1_registered, Thesis.phase == Phase.P1, Thesis.status == ThesisStatus.active)
+    keep = [
+        t.id for t in db.scalars(still_p1)
+        if not (s := thesis_standing(db, t, now)).frozen and s.submitted_at is None and s.closes_at and now <= s.closes_at
+    ]
+    db.execute(update(Thesis).where(Thesis.id.not_in(keep)).values(p1_registered=False))
     db.add(Semester(started_at=now))  # opens P1 registration for the new semester
     db.commit()
     return result

@@ -66,6 +66,7 @@ export default function DeadlinePage() {
             due_local: `${f.get("due_date")}T${f.get("due_time")}`, // Dhaka time; the server converts it
             grace_days: Number(f.get("grace_days")),
             penalty_per_day: Number(f.get("penalty_per_day")),
+            semester_id: Number(f.get("semester_id")),
           },
         }),
       );
@@ -116,9 +117,9 @@ export default function DeadlinePage() {
           <div className="max-w-prose">
             <h2 className="font-semibold">End this semester</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Once every grace time has ended: thesis groups that submitted move to their next phase, P3 theses are completed
-              or deferred (a second deferral cancels the thesis), groups that missed are frozen, approved restarts start fresh, and
-              all deadlines are cleared for next semester.
+              Thesis groups that submitted move to their next phase, P3 theses are completed or deferred (a second deferral
+              cancels the thesis), groups that missed a closed deadline are frozen, and approved restarts start fresh.
+              Deadlines are kept: groups still working to an open deadline carry on with it. Set and tag new deadlines below.
               P1 registration then opens for one week, unless you set other dates below.
             </p>
           </div>
@@ -175,6 +176,7 @@ export default function DeadlinePage() {
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold">{m.phase}</h2>
                     <span className={`badge ${tone}`}>{label}</span>
+                    {m.semester_name && <span className="badge bg-zinc-100 text-zinc-700 ring-zinc-300">For {m.semester_name}</span>}
                     {m.mine && <span className="badge bg-teal-700 text-white ring-teal-700">Your phase</span>}
                   </div>
                   {m.countdown_to && (
@@ -210,6 +212,12 @@ export default function DeadlinePage() {
                 {data.can_edit && (
                   <form onSubmit={(e) => save(e, m.phase)} className="mt-5 grid items-end gap-3 border-t border-zinc-100 pt-5 sm:grid-cols-5">
                     <label className="label">
+                      For semester
+                      <select name="semester_id" required defaultValue={m.semester_id ?? data.semesters[0]?.id} className="input">
+                        {data.semesters.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="label">
                       Due date
                       <input name="due_date" type="date" required defaultValue={m.due_date ?? ""} className="input" />
                     </label>
@@ -238,7 +246,7 @@ export default function DeadlinePage() {
 
       <ConfirmDialog open={confirming} title="Start the next semester?" confirm="Yes, start it"
         onCancel={() => setConfirming(false)} onConfirm={nextSemester}>
-        This moves every student on and clears all P1, P2 and P3 deadlines. It cannot be undone.
+        This moves every student on. P1, P2 and P3 deadlines are kept. It cannot be undone.
       </ConfirmDialog>
     </div>
   );

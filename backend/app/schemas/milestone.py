@@ -21,6 +21,7 @@ class MilestoneIn(BaseModel):
     due_local: NaiveDatetime = Field(lt=datetime(9999, 12, 1))
     grace_days: int = Field(ge=0, le=MAX_GRACE_DAYS)
     penalty_per_day: int = Field(ge=0, le=MAX_PENALTY_PER_DAY)
+    semester_id: int  # the semester this deadline is for (a tag; checked to exist by the service)
 
     @property
     def due_at(self) -> datetime:
@@ -66,6 +67,8 @@ class MilestoneOut(BaseModel):
 
     grace_days: int
     penalty_per_day: int
+    semester_id: int | None = None  # the semester this deadline is for; None until set
+    semester_name: str | None = None
     closes_at: datetime | None  # due_at + grace; late after this
     status: Literal["not_set", "open", "grace", "closed"]
     # What the live countdown ticks toward: due_at while open, closes_at in grace, else None.
@@ -79,10 +82,18 @@ class MilestoneOut(BaseModel):
     submission_status: Literal["not_submitted", "on_time", "late"] | None = None
 
 
+class SemesterTagOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
 class TimelineOut(BaseModel):
     now: datetime  # server clock, so countdowns don't trust the browser's
     milestones: list[MilestoneOut]
     can_edit: bool  # coordinator only
+    semesters: list[SemesterTagOut] = []  # coordinator only, newest (current) first: the tags a deadline can take
     registration_opens_at: datetime | None  # this semester's P1 registration window
     registration_closes_at: datetime | None
     registration_open: bool

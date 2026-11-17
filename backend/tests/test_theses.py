@@ -49,7 +49,8 @@ def close(db, phase):
 def reopen(db):
     # A new semester's deadlines.
     due = datetime.now(timezone.utc) + timedelta(days=30)
-    db.add_all(MilestoneTemplate(phase=p, due_at=due, grace_days=0, penalty_per_day=0) for p in Phase)
+    for p in Phase:  # the rollover keeps deadlines, so the coordinator replaces them
+        db.merge(MilestoneTemplate(phase=p, due_at=due, grace_days=0, penalty_per_day=0))
     db.flush()
 
 
@@ -314,21 +315,37 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
     started_yesterday(client, db, missed)
 
     assert client.post("/api/milestones/next-semester", headers=done).status_code == 403
-    res = client.post("/api/milestones/next-semester", headers=coord)
-    assert (res.status_code, res.json()["detail"]) == (409, "P1, P2, P3 is still open, wait until its grace period ends")
 
     # Counted per thesis group: done's moves on, missed's is frozen.
     assert close_all_and_roll(client, db, coord) == {
         "advanced": 1, "completed": 0, "deferred": 0, "cancelled": 0, "frozen": 1, "restarted": 0
     }
     assert me(client, done)["phase"] == "P2"
-    assert [m["status"] for m in client.get("/api/milestones", headers=coord).json()["milestones"]] == ["not_set"] * 3
-    # The freeze is saved, so it outlives the cleared deadlines.
+    # Deadlines are independent of the rollover: kept, not cleared.
+    assert [m["status"] for m in client.get("/api/milestones", headers=coord).json()["milestones"]] == ["closed"] * 3
+    # The freeze is saved, so it outlives the deadline being replaced.
     assert mine(client, missed)["frozen_reason"] == "Your group missed the P1 deadline"
 
     reopen(db)
     assert client.get("/api/proposals/mine", headers=done).json()["phase"] == "P2"
     assert upload(client, done, content=PDF + b"p2").json()["versions"][0]["phase"] == "P2"
+
+
+def test_rollover_with_an_open_deadline_lets_groups_carry_on(client, db):
+    # A semester's deadlines fall in week 2 of the next one, so the rollover runs while they are still open.
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    done, working = student(client, db, "done@x.com"), student(client, db, "working@x.com")
+    upload(client, done)
+
+    res = client.post("/api/milestones/next-semester", headers=coord)
+    assert res.status_code == 200 and (res.json()["advanced"], res.json()["frozen"]) == (1, 0)
+    assert me(client, done)["phase"] == "P2"
+    # The group still working to the open P1 deadline keeps its registration and the deadline, and can still hand in.
+    assert user_of(client, db, working).thesis.p1_registered
+    assert client.get("/api/milestones", headers=coord).json()["milestones"][0]["status"] == "open"
+    assert upload(client, working).status_code == 201
+    # Groups that didn't register this time must register again next semester.
+    assert not user_of(client, db, done).thesis.p1_registered
 
 
 def p3_student(client, db, email):

@@ -71,7 +71,6 @@ export default function SemesterSetupPage() {
       name: f.get("name"),
       registration_opens_local: f.get("registration_opens_local") || null,
       registration_closes_local: f.get("registration_closes_local") || null,
-      rollover: f.has("rollover"),
       form_group_open: f.has("step_form_group"),
       pick_supervisor_open: f.has("step_pick_supervisor"),
       p1_open: f.has("step_P1"),
@@ -80,11 +79,8 @@ export default function SemesterSetupPage() {
       defense_open: f.has("step_defense"),
     };
 
-    if (payload.rollover) {
-      setPendingCreate({ payload, form: e.currentTarget });
-    } else {
-      executeCreate(payload, e.currentTarget);
-    }
+    // A new semester always rolls groups over, so always confirm first.
+    setPendingCreate({ payload, form: e.currentTarget });
   };
 
   const executeCreate = (payload, form) => {
@@ -243,15 +239,12 @@ export default function SemesterSetupPage() {
               </div>
             </div>
 
-            <label className="flex items-start gap-2.5 rounded-lg bg-amber-50/70 px-3.5 py-3 text-sm text-amber-950 ring-1 ring-amber-600/20 ring-inset">
-              <input type="checkbox" name="rollover" className="mt-0.5 size-4 accent-teal-700" />
-              <span>
-                <span className="font-medium">Advance active groups from previous semester</span>
-                <span className="block text-xs text-amber-800">
-                  Moves submitted groups to their next phase, freezes groups that missed closed deadlines, and clears old phase deadlines.
-                </span>
+            <p className="rounded-lg bg-amber-50/70 px-3.5 py-3 text-sm text-amber-950 ring-1 ring-amber-600/20 ring-inset">
+              <span className="font-medium">Active groups from the previous semester move on</span>
+              <span className="block text-xs text-amber-800">
+                Moves submitted groups to their next phase and freezes groups that missed a closed deadline. Deadlines are kept: groups still working to an open deadline carry on with it.
               </span>
-            </label>
+            </p>
 
             <div className="flex justify-end">
               <button disabled={busy === "create"} className="btn-primary">
@@ -285,7 +278,7 @@ export default function SemesterSetupPage() {
         onCancel={() => setPendingCreate(null)}
         onConfirm={() => executeCreate(pendingCreate.payload, pendingCreate.form)}
       >
-        This will advance submitted thesis groups to their next phase, freeze groups that missed deadlines, clear old deadlines, and start "{pendingCreate?.payload.name}". This cannot be undone.
+        This will advance submitted thesis groups to their next phase, freeze groups that missed a closed deadline, keep every deadline, and start "{pendingCreate?.payload.name}". This cannot be undone.
       </ConfirmDialog>
     </div>
   );
