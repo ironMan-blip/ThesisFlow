@@ -70,24 +70,28 @@ export default function ThesisPage() {
 
       <Alerts error={error} notice={notice} floating onDismiss={clear} />
 
+      {/* Where the student stands comes first; the steps to get further follow below. */}
+      {state && (
+        <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
+          <div>
+            <p className="text-sm text-zinc-500">Current phase</p>
+            <p className="mt-1 text-2xl font-semibold">{state.phase ?? "Thesis complete"}</p>
+          </div>
+          {t?.code && (
+            <div className="text-right">
+              <p className="text-sm text-zinc-500">Thesis ID</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{t.code}</p>
+            </div>
+          )}
+        </section>
+      )}
+
       <GroupSection />
 
       {!state ? (
         <Skeleton rows={2} row="h-28 rounded-xl" className="space-y-4" />
       ) : (
         <>
-          <section className="card flex flex-wrap items-center justify-between gap-4 p-6">
-            <div>
-              <p className="text-sm text-zinc-500">Current phase</p>
-              <p className="mt-1 text-2xl font-semibold">{state.phase ?? "Thesis complete"}</p>
-            </div>
-            {t?.code && (
-              <div className="text-right">
-                <p className="text-sm text-zinc-500">Thesis ID</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">{t.code}</p>
-              </div>
-            )}
-          </section>
 
           {state.frozen_reason && (
             <section role="alert" className="card space-y-3 bg-red-50/60 p-6 ring-red-200">
@@ -187,18 +191,24 @@ export default function ThesisPage() {
           )}
 
           {state.can_form_group && (
-            <form onSubmit={submit} className="card max-w-xl space-y-5 p-6">
-              <h2 className="font-semibold">Form your thesis group</h2>
-              <label className="label">
-                Supervisor
-                <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
-                  <option value="" disabled>Choose a faculty member</option>
-                  {state.faculty_choices.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
-                </select>
-              </label>
-              <button disabled={busy === "ask" || !state.faculty_choices.length} className="btn-primary w-full">
-                {busy === "ask" ? "Sending…" : "Send request"}
-              </button>
+            <form onSubmit={submit} className="card space-y-5 p-6">
+              <div>
+                <h2 className="font-semibold">Choose a supervisor</h2>
+                <p className="mt-1 text-sm text-zinc-500">Your thesis group is formed, with its thesis ID, once the supervisor accepts.</p>
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="label min-w-56 flex-1">
+                  Supervisor
+                  <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
+                    <option value="" disabled>Choose a faculty member</option>
+                    {state.faculty_choices.map((f) => <option key={f.id} value={f.id}>{personName(f)}</option>)}
+                  </select>
+                </label>
+                <button disabled={busy === "ask" || !state.faculty_choices.length} className="btn-primary">
+                  {busy === "ask" ? "Sending…" : "Send request"}
+                </button>
+              </div>
+              {!state.faculty_choices.length && <p className="text-sm text-zinc-500">No faculty members are available yet.</p>}
             </form>
           )}
         </>

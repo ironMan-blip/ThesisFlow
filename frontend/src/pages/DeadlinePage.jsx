@@ -21,9 +21,9 @@ function Countdown({ ms }) {
     <span className="flex gap-1.5">
       <span className="sr-only">{parts.map(([v, u]) => `${v} ${u}`).join(" ")}</span>
       {parts.map(([v, u]) => (
-        <span key={u} className="min-w-11 rounded-lg bg-zinc-900 px-1.5 py-1 text-center text-white" aria-hidden="true">
-          <span className="block text-sm font-semibold leading-tight tabular-nums">{v}</span>
-          <span className="block text-[10px] uppercase tracking-wide text-zinc-400">{u}</span>
+        <span key={u} className="min-w-11 rounded-lg bg-zinc-50 px-1.5 py-1 text-center ring-1 ring-zinc-200 ring-inset" aria-hidden="true">
+          <span className="block text-sm font-semibold leading-tight text-zinc-900 tabular-nums">{v}</span>
+          <span className="block text-[10px] uppercase tracking-wide text-zinc-500">{u}</span>
         </span>
       ))}
     </span>
@@ -130,13 +130,13 @@ export default function DeadlinePage() {
           {data.milestones.map((m) => {
             const [label, tone, dot] = STATUS[m.status];
             return (
-              <li key={m.phase} className="card relative p-6">
+              <li key={m.phase} className={`card relative p-6 ${m.mine ? "ring-2 ring-teal-600/40" : ""}`}>
                 <span className={`absolute -left-[31px] top-8 size-3 rounded-full ring-4 ring-zinc-50 ${dot}`} aria-hidden="true" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold">{m.phase}</h2>
                     <span className={`badge ${tone}`}>{label}</span>
-                    {m.mine && <span className="badge bg-zinc-900 text-white ring-zinc-900">Your phase</span>}
+                    {m.mine && <span className="badge bg-teal-700 text-white ring-teal-700">Your phase</span>}
                   </div>
                   {m.countdown_to && (
                     <div className="flex items-center gap-3 text-sm text-zinc-600">

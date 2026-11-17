@@ -49,7 +49,9 @@ export default function ProposalPage() {
             )}
           </div>
           {proposal?.upload_block && (
-            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200/70 ring-inset">{proposal.upload_block}.</p>
+            <p role="status" className="alert border-amber-200 bg-amber-50 text-amber-900">
+              <Icon className="mt-px size-4">{ICONS.alert}</Icon><span>{proposal.upload_block}.</span>
+            </p>
           )}
           {proposal?.freeze_at && (
             <p role="alert" className="alert-error">
@@ -60,6 +62,8 @@ export default function ProposalPage() {
           {proposal?.title && (
             <p className="text-sm text-zinc-500">Your first upload set the title and abstract. Every upload must use them exactly.</p>
           )}
+          {/* Fields stay visible but locked while uploads are blocked, so nobody fills a form they can't send. */}
+          <fieldset disabled={!!proposal?.upload_block} className="space-y-5">
           <label className="label">
             Title
             <input key={`t-${proposal?.title}`} name="title" required maxLength={255} defaultValue={proposal?.title ?? ""}
@@ -74,7 +78,8 @@ export default function ProposalPage() {
             <span className="label">PDF file</span>
             {/* The real input covers the box, so click and drag-and-drop both work natively. */}
             <div className={`relative mt-1.5 flex flex-col items-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition
-              focus-within:border-teal-600 focus-within:ring-3 focus-within:ring-teal-600/15 hover:border-teal-500 hover:bg-teal-50/40 ${
+              focus-within:border-teal-600 focus-within:ring-3 focus-within:ring-teal-600/15 hover:border-teal-500 hover:bg-teal-50/40
+              has-disabled:border-zinc-200 has-disabled:bg-zinc-50 has-disabled:opacity-60 has-disabled:pointer-events-none ${
                 fileName ? "border-teal-300 bg-teal-50/40" : "border-zinc-300"
               }`}>
               <span className="grid size-10 place-items-center rounded-lg bg-white text-teal-700 shadow-xs ring-1 ring-zinc-200">
@@ -84,9 +89,10 @@ export default function ProposalPage() {
               <p className="mt-0.5 text-xs text-zinc-500">{fileName ? "Click to choose a different file" : <>PDF only{proposal && `, up to ${proposal.max_upload_mb} MB`}</>}</p>
               <input name="file" type="file" accept="application/pdf" required aria-label="PDF file"
                 onChange={(e) => setFileName(e.target.files[0]?.name ?? "")}
-                className="absolute inset-0 cursor-pointer opacity-0" />
+                className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed" />
             </div>
           </div>
+          </fieldset>
           <Alerts error={error} notice={notice} />
           <button disabled={saving || !proposal || !!proposal.upload_block} className="btn-primary w-full">
             {/* After the last byte the server still scans and checks the file, so say so instead of sitting at 100%. */}

@@ -78,14 +78,16 @@ export default function GroupSection() {
           )}
 
           {state.can_create && (
-            <form onSubmit={create} className="card max-w-xl space-y-5 p-6">
+            <form onSubmit={create} className="card space-y-5 p-6">
               <h2 className="font-semibold">Create a group</h2>
-              <label className="label">
-                Group name
-                <input name="name" required maxLength={60} placeholder="e.g. Team Nova" className="input" />
-              </label>
-              <button disabled={busy === "create"} className="btn-primary w-full">{busy === "create" ? "Creating…" : "Create group"}</button>
-              <p className="text-xs text-zinc-500">
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="label min-w-56 flex-1">
+                  Group name
+                  <input name="name" required maxLength={60} placeholder="e.g. Team Nova" className="input" />
+                </label>
+                <button disabled={busy === "create"} className="btn-primary">{busy === "create" ? "Creating…" : "Create group"}</button>
+              </div>
+              <p className="text-sm text-zinc-500">
                 You become the leader. You can also wait for an invitation, or <Link to="/teammates" className="font-medium text-teal-700 hover:underline">find teammates</Link> first.
               </p>
             </form>
