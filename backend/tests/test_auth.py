@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.main import app
 from app.models.user import Role, User
-from app.security import hash_password
+from app.security import DEVICE_COOKIE, device_account, hash_password
 from app.services import account_service, auth_service
 from app.services.auth_service import REGISTER_TAKEN
 from tests.helpers import REASON, auth, run_deletions_due, student as make_student, supervised_student, upload
@@ -364,6 +364,30 @@ def test_failed_logins_from_one_ip_do_not_lock_out_the_owner(client, db):
     assert exc.value.status_code == 429
     # The owner, from another IP, still gets in; right logins don't use up the budget.
     assert all(login(client).status_code == 200 for _ in range(rate_limit.LOGIN_PER_ACCOUNT + 1))
+
+
+def test_guessing_from_the_same_ip_does_not_lock_out_a_known_browser(client, db):
+    # Behind Docker Desktop everyone shares one IP, so the per-IP buckets alone let a guesser lock the owner out.
+    register(client)
+    db.scalar(select(User).where(User.id_number == "12345678")).approved = True
+    db.flush()
+    assert login(client).status_code == 200
+    cookie = client.cookies.get(DEVICE_COOKIE)
+    assert cookie and device_account(cookie) == "12345678"
+    client.cookies.clear()
+    assert all(login(client, password="Wrong1234").status_code == 401 for _ in range(rate_limit.LOGIN_PER_ACCOUNT))
+    assert login(client).status_code == 429  # a browser without the cookie is locked out with the guesser
+    for _ in range(rate_limit.LIMITS["/api/auth/login"]):
+        client.post("/api/auth/login", data={"username": "00000000", "password": "Wrong1234"})
+    client.cookies.set(DEVICE_COOKIE, cookie)
+    res = login(client)
+    assert res.status_code == 200  # the owner's browser has its own buckets
+    # The cookie only names its own account: it gives no fresh bucket for guessing another one.
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db, "12345678", "Wrong1234", ip="testclient", device="87654321")
+    assert exc.value.status_code == 429
+    assert device_account(res.cookies[DEVICE_COOKIE]) == "12345678"  # renewed
+    assert device_account(res.json()["access_token"]) is None  # an access token is no device cookie
 
 
 def test_guessing_from_many_ips_does_not_lock_out_a_known_ip(client, db, monkeypatch):

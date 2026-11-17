@@ -12,7 +12,7 @@ from redis import Redis, RedisError
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
-from app.security import decode_access_token
+from app.security import DEVICE_COOKIE, decode_access_token, device_account
 
 WINDOW_SECONDS = 60
 # Per-IP limits. Behind Docker Desktop every client shows up as one gateway IP, so these are loose;
@@ -173,6 +173,10 @@ async def rate_limit(request: Request, call_next):
         claims = auth.startswith("Bearer ") and decode_access_token(auth[7:])
         if claims:
             who = f"user:{claims[0]}"
+    elif prefix == "/api/auth/login" and (account := device_account(request.cookies.get(DEVICE_COOKIE))):
+        # Same idea for logins: a guesser sharing the IP can't use up the owner's browser's budget.
+        # Keyed by account, not cookie, so logging in again for fresh cookies gives no extra buckets.
+        who = f"device:{account}"
     # The Redis client is blocking; keep it off the event loop.
     if retry := await run_in_threadpool(hit, (who, prefix), limit):
         exc = too_many(retry)

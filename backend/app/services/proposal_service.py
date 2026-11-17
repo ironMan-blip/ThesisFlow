@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
@@ -25,6 +25,7 @@ CHUNK = 1024 * 1024
 ACTIVE_KEYS = {"/JS", "/JavaScript", "/EmbeddedFiles", "/EmbeddedFile", "/XFA", "/RichMedia"}
 # /GoToR opens another file: a UNC path (\\host\share) makes Windows send the reader's login hash to that host.
 ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToE", "/GoToR", "/RichMediaExecute", "/SubmitForm"}
+LINK_SCHEMES = ("http://", "https://", "mailto:")
 # Bounds the object walk, so a crafted file with millions of tiny objects can't tie up a worker.
 MAX_PDF_OBJECTS = 200_000
 log = logging.getLogger(__name__)
@@ -152,8 +153,15 @@ def _scan(path: Path) -> None:
         )
 
 
+def _web_link(uri: object) -> bool:
+    # Allowlist, not blocklist: file:, smb:, \\host and OS protocol handlers (ms-msdt:, ...) all open more than a page.
+    text = uri.decode("latin-1") if isinstance(uri, bytes) else str(uri or "")
+    return text.strip().lower().startswith(LINK_SCHEMES)
+
+
 def _check_pdf(path: Path) -> None:
-    """Refuse anything a PDF reader can't open, an encrypted file (it can't be checked), or one with active content."""
+    """Refuse anything a PDF reader can't open, an encrypted file (it can't be checked), or one with active content.
+    Then replace the file with a clean rewrite of what was checked."""
     try:
         reader = PdfReader(path, strict=False)
         if reader.is_encrypted:
@@ -173,14 +181,29 @@ def _check_pdf(path: Path) -> None:
                 stack.append(obj.get_object())
             elif isinstance(obj, DictionaryObject):
                 # obj["/S"], not .get: it resolves an indirect /S, which viewers follow too.
-                if ACTIVE_KEYS.intersection(obj) or ("/S" in obj and obj["/S"] in ACTIVE_ACTIONS):
+                action = obj["/S"] if "/S" in obj else None
+                if ACTIVE_KEYS.intersection(obj) or action in ACTIVE_ACTIONS:
                     raise HTTPException(
                         status.HTTP_422_UNPROCESSABLE_CONTENT,
                         "PDF must not contain scripts, attached files or interactive forms",
                     )
+                if action == "/URI" and not _web_link(obj["/URI"] if "/URI" in obj else None):
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        "PDF links must be web (http or https) or email (mailto) links",
+                    )
                 stack.extend(dict.values(obj))  # raw values, so references are walked once via `seen`
             elif isinstance(obj, ArrayObject):
                 stack.extend(list.__iter__(obj))
+        # Store pypdf's rewrite, not the upload: it holds only what was walked above, so a viewer that reads the
+        # file differently (an orphan object, an older revision) can't find anything the check never saw.
+        out = path.with_suffix(".tmp")
+        try:
+            with out.open("wb") as f:
+                PdfWriter(clone_from=reader).write(f)
+            out.replace(path)
+        finally:
+            out.unlink(missing_ok=True)
     except HTTPException:
         raise
     except Exception:  # pypdf raises many kinds of errors on broken files
@@ -213,7 +236,8 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     except BaseException:
         path.unlink(missing_ok=True)
         raise
-    return stored, size, digest.hexdigest()
+    # sha256 stays the upload's, so re-uploading the same file is still recognised; size is what is stored.
+    return stored, path.stat().st_size, digest.hexdigest()
 
 
 def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:

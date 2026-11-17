@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -6,6 +6,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserOut
+from app.security import DEVICE_COOKIE, DEVICE_TTL, create_device_token, device_account
 from app.services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -17,10 +18,19 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    request: Request, response: Response, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
     # OAuth2 form uses "username"; we treat it as the 8-digit ID number.
     ip = request.client.host if request.client else "unknown"
-    return Token(access_token=auth_service.login(db, form.username, form.password, ip))
+    device = device_account(request.cookies.get(DEVICE_COOKIE))
+    token = auth_service.login(db, form.username, form.password, ip, device)
+    # Renewed on every login. HttpOnly and only sent to this route: page scripts never see it.
+    response.set_cookie(
+        DEVICE_COOKIE, create_device_token(form.username), max_age=int(DEVICE_TTL.total_seconds()),
+        path="/api/auth/login", httponly=True, samesite="strict",
+    )
+    return Token(access_token=token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

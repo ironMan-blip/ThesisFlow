@@ -1,7 +1,9 @@
+import io
 import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from pypdf import PdfReader
 from pypdf.generic import DictionaryObject, NameObject, TextStringObject
 from sqlalchemy import update
 
@@ -13,6 +15,15 @@ from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from app.services import proposal_service
 from tests.helpers import PDF, REASON, make_pdf, auth, me, student, supervised_student, upload
 
+
+def _tagged(tag: str) -> bytes:
+    # Distinct real PDFs: stored files are rewritten, so bytes appended after %%EOF don't survive.
+    return make_pdf(lambda w: w.add_metadata({"/Title": tag}))
+
+
+def _tag(content: bytes) -> str | None:
+    return (PdfReader(io.BytesIO(content)).metadata or {}).get("/Title")
+
 pytestmark = pytest.mark.usefixtures("timelines")
 
 
@@ -23,7 +34,7 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
     assert re.fullmatch(r"T\d{8}", empty["thesis_code"])
 
     assert upload(client, h).status_code == 201
-    res = upload(client, h, content=PDF + b"v2", name="p2.pdf")
+    res = upload(client, h, content=_tagged("v2"), name="p2.pdf")
     assert res.status_code == 201
     versions = res.json()["versions"]
     assert [v["version_no"] for v in versions] == [2, 1]
@@ -35,7 +46,7 @@ def test_each_upload_is_a_new_version_and_old_ones_stay(client, db):
 
     old = client.get(f"/api/proposals/versions/{versions[1]['id']}/file", headers=h)
     assert old.status_code == 200
-    assert old.content == PDF
+    assert _tag(old.content) is None  # version 1, not the tagged version 2
     assert old.headers["content-type"] == "application/pdf"
 
 
@@ -110,19 +121,19 @@ def test_only_students_upload(client, db):
 def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
     h = student(client, db, "s@x.com")
     for t in ("a", "b", "c"):
-        upload(client, h, content=PDF + t.encode(), name=f"{t}.pdf")
+        upload(client, h, content=_tagged(t), name=f"{t}.pdf")
     a_id = client.get("/api/proposals/mine", headers=h).json()["versions"][2]["id"]
 
-    res = upload(client, h, content=PDF + b"a", name="a.pdf")
+    res = upload(client, h, content=_tagged("a"), name="a.pdf")
     assert res.status_code == 201
     versions = res.json()["versions"]
     assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
     assert (versions[0]["id"], versions[0]["is_latest"]) == (a_id, True)
     assert len(list((tmp_path / "proposals").iterdir())) == 3
-    assert client.get(f"/api/proposals/versions/{a_id}/file", headers=h).content == PDF + b"a"
+    assert _tag(client.get(f"/api/proposals/versions/{a_id}/file", headers=h).content) == "a"
 
     # Re-submitting the current latest keeps the order.
-    versions = upload(client, h, content=PDF + b"a", name="a.pdf").json()["versions"]
+    versions = upload(client, h, content=_tagged("a"), name="a.pdf").json()["versions"]
     assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
 
 
@@ -287,6 +298,10 @@ def test_only_real_pdfs_without_active_content_are_stored(client, db, tmp_path):
             {NameObject("/S"): w._add_object(NameObject("/Launch")), NameObject("/F"): TextStringObject("calc.exe")}
         ))),
         make_pdf(lambda w: _open_action(w, {"/S": "/GoToR", "/F": "\\\\attacker\\share\\x.pdf"})),
+        # Links that open local files, shares or OS protocol handlers instead of a web page.
+        make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": "file:///C:/Windows/System32/calc.exe"})),
+        make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": "\\\\attacker\\share"})),
+        make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": "ms-msdt:/id PCWDiagnostic"})),
         make_pdf(lambda w: w.add_attachment("run.exe", b"MZ")),
         make_pdf(lambda w: w.encrypt("secret")),
     ):
@@ -294,6 +309,25 @@ def test_only_real_pdfs_without_active_content_are_stored(client, db, tmp_path):
         assert res.status_code == 422, res.json()
     assert len(client.get("/api/proposals/mine", headers=h).json()["versions"]) == 1
     assert len(list((tmp_path / "proposals").iterdir())) == 1  # refused files are not kept
+
+
+def test_web_links_are_kept(client, db):
+    h = student(client, db, "links@x.com")
+    for uri in ("https://example.com/paper", "mailto:a@b.com"):
+        assert upload(client, h, content=make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": uri}))).status_code == 201
+
+
+def test_stored_pdf_is_the_checked_rewrite(client, db, tmp_path):
+    # An unreferenced object is skipped by the check but a repairing viewer could still find it: it must not be stored.
+    hidden = b"99 0 obj\n<< /S /JavaScript /JS (app.alert(1)) >>\nendobj\n"
+    h = student(client, db, "rewrite@x.com")
+    header, rest = PDF.split(b"\n", 1)
+    res = upload(client, h, content=header + b"\n" + hidden + rest)
+    assert res.status_code == 201, res.json()
+    (stored,) = (tmp_path / "proposals").iterdir()
+    data = stored.read_bytes()
+    assert b"app.alert" not in data and data.startswith(b"%PDF-")
+    assert res.json()["versions"][0]["size_bytes"] == len(data)
 
 
 def test_uploads_per_phase_are_capped(client, db, monkeypatch):
