@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.models.milestone import Phase
 from app.models.thesis import ThesisStatus
 from app.models.user import Role
-from app.schemas.proposal import ProposalVersionOut, TitleChangeOut
+from app.schemas.proposal import ProposalVersionOut, TitleChangeOut, mark_versions
 
 
 class PersonOut(BaseModel):
@@ -46,6 +46,11 @@ class ThesisDetailOut(ThesisOut):
     title_change_request: TitleChangeOut | None = None  # a change waiting for the supervisor
     is_supervisor: bool = False  # the viewer is the supervisor (not the co-supervisor): decides title changes and deferral
     can_defer: bool = False  # supervisor only: can set (P3 submitted this semester) or undo a pending deferral
+
+    @model_validator(mode="after")
+    def _mark_versions(self):
+        mark_versions(self.versions)
+        return self
 
 
 class SupervisionRequestOut(ThesisOut):

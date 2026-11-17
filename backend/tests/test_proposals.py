@@ -192,7 +192,10 @@ def test_one_title_change_needs_the_supervisors_ok_within_3_days(client, db):
     body = client.get("/api/proposals/mine", headers=h).json()
     assert (body["title"], body["abstract"], body["can_request_title_change"]) == ("b", "New abstract", False)
     assert _upload_as(client, h, "a", content=PDF + b"2").status_code == 422  # the old title is gone
-    assert _upload_as(client, h, "b", "New abstract", content=PDF + b"2").status_code == 201
+    versions = _upload_as(client, h, "b", "New abstract", content=PDF + b"2").json()["versions"]
+    # Older versions keep the title they were uploaded with; the first one after the change is marked.
+    assert [(v["title"], v["title_changed"], v["abstract_changed"]) for v in versions] == [("b", True, True), ("a", False, False)]
+    assert client.get("/api/theses", headers=sup).json()[0]["versions"][0]["title_changed"] is True
     r = _ask_title(client, h, "c")
     assert r.status_code == 409 and "already used" in r.json()["detail"]
 

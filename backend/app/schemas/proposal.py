@@ -22,7 +22,10 @@ class ProposalVersionOut(BaseModel):
     original_filename: str
     size_bytes: int
     created_at: datetime
-    is_latest: bool = False  # set by ProposalOut
+    is_latest: bool = False  # set by mark_versions
+    # Set by mark_versions: differs from the version before it, i.e. the first upload after an approved title change.
+    title_changed: bool = False
+    abstract_changed: bool = False
 
     @computed_field
     @property
@@ -34,6 +37,14 @@ class ProposalVersionOut(BaseModel):
     def download_path(self) -> str:
         # Relative to /api, as the frontend client expects.
         return f"/proposals/versions/{self.id}/file"
+
+
+def mark_versions(versions: list[ProposalVersionOut]) -> None:
+    """versions: newest first. Older versions keep the title and abstract they were uploaded with."""
+    if versions:
+        versions[0].is_latest = True
+    for newer, older in zip(versions, versions[1:]):
+        newer.title_changed, newer.abstract_changed = newer.title != older.title, newer.abstract != older.abstract
 
 
 class TitleChangeIn(BaseModel):
@@ -71,7 +82,6 @@ class ProposalOut(BaseModel):
     title_change_days: int = TITLE_CHANGE_WINDOW.days
 
     @model_validator(mode="after")
-    def _mark_latest(self):
-        if self.versions:
-            self.versions[0].is_latest = True
+    def _mark_versions(self):
+        mark_versions(self.versions)
         return self

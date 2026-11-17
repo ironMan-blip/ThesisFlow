@@ -139,6 +139,12 @@ export function VersionInfo({ v, abstract = false }) {
         <span className="badge bg-zinc-50 font-semibold tabular-nums text-zinc-700 ring-zinc-200">v{v.version_no}</span>
         <span className="badge bg-zinc-50 text-zinc-700 ring-zinc-200">{v.phase}</span>
         {v.is_latest && <span className="badge bg-teal-50 text-teal-800 ring-teal-600/20">Latest</span>}
+        {(v.title_changed || v.abstract_changed) && (
+          // First upload after an approved change; older versions keep the text they were uploaded with.
+          <span className="badge bg-amber-50 text-amber-800 ring-amber-600/20">
+            {v.title_changed && v.abstract_changed ? "Title and abstract changed" : v.title_changed ? "Title changed" : "Abstract changed"}
+          </span>
+        )}
         <p className="truncate font-medium">{v.title}</p>
       </div>
       {abstract && <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{v.abstract}</p>}
