@@ -16,11 +16,16 @@ jobs:
           POSTGRES_PASSWORD: thesisflow
           POSTGRES_DB: thesisflow_test
         ports: ["5432:5432"]
-        options: --health-cmd "pg_isready -U thesisflow" --health-interval 2s --health-retries 20
+        options: --health-cmd "pg_isready -U thesisflow -d thesisflow_test" --health-interval 2s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 2s --health-retries 20
     # Throwaway values for the CI-only database; CI has no .env.
     env:
       DATABASE_URL: postgresql+psycopg://thesisflow:thesisflow@localhost:5432/thesisflow_test
       TEST_DATABASE_URL: postgresql+psycopg://thesisflow:thesisflow@localhost:5432/thesisflow_test
+      TEST_REDIS_URL: redis://localhost:6379/1
       JWT_SECRET: ci-only-secret-not-for-real-use-000000
       ADMIN_NAME: CI Coordinator
       ADMIN_EMAIL: coordinator@thesisflow.test

@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { Alerts, Icon, ICONS, PageHeader, Person, Skeleton, ThesisBadge } from "../components/ui";
 import { personName, when } from "../format";
 import { useAction } from "../useAction";
+import GroupSection from "./GroupSection";
 
 export default function ThesisPage() {
   const [state, setState] = useState(null);
@@ -58,8 +59,9 @@ export default function ThesisPage() {
     <div className="space-y-8">
       <PageHeader
         title="Thesis group"
-        intro="You need a thesis group, you and a supervisor, before you can upload proposals."
+        intro="Form your group with other students, then choose a supervisor. You need both before you can upload proposals."
         help={[
+          "Create a group or accept an invitation. Invite teammates from Find teammates.",
           "Choose a supervisor and send a request. The group forms when they accept.",
           "After that you can add a co-supervisor if you like. They join when both they and your supervisor accept.",
           "Every proposal version is kept under your thesis ID.",
@@ -67,6 +69,8 @@ export default function ThesisPage() {
       />
 
       <Alerts error={error} notice={notice} floating onDismiss={clear} />
+
+      <GroupSection />
 
       {!state ? (
         <Skeleton rows={2} row="h-28 rounded-xl" className="space-y-4" />

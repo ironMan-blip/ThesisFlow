@@ -48,7 +48,7 @@ export default function TeammatesPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Find teammates" intro="Students without a group, searchable by interests and skills. Create a group on My group first, then invite from here." />
+      <PageHeader title="Find teammates" intro="Students without a group, searchable by interests and skills. Create a group on Thesis group first, then invite from here." />
 
       <Alerts error={error} notice={notice} />
 

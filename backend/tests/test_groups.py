@@ -55,7 +55,7 @@ def test_invite_accept_and_group_becomes_ready_at_three(client, db):
     assert join(client, a, b).json()["group"]["members_needed"] == 1
     assert client.get("/api/auth/me/counts", headers=c).json() == {}
     assert invite(client, a, c).status_code == 201
-    assert client.get("/api/auth/me/counts", headers=c).json() == {"group": 1}
+    assert client.get("/api/auth/me/counts", headers=c).json() == {"thesis": 1}
     assert invite(client, a, c).status_code == 409  # already invited
     assert invite(client, b, c).status_code == 403  # only the leader invites
     inv = mine(client, c)["received_invitations"][0]

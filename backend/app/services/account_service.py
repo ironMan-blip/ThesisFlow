@@ -119,7 +119,7 @@ def pending_counts(db: Session, user: User) -> dict[str, int]:
         # Supervision requests plus students' version delete requests waiting for this supervisor.
         return {"theses": thesis_service.count_requests(db, user) + proposal_service.count_delete_requests(db, user)}
     if user.role == Role.student:
-        counts = {"proposal": proposal_service.count_staff_deletes(db, user), "group": group_service.count_invitations(db, user)}
+        counts = {"proposal": proposal_service.count_staff_deletes(db, user), "thesis": group_service.count_invitations(db, user)}
         return {tool: n for tool, n in counts.items() if n}
     # Polled every 10s by the UI, so count in SQL instead of loading the rows.
     count = lambda q: db.scalar(q.with_only_columns(func.count()))
