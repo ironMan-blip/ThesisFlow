@@ -14,7 +14,7 @@ from app.models.proposal import ProposalVersion
 from app.models.user import Role
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from app.services import proposal_service
-from tests.helpers import PDF, REASON, make_pdf, auth, me, student, supervised_student, upload
+from tests.helpers import ask_supervisor, PDF, REASON, make_pdf, auth, me, student, supervised_student, upload
 
 
 def _tagged(tag: str) -> bytes:
@@ -80,7 +80,7 @@ def test_upload_needs_an_accepted_thesis_group(client, db):
     res = upload(client, h)
     assert (res.status_code, res.json()["detail"]) == (409, "Form a thesis group first: choose a supervisor on the Thesis page")
     sup = auth(client, db, "f@x.com", Role.faculty)
-    client.post("/api/theses/mine", headers=h, json={"supervisor_id": client.get("/api/auth/me", headers=sup).json()["id"]})
+    ask_supervisor(client, db, h, sup)
     res = upload(client, h)
     assert (res.status_code, res.json()["detail"]) == (409, "Your supervisor has not accepted your thesis group yet")
 

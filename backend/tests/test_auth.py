@@ -267,7 +267,8 @@ def test_account_deletion_needs_a_reason_approval_and_7_days(client, db, tmp_pat
     assert pdfs[0].exists()  # the thesis and its versions are kept as an archive
     assert client.get("/api/auth/me", headers=student).status_code == 401
     theses = client.get("/api/theses", headers=sup).json()
-    assert [(t["status"], t["student"], len(t["versions"])) for t in theses] == [("dropped", None, 1)]
+    # The teammates carry on with the thesis; only the requester's link is gone.
+    assert [(t["status"], t["student"], len(t["members"]), len(t["versions"])) for t in theses] == [("active", None, 2, 1)]
 
 
 def test_only_the_coordinator_cancels_a_deletion(client, db):
@@ -296,10 +297,10 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     accounts = client.get("/api/auth/accounts", headers=coord).json()
     by_email = {a["email"]: a["id"] for a in accounts}
     supervisor_email = next(e for e in by_email if e.startswith("sup"))
-    assert set(by_email) == {"s@b.com", supervisor_email}  # coordinator is the admin login, not listed
+    assert {"s@b.com", supervisor_email} <= set(by_email) and "coord@b.com" not in by_email  # coordinator is the admin login
     student_id = db.scalar(select(User.id_number).where(User.email == "s@b.com"))
     emails = lambda q: [a["email"] for a in client.get(f"/api/auth/accounts?{q}", headers=coord).json()]
-    assert emails(f"role=student&id_prefix={student_id[:3]}") == ["s@b.com"]
+    assert emails(f"role=student&id_prefix={student_id}") == ["s@b.com"]
     assert emails("role=faculty") == [supervisor_email]
     assert emails("id_prefix=%25") == []  # LIKE wildcards are matched literally
     assert client.get("/api/auth/accounts?role=coordinator", headers=coord).status_code == 422
@@ -322,7 +323,7 @@ def test_coordinator_lists_and_schedules_account_deletions(client, db, tmp_path,
     assert run_deletions_due(db) == 1
     assert db.get(User, by_email["s@b.com"]) is None
     assert len(list(tmp_path.rglob("*.pdf"))) == 1  # versions are never lost
-    assert schedule(by_email[supervisor_email]).status_code == 200
+    assert schedule(by_email[supervisor_email]).status_code == 409  # the teammates' thesis is still active
     assert schedule(by_email["s@b.com"]).status_code == 404
 
 

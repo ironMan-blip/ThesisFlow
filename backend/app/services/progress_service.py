@@ -17,6 +17,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from app.models.group import MIN_MEMBERS
 from app.models.milestone import Deliverable, GroupMilestone, MilestoneTemplate, Phase
 from app.models.proposal import ProposalVersion
 from app.models.semester import Semester
@@ -208,6 +209,8 @@ def next_semester(db: Session) -> dict[str, int]:
             status.HTTP_409_CONFLICT, f"{', '.join(sorted(still_open))} is still open, wait until its grace period ends"
         )
     result = {"advanced": 0, "completed": 0, "deferred": 0, "frozen": 0, "restarted": 0}
+    # A thesis's P3 outcome is decided once, by its first member seen, and then applied to every member.
+    p3_outcome: dict[int, str] = {}
     for user in _students(db):
         if user.restart_approved:
             _restart(db, user, now)
@@ -221,24 +224,29 @@ def next_semester(db: Session) -> dict[str, int]:
             user.frozen_at = now
             _withdraw_co_supervisor(thesis)
             result["frozen"] += 1
-        elif s.submitted_at is None or thesis is None or thesis.status != ThesisStatus.active:
+        elif s.submitted_at is None or thesis is None or (thesis.status != ThesisStatus.active and thesis.id not in p3_outcome):
             continue  # nothing due for them this semester (no deadline, or they started late): same phase again
         elif user.phase in NEXT_PHASE:
             user.phase, user.phase_started_at = NEXT_PHASE[user.phase], now
             result["advanced"] += 1
-        elif thesis.defer_pending:
-            thesis.defer_pending = False
-            thesis.deferrals += 1
-            if thesis.deferrals >= MAX_DEFERRALS:
+        else:
+            if thesis.id not in p3_outcome:
+                if thesis.defer_pending:
+                    thesis.defer_pending = False
+                    thesis.deferrals += 1
+                    p3_outcome[thesis.id] = "frozen" if thesis.deferrals >= MAX_DEFERRALS else "deferred"
+                else:
+                    thesis.status = ThesisStatus.completed
+                    p3_outcome[thesis.id] = "completed"
+            outcome = p3_outcome[thesis.id]
+            if outcome == "frozen":
                 user.frozen_at = now
                 _withdraw_co_supervisor(thesis)
-                result["frozen"] += 1
-            else:
+            elif outcome == "deferred":
                 user.phase_started_at = now  # P3 again; last semester's upload no longer counts
-                result["deferred"] += 1
-        else:
-            thesis.status, user.phase = ThesisStatus.completed, None
-            result["completed"] += 1
+            else:
+                user.phase = None
+            result[outcome] += 1
     db.execute(delete(MilestoneTemplate))
     db.execute(update(Thesis).values(p1_registered=False))  # P1 registration is per semester
     db.add(Semester(started_at=now))  # opens P1 registration for the new semester
@@ -246,16 +254,24 @@ def next_semester(db: Session) -> dict[str, int]:
     return result
 
 
-def can_register(db: Session, user: User) -> bool:
+def register_block(db: Session, user: User) -> str | None:
+    """Why this P1 student's accepted group can't register now, or None if it can."""
     thesis = user.thesis
-    return (
-        user.phase == Phase.P1
-        and thesis is not None
-        and thesis.status in FORMED  # active: registered in an earlier semester but still in P1
-        and not thesis.p1_registered
-        and not standing(db, user).frozen
-        and registration_open(db)
-    )
+    if user.phase != Phase.P1 or thesis is None or thesis.status not in FORMED:  # active: registered earlier, still in P1
+        return "Only a P1 student with an accepted thesis group can register"
+    if thesis.p1_registered:
+        return "Your group is already registered for P1 this semester"
+    if standing(db, user).frozen:
+        return "Your account is frozen"
+    if not registration_open(db):
+        return "P1 registration is closed, register in the first week of next semester"
+    if (needed := MIN_MEMBERS - len(thesis.members)) > 0:
+        return f"Your group needs {needed} more {'member' if needed == 1 else 'members'} to register"
+    return None
+
+
+def can_register(db: Session, user: User) -> bool:
+    return register_block(db, user) is None
 
 
 def new_code(db: Session) -> str:
@@ -269,10 +285,8 @@ def new_code(db: Session) -> str:
 def register_p1(db: Session, user: User) -> None:
     """Student: register their accepted group for P1 this semester. Only in the first week of the semester."""
     user = db.scalar(select(User).where(User.id == user.id).with_for_update())
-    if not can_register(db, user):
-        if not registration_open(db):
-            raise HTTPException(status.HTTP_409_CONFLICT, "P1 registration is closed, register in the first week of next semester")
-        raise HTTPException(status.HTTP_409_CONFLICT, "Only a P1 student with an accepted thesis group can register, once per semester")
+    if block := register_block(db, user):
+        raise HTTPException(status.HTTP_409_CONFLICT, block)
     thesis = user.thesis
     thesis.p1_registered, thesis.status = True, ThesisStatus.active
     thesis.code = thesis.code or new_code(db)  # kept if the group registers again in a later semester
@@ -280,8 +294,8 @@ def register_p1(db: Session, user: User) -> None:
 
 
 def can_defer(db: Session, thesis: Thesis, s: Standing | None = None) -> bool:
-    """s: the student's standing, if the caller already has it (see standings)."""
-    student = thesis.student
+    """s: a member's standing, if the caller already has it (see standings). Members share phase and deadlines."""
+    student = thesis.members[0] if thesis.members else None
     if thesis.status != ThesisStatus.active or student is None or student.phase != Phase.P3:
         return False
     s = s or standing(db, student)
@@ -344,13 +358,27 @@ def approve_restart(db: Session, user_id: int) -> User:
     return user
 
 
-def _restart(db: Session, user: User, now: datetime) -> None:
-    """Fresh start at P1 with no thesis. The old thesis is archived with all its versions; the next group gets a new thesis ID."""
+def release_thesis(db: Session, user: User) -> None:
+    """The student stops being a member of their thesis. When the last member goes, a never-registered thesis is deleted
+    (no thesis ID, no versions) and an active one is archived with all its versions. No commit."""
     thesis, user.thesis = user.thesis, None
-    if thesis is not None and thesis.status in UNREGISTERED:
-        db.delete(thesis)  # never registered, so it has no thesis ID and no versions
-    elif thesis is not None:
+    if thesis is None:
+        return
+    db.flush()
+    if db.scalar(select(func.count()).select_from(User).where(User.thesis_id == thesis.id)):
+        return  # other members carry on with it
+    if thesis.status in UNREGISTERED:
+        db.delete(thesis)
+    elif thesis.status == ThesisStatus.active:
         thesis.status, thesis.defer_pending = ThesisStatus.dropped, False
+
+
+def _restart(db: Session, user: User, now: datetime) -> None:
+    """Fresh start at P1 with no thesis and no group, so they can form a new one; the next group gets a new thesis ID."""
+    from app.services import group_service  # group_service uses this module, so import at call time
+
+    group_service.drop_membership(db, user)
+    release_thesis(db, user)
     user.phase, user.phase_started_at = Phase.P1, now
     user.frozen_at, user.restart_approved = None, False
 

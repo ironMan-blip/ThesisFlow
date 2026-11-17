@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role
-from tests.helpers import auth, me
+from tests.helpers import ask_supervisor, auth, me
 
 
 def ago(**delta):
@@ -19,7 +19,7 @@ def group(client, db, co=False, co_joins=True, register=True):
     """A thesis group, registered for P1 unless told not to. Returns (student, supervisor, co-supervisor or None, thesis id)."""
     s = auth(client, db, "s@x.com")
     sup = auth(client, db, "sup@x.com", Role.faculty)
-    res = client.post("/api/theses/mine", headers=s, json={"supervisor_id": me(client, sup)["id"]})
+    res = ask_supervisor(client, db, s, sup)
     assert res.status_code == 201, res.json()
     tid = res.json()["thesis"]["id"]
     assert client.post(f"/api/theses/requests/{tid}/accept", headers=sup).status_code == 204
@@ -159,7 +159,7 @@ def test_formed_group_can_log_before_p1_registration(client, db):
 def test_pending_group_has_no_meetings(client, db):
     s = auth(client, db, "s@x.com")
     sup = auth(client, db, "sup@x.com", Role.faculty)
-    res = client.post("/api/theses/mine", headers=s, json={"supervisor_id": me(client, sup)["id"]})
+    res = ask_supervisor(client, db, s, sup)
     tid = res.json()["thesis"]["id"]
     assert log(client, sup, tid).status_code == 404
     mine = client.get("/api/meetings/mine", headers=s).json()

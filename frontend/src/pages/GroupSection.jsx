@@ -5,8 +5,9 @@ import { Alerts, ConfirmDialog, DecideButtons, Icon, ICONS, Person, Skeleton } f
 import { when } from "../format";
 import { useAction } from "../useAction";
 
-// Student group (3 to 5 students): shown on the Thesis group page.
-export default function GroupSection() {
+// Student group (3 to 5 students): shown on the Thesis group page. onChange: membership changed, so the group's
+// thesis state (shared by members) must be fetched again.
+export default function GroupSection({ onChange }) {
   const { refreshCounts } = useOutletContext();
   const [state, setState] = useState(null);
   const [leaving, setLeaving] = useState(false);
@@ -21,6 +22,7 @@ export default function GroupSection() {
     run(key, async () => {
       setState(await api(path, options));
       refreshCounts();
+      onChange?.();
       return message;
     });
 
@@ -105,7 +107,9 @@ export default function GroupSection() {
                 </div>
                 <div className="flex gap-2">
                   {state.can_invite && <Link to="/teammates" className="btn-primary px-3 py-1.5">Invite students</Link>}
-                  <button onClick={() => setLeaving(true)} disabled={busy === "leave"} className="btn-ghost-danger px-3 py-1.5">Leave group</button>
+                  {state.can_leave && (
+                    <button onClick={() => setLeaving(true)} disabled={busy === "leave"} className="btn-ghost-danger px-3 py-1.5">Leave group</button>
+                  )}
                 </div>
               </div>
 
@@ -133,7 +137,10 @@ export default function GroupSection() {
                   </ul>
                 </div>
               )}
-              {!state.can_invite && state.is_leader && (
+              {state.locked && (
+                <p className="text-sm text-zinc-500">Your group is registered for P1, so nobody can join or leave it now.</p>
+              )}
+              {!state.can_invite && state.is_leader && !state.locked && (
                 <p className="alert-success"><Icon className="mt-px size-4">{ICONS.check}</Icon><span>Your group is full, counting invitations still waiting.</span></p>
               )}
             </section>
@@ -142,7 +149,8 @@ export default function GroupSection() {
       )}
 
       <ConfirmDialog open={leaving} title="Leave this group?" confirm="Yes, leave" danger onCancel={() => setLeaving(false)} onConfirm={leave}>
-        If you are the leader, the longest-standing member takes over. If you are the last member, the group is removed.
+        You also leave the group's thesis request. If you are the leader, the longest-standing member takes over. If you are the
+        last member, the group and its request are removed.
       </ConfirmDialog>
     </div>
   );

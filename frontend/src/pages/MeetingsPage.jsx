@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
 import { Alerts, ConfirmDialog, EmptyState, Skeleton, PageHeader } from "../components/ui";
-import { fromDhakaInput, personName, toDhakaInput, when } from "../format";
+import { fromDhakaInput, memberNames, personName, toDhakaInput, when } from "../format";
 import { TOOLS } from "../tools";
 import { useAction } from "../useAction";
 
@@ -242,7 +242,7 @@ export default function MeetingsPage() {
           <select value={thesisId ?? ""} onChange={(e) => setThesisId(Number(e.target.value))} className="input">
             {theses.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.code ?? "No thesis ID yet"} · {t.student ? t.student.full_name : "Account deleted"}{t.status !== "active" ? ` (${t.status === "dropped" ? "archived" : t.status})` : ""}
+                {t.code ?? "No thesis ID yet"} · {memberNames(t)}{t.status !== "active" ? ` (${t.status === "dropped" ? "archived" : t.status})` : ""}
               </option>
             ))}
           </select>

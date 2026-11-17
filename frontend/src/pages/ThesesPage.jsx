@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, download } from "../api/client";
 import { Alerts, DecideButtons, EmptyState, ICONS, PageHeader, Person, Skeleton, ThesisBadge, VersionInfo } from "../components/ui";
-import { personName, when } from "../format";
+import { memberNames, personName, when } from "../format";
 import { useAction } from "../useAction";
 
 const fullName = (p) => (p ? personName(p) : "Account deleted");
@@ -17,9 +17,10 @@ function Requests({ requests, decide, busy }) {
       <ul className="divide-y divide-zinc-100">
         {requests.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-            <Person user={r.student}>
+            {/* The member who asked may have deleted their account since; any member stands for the group then. */}
+            <Person user={r.student ?? r.members[0]}>
               {" "}· {r.slot === "supervisor"
-                ? "asks you to be their supervisor (accepting forms the group)"
+                ? `asks, for their group of ${r.members.length} (${memberNames(r)}), for you to be their supervisor (accepting forms the group)`
                 : r.slot === "co_supervisor"
                   ? `asks you to be co-supervisor of ${r.code ?? "their thesis"} (you join once ${fullName(r.supervisor)} also accepts)`
                   : `wants ${fullName(r.co_supervisor)} as co-supervisor of ${r.code ?? "their thesis"} (they join once you both accept)`}
@@ -57,7 +58,7 @@ export default function ThesesPage() {
       await load(); // a refused, stale request shows its current state
     }
     refreshCounts();
-    return `${r.student.full_name}: request ${accept ? "accepted" : "declined"}.`;
+    return `${memberNames(r)}: request ${accept ? "accepted" : "declined"}.`;
   });
 
   const defer = (t, on) => run(`defer-${t.id}`, async () => {
@@ -120,7 +121,7 @@ export default function ThesesPage() {
                 )}
               </div>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                <div><dt className="text-zinc-500">Student</dt><dd className="font-medium">{t.student ? `${t.student.full_name} · ID ${t.student.id_number}` : "Account deleted"}</dd></div>
+                <div><dt className="text-zinc-500">Students</dt><dd className="font-medium">{memberNames(t)}</dd></div>
                 <div><dt className="text-zinc-500">Supervisor</dt><dd className="font-medium">{fullName(t.supervisor)}</dd></div>
                 <div><dt className="text-zinc-500">Co-supervisor</dt><dd className="font-medium">
                   {!t.co_supervisor ? "None" : t.co_supervisor_joined ? fullName(t.co_supervisor) : `${fullName(t.co_supervisor)} (not joined yet)`}

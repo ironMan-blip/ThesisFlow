@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Alerts, Icon, ICONS, PageHeader, Person, Skeleton, ThesisBadge } from "../components/ui";
-import { personName, when } from "../format";
+import { memberNames, personName, when } from "../format";
 import { useAction } from "../useAction";
 import GroupSection from "./GroupSection";
 
@@ -10,9 +10,10 @@ export default function ThesisPage() {
   const [supervisor, setSupervisor] = useState("");
   const { busy, error, notice, setError, run, clear } = useAction();
 
-  useEffect(() => {
-    api("/theses/mine").then(setState).catch((err) => setError(err.message));
-  }, [setError]);
+  const load = useCallback(() => api("/theses/mine").then(setState).catch((err) => setError(err.message)), [setError]);
+  useEffect(() => { load(); }, [load]);
+  // Bumped after registering for P1, which locks the group: remounting GroupSection fetches its new state.
+  const [groupKey, setGroupKey] = useState(0);
 
   const submit = (e) => {
     e.preventDefault();
@@ -44,6 +45,7 @@ export default function ThesisPage() {
 
   const register = () => run("register", async () => {
     setState(await api("/theses/mine/register", { method: "POST" }));
+    setGroupKey((k) => k + 1);
     return "Your group is registered for P1 this semester.";
   });
 
@@ -62,8 +64,9 @@ export default function ThesisPage() {
         intro="Form your group with other students, then choose a supervisor. You need both before you can upload proposals."
         help={[
           "Create a group or accept an invitation. Invite teammates from Find teammates.",
-          "Choose a supervisor and send a request. The group forms when they accept.",
-          "After that you can add a co-supervisor if you like. They join when both they and your supervisor accept.",
+          "Once your group has at least 3 members, any member can choose a supervisor and send the request. The thesis belongs to the whole group, and it forms when the supervisor accepts.",
+          "After that any member can add a co-supervisor. They join when both they and your supervisor accept.",
+          "Students can join or leave until your group registers for P1. After that, the group is fixed.",
           "Every proposal version is kept under your thesis ID.",
         ]}
       />
@@ -86,7 +89,7 @@ export default function ThesisPage() {
         </section>
       )}
 
-      <GroupSection />
+      <GroupSection key={groupKey} onChange={load} />
 
       {!state ? (
         <Skeleton rows={2} row="h-28 rounded-xl" className="space-y-4" />
@@ -128,6 +131,10 @@ export default function ThesisPage() {
                 </p>
               )}
               <div className="space-y-4">
+                <div>
+                  <p className="mb-2 text-sm text-zinc-500">Students</p>
+                  <p className="font-medium">{memberNames(t)}</p>
+                </div>
                 <div>
                   <p className="mb-2 text-sm text-zinc-500">
                     Supervisor{t.status === "pending" && " (waiting to accept)"}
@@ -178,9 +185,12 @@ export default function ThesisPage() {
                   {t.p1_registered
                     ? "Your group is registered for P1 this semester."
                     : state.registration_open
-                      ? <>Register your group to work on P1 this semester. Open until <span className="font-medium tabular-nums">{when(state.registration_closes_at)}</span>.</>
+                      ? <>Register your group to work on P1 this semester. Open until <span className="font-medium tabular-nums">{when(state.registration_closes_at)}</span>. After that, nobody can join or leave the group.</>
                       : "P1 registration is closed. Your group can register in the first week of next semester; nothing is due for you until then."}
                 </p>
+                {state.registration_open && state.register_block && !t.p1_registered && (
+                  <p className="mt-2 text-sm font-medium text-amber-800">{state.register_block}.</p>
+                )}
               </div>
               {state.can_register && (
                 <button onClick={register} disabled={busy === "register"} className="btn-primary">
@@ -190,13 +200,20 @@ export default function ThesisPage() {
             </section>
           )}
 
-          {state.can_form_group && (
+          {(state.can_form_group || state.form_group_block) && (
             <form onSubmit={submit} className="card space-y-5 p-6">
               <div>
                 <h2 className="font-semibold">Choose a supervisor</h2>
-                <p className="mt-1 text-sm text-zinc-500">Your thesis group is formed, with its thesis ID, once the supervisor accepts.</p>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Any member can send the request for the whole group. Your group is formed once the supervisor accepts.
+                </p>
               </div>
-              <div className="flex flex-wrap items-end gap-3">
+              {state.form_group_block && (
+                <p role="status" className="alert border-amber-200 bg-amber-50 text-amber-900">
+                  <Icon className="mt-px size-4">{ICONS.alert}</Icon><span>{state.form_group_block}.</span>
+                </p>
+              )}
+              <fieldset disabled={!state.can_form_group} className="flex flex-wrap items-end gap-3">
                 <label className="label min-w-56 flex-1">
                   Supervisor
                   <select name="supervisor_id" required value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="input">
@@ -207,8 +224,8 @@ export default function ThesisPage() {
                 <button disabled={busy === "ask" || !state.faculty_choices.length} className="btn-primary">
                   {busy === "ask" ? "Sending…" : "Send request"}
                 </button>
-              </div>
-              {!state.faculty_choices.length && <p className="text-sm text-zinc-500">No faculty members are available yet.</p>}
+              </fieldset>
+              {state.can_form_group && !state.faculty_choices.length && <p className="text-sm text-zinc-500">No faculty members are available yet.</p>}
             </form>
           )}
         </>

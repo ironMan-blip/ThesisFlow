@@ -5,9 +5,10 @@ from itertools import count
 from pypdf import PdfWriter
 from sqlalchemy import update
 
+from app.models.group import MIN_MEMBERS, Group, GroupMember
 from app.models.semester import Semester
 from app.models.user import DELETION_DELAY, Role, User
-from app.services import account_service, auth_service
+from app.services import account_service, auth_service, group_service
 
 
 
@@ -40,9 +41,31 @@ def me(client, headers):
     return client.get("/api/auth/me", headers=headers).json()
 
 
+def make_group(client, db, student, size=MIN_MEMBERS):
+    """Put the student in a student group with size - 1 new teammates, unless they are in one already. Returns it."""
+    lead = db.get(User, me(client, student)["id"])
+    if member := group_service.membership(db, lead.id):
+        return member.group
+    group = Group(name="Team", leader=lead)
+    group.members.append(GroupMember(user=lead))
+    for _ in range(size - 1):
+        n = next(_id_numbers)
+        group.members.append(GroupMember(user=auth_service.create_user(db, f"m{n}@x.com", str(n), "M", "Password123", Role.student)))
+    db.add(group)
+    db.flush()
+    return group
+
+
+def ask_supervisor(client, db, student, supervisor):
+    """The student's group (made here if needed) asks the supervisor."""
+    make_group(client, db, student)
+    return client.post("/api/theses/mine", headers=student, json={"supervisor_id": me(client, supervisor)["id"]})
+
+
 def form_group(client, db, student, supervisor=None):
-    """Student asks a supervisor (made here unless given) and the supervisor accepts. Returns the supervisor's headers."""
+    """Student's group asks a supervisor (made here unless given) and the supervisor accepts. Returns the supervisor's headers."""
     supervisor = supervisor or auth(client, db, f"sup{next(_id_numbers)}@x.com", Role.faculty)
+    make_group(client, db, student)
     res = client.post("/api/theses/mine", headers=student, json={"supervisor_id": me(client, supervisor)["id"]})
     assert res.status_code == 201, res.json()
     tid = res.json()["thesis"]["id"]

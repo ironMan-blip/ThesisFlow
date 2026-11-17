@@ -27,7 +27,8 @@ class ThesisOut(BaseModel):
     id: int
     code: str | None  # the thesis ID, e.g. T12345678; None until the supervisor accepts
     status: ThesisStatus
-    student: PersonOut | None  # None once the student's account is deleted
+    student: PersonOut | None  # the member who sent the supervisor request; None once their account is deleted
+    members: list[PersonOut]  # the group's students on this thesis now; may be empty once archived
     supervisor: PersonOut | None
     co_supervisor: PersonOut | None  # named on a formed group; a member once both flags below are true
     co_supervisor_accepted: bool  # by the co-supervisor
@@ -68,7 +69,9 @@ class MyThesisOut(BaseModel):
     registration_closes_at: datetime | None  # end of this semester's one-week P1 registration
     registration_open: bool
     can_register: bool  # an accepted group in P1 that can register now
-    can_form_group: bool
+    register_block: str | None  # why an accepted P1 group can't register now
+    can_form_group: bool  # a member of a ready group with no thesis can ask a supervisor
+    form_group_block: str | None  # why not, while the student has no thesis
     can_cancel: bool  # the group request still waits for the supervisor
     can_add_co_supervisor: bool  # a formed group with no co-supervisor named
     can_cancel_co_supervisor: bool  # a co-supervisor was added but hasn't joined yet

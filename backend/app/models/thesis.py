@@ -23,14 +23,18 @@ UNREGISTERED = (ThesisStatus.pending, ThesisStatus.formed)
 
 
 class Thesis(Base):
-    """A thesis group: one student, a supervisor and an optional co-supervisor. Every proposal version belongs to one."""
+    """A student group's thesis: its members, a supervisor and an optional co-supervisor. Every proposal version belongs
+    to one. The members are the students whose users.thesis_id points here (see `members`)."""
 
     __tablename__ = "theses"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # The thesis ID people see, e.g. T12345678; issued when the group registers for P1.
     code: Mapped[str | None] = mapped_column(String(9), unique=True)
+    # The student group this thesis belongs to; null on theses made before groups, or once the group is gone.
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("student_groups.id", ondelete="SET NULL"), index=True)
     # SET NULL everywhere: deleting an account never deletes a thesis or its versions.
+    # The member who sent the supervisor request (kept for the record; every member acts on the thesis).
     student_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     # Null only on archived rows made from proposals that existed before thesis groups.
     supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
@@ -53,6 +57,9 @@ class Thesis(Base):
     abstract: Mapped[str | None] = mapped_column(Text)
 
     student = relationship("User", foreign_keys=[student_id])
+    group = relationship("Group")
+    # Students currently on this thesis. Archived theses (restart, deleted accounts) may have none.
+    members = relationship("User", primaryjoin="Thesis.id == foreign(User.thesis_id)", viewonly=True, order_by="User.id")
     supervisor = relationship("User", foreign_keys=[supervisor_id])
     co_supervisor = relationship("User", foreign_keys=[co_supervisor_id])
     proposal = relationship("Proposal", back_populates="thesis", uselist=False)

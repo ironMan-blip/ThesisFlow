@@ -9,7 +9,7 @@ from app.models.milestone import GroupMilestone, MilestoneTemplate, Phase
 from app.models.thesis import Thesis, ThesisStatus
 from app.models.user import Role, User
 from tests.conftest import engine
-from tests.helpers import PDF, REASON, auth, close_registration, form_group, me, run_deletions_due, student, supervised_student, upload
+from tests.helpers import PDF, REASON, ask_supervisor, auth, close_registration, form_group, me, run_deletions_due, student, supervised_student, upload
 
 pytestmark = pytest.mark.usefixtures("timelines")
 
@@ -18,8 +18,8 @@ def mine(client, h):
     return client.get("/api/theses/mine", headers=h).json()
 
 
-def ask(client, h, supervisor):
-    return client.post("/api/theses/mine", headers=h, json={"supervisor_id": me(client, supervisor)["id"]})
+def ask(client, db, h, supervisor):
+    return ask_supervisor(client, db, h, supervisor)
 
 
 def add_co(client, h, co):
@@ -67,15 +67,15 @@ def test_group_forms_when_the_supervisor_accepts(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     other_student = auth(client, db, "o@x.com")
 
-    assert ask(client, s, other_student).status_code == 422  # supervisor must be faculty
-    res = ask(client, s, sup)
+    assert ask(client, db, s, other_student).status_code == 422  # supervisor must be faculty
+    res = ask(client, db, s, sup)
     assert res.status_code == 201
     t = res.json()["thesis"]
     assert (t["status"], t["code"], t["co_supervisor"]) == ("pending", None, None)
     flags = mine(client, s)
     assert (flags["can_cancel"], flags["show_p1_registration"], flags["can_add_co_supervisor"]) == (True, False, False)
     assert add_co(client, s, auth(client, db, "co@x.com", Role.faculty)).status_code == 409  # only after forming
-    assert ask(client, s, sup).status_code == 409  # one group at a time
+    assert ask(client, db, s, sup).status_code == 409  # one group at a time
     assert client.get("/api/auth/me/counts", headers=sup).json() == {"theses": 1}
     assert answer(client, other_student, t["id"]) == 403
 
@@ -166,11 +166,11 @@ def test_a_stale_answer_never_approves_a_swapped_co_supervisor(client, db):
 def test_declines_and_cancel(client, db):
     s = auth(client, db, "s@x.com")
     sup = auth(client, db, "sup@x.com", Role.faculty)
-    tid = ask(client, s, sup).json()["thesis"]["id"]
+    tid = ask(client, db, s, sup).json()["thesis"]["id"]
     assert answer(client, sup, tid, yes=False) == 204
     assert mine(client, s)["thesis"] is None and mine(client, s)["can_form_group"] is True
 
-    ask(client, s, sup)
+    ask(client, db, s, sup)
     assert client.delete("/api/theses/mine", headers=s).json()["thesis"] is None
     form_group(client, db, s, sup)
     assert client.delete("/api/theses/mine", headers=s).status_code == 409  # an active group can't be cancelled
@@ -223,12 +223,15 @@ def test_missed_deadline_freezes_until_restart_at_p1(client, db):
 
     state = mine(client, s)
     assert state["restart_approved"] is False
-    assert (state["phase"], state["thesis"], state["frozen_reason"], state["can_form_group"]) == ("P1", None, None, True)
+    # A fresh start leaves the old group too; the teammates (who didn't restart) keep the old thesis.
+    assert (state["phase"], state["thesis"], state["frozen_reason"], state["form_group_block"]) == (
+        "P1", None, None, "Create or join a group first"
+    )
     form_group(client, db, s)
     new_thesis = mine(client, s)["thesis"]
     assert new_thesis["code"] != old_thesis["code"]  # a new thesis ID
     archived = {t["id"]: t for t in client.get("/api/theses", headers=sup).json()}
-    assert archived[old_thesis["id"]]["status"] == "dropped"
+    assert archived[old_thesis["id"]]["status"] == "active"  # still the teammates' thesis
     assert len(archived[old_thesis["id"]]["versions"]) == 1  # nothing is lost
 
 
@@ -241,7 +244,7 @@ def test_extension_without_restart_request_lets_a_frozen_student_continue(client
     db.get(MilestoneTemplate, Phase.P1).grace_days = 2  # extended, and they never asked to restart
     db.flush()
     assert upload(client, s).status_code == 201
-    assert close_all_and_roll(client, db, coord)["advanced"] == 1
+    assert close_all_and_roll(client, db, coord)["advanced"] == 3  # the whole group
     assert me(client, s)["phase"] == "P2"
 
 
@@ -283,7 +286,7 @@ def test_groups_form_any_time_but_register_for_p1_only_in_the_first_week(client,
 
     # After the first week, groups still form and get accepted, but can't register for P1.
     close_registration(db)
-    assert mine(client, late)["can_form_group"] is True
+    assert mine(client, late)["form_group_block"] == "Create or join a group first"
     form_group(client, db, late, sup)
     assert mine(client, late)["can_register"] is False
     res = client.post("/api/theses/mine/register", headers=late)
@@ -296,7 +299,7 @@ def test_groups_form_any_time_but_register_for_p1_only_in_the_first_week(client,
     close(db, Phase.P1)
     assert [mine(client, h)["frozen_reason"] for h in (unregistered, late)] == [None, None]
     res = close_all_and_roll(client, db, coord)
-    assert (res["advanced"], res["frozen"]) == (1, 0)
+    assert (res["advanced"], res["frozen"]) == (3, 0)  # on_time's group of 3
     assert [me(client, h)["phase"] for h in (on_time, unregistered, late)] == ["P2", "P1", "P1"]
 
     # The new semester opens registration again.
@@ -314,7 +317,8 @@ def test_rollover_moves_students_on_and_saves_freezes(client, db):
     res = client.post("/api/milestones/next-semester", headers=coord)
     assert (res.status_code, res.json()["detail"]) == (409, "P1, P2, P3 is still open, wait until its grace period ends")
 
-    assert close_all_and_roll(client, db, coord) == {"advanced": 1, "completed": 0, "deferred": 0, "frozen": 1, "restarted": 0}
+    # done's group of 3 moves on; only missed (not its teammates) started the phase before the deadline.
+    assert close_all_and_roll(client, db, coord) == {"advanced": 3, "completed": 0, "deferred": 0, "frozen": 1, "restarted": 0}
     assert me(client, done)["phase"] == "P2"
     assert [m["status"] for m in client.get("/api/milestones", headers=coord).json()["milestones"]] == ["not_set"] * 3
     # The freeze is saved, so it outlives the cleared deadlines.
@@ -387,7 +391,7 @@ def test_faculty_who_accepted_a_group_are_kept_until_its_thesis_ends(client, db)
     unschedule = lambda h: client.delete(f"/api/auth/deletion-requests/{me(client, h)['id']}", headers=coord).status_code
     ask_delete = lambda h: client.post("/api/auth/me/deletion-request", headers=h, json=REASON).status_code
 
-    ask(client, s, sup)
+    ask(client, db, s, sup)
     assert schedule(sup) == 200  # a request they haven't accepted doesn't keep them
     assert unschedule(sup) == 200
     tid = mine(client, s)["thesis"]["id"]
@@ -409,7 +413,7 @@ def test_a_deletion_drops_requests_not_yet_accepted(client, db):
     coord = auth(client, db, "c@x.com", Role.coordinator)
     f, sup2 = auth(client, db, "f@x.com", Role.faculty), auth(client, db, "sup2@x.com", Role.faculty)
     s1, s2 = auth(client, db, "s1@x.com"), auth(client, db, "s2@x.com")
-    ask(client, s1, f)
+    ask(client, db, s1, f)
     form_group(client, db, s2, sup2)
     add_co(client, s2, f)
     fid = me(client, f)["id"]
@@ -417,7 +421,7 @@ def test_a_deletion_drops_requests_not_yet_accepted(client, db):
 
     s3 = auth(client, db, "s3@x.com")
     assert fid not in [p["id"] for p in mine(client, s3)["faculty_choices"]]
-    assert ask(client, s3, f).status_code == 422  # can't be picked while leaving
+    assert ask(client, db, s3, f).status_code == 422  # can't be picked while leaving
     assert answer(client, f, mine(client, s1)["thesis"]["id"]) == 409  # nor accept, which would keep the account
     assert run_deletions_due(db) == 1
     assert (mine(client, s1)["thesis"], mine(client, s1)["can_form_group"]) == (None, True)

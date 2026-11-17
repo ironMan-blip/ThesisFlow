@@ -68,6 +68,7 @@ class MyGroupOut(BaseModel):
     can_create: bool
     can_invite: bool  # leader with a free spot (members + live invitations < max)
     can_leave: bool
+    locked: bool  # registered for P1: nobody joins or leaves any more
     open_slots: int
     sent_invitations: list[InvitationOut]  # live ones, for the group's members
     received_invitations: list[InvitationOut]  # live ones, for a student without a group

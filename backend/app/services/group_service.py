@@ -22,7 +22,9 @@ from app.models.group import (
     InvitationStatus,
     StudentProfile,
 )
+from app.models.thesis import FORMED, Thesis, ThesisStatus
 from app.models.user import Role, User
+from app.services import progress_service
 from app.schemas.group import (
     GroupCreate,
     GroupOut,
@@ -35,6 +37,7 @@ from app.schemas.group import (
 from app.schemas.thesis import PersonOut
 
 MAX_RESULTS = 50
+LIVE = (ThesisStatus.pending, *FORMED)  # a group has at most one of these at a time
 
 
 def _live():
@@ -95,18 +98,30 @@ def _group_out(group: Group) -> GroupOut:
     )
 
 
+def thesis_of(db: Session, group: Group) -> Thesis | None:
+    """The group's current thesis (requested, accepted or registered), if any."""
+    return db.scalar(select(Thesis).where(Thesis.group_id == group.id, Thesis.status.in_(LIVE)))
+
+
+def _locked(thesis: Thesis | None) -> bool:
+    # Registered for P1: from then on nobody joins or leaves (a restart or account deletion still takes a member out).
+    return thesis is not None and thesis.status == ThesisStatus.active
+
+
 def mine(db: Session, user: User) -> MyGroupOut:
     member = membership(db, user.id)
     group = member.group if member else None
     is_leader = group is not None and group.leader_id == user.id
+    locked = group is not None and _locked(thesis_of(db, group))
     sent = _live_invitations(db, group_id=group.id) if group else []
     slots = MAX_MEMBERS - len(group.members) - len(sent) if group else 0
     return MyGroupOut(
         group=group and _group_out(group),
         is_leader=is_leader,
         can_create=group is None,
-        can_invite=is_leader and slots > 0,
-        can_leave=group is not None,
+        can_invite=is_leader and slots > 0 and not locked,
+        can_leave=group is not None and not locked,
+        locked=locked,
         open_slots=max(0, slots),
         sent_invitations=[_invitation_out(i) for i in sent],
         received_invitations=[] if group else [_invitation_out(i) for i in _live_invitations(db, invitee_id=user.id)],
@@ -153,6 +168,8 @@ def invite(db: Session, user: User, student_id: int) -> MyGroupOut:
     group = _lock_group(db, member.group_id)
     if group.leader_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the group leader can invite students")
+    if _locked(thesis_of(db, group)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Your group is registered for P1, so it can't take new members")
     invitee = db.get(User, student_id)
     if invitee is None or invitee.role != Role.student or not invitee.approved or invitee.id == user.id:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose another student to invite")
@@ -198,6 +215,16 @@ def decide(db: Session, user: User, invitation_id: int, accept: bool) -> MyGroup
         raise HTTPException(status.HTTP_409_CONFLICT, "You are already in a group")
     if len(group.members) >= MAX_MEMBERS:
         raise HTTPException(status.HTTP_409_CONFLICT, "That group is already full")
+    if thesis := thesis_of(db, group):
+        # Joining before P1 registration: the new member shares the group's thesis, so they must be able to work on it.
+        if _locked(thesis):
+            raise HTTPException(status.HTTP_409_CONFLICT, "That group is registered for P1, so it can't take new members")
+        phase = thesis.members[0].phase if thesis.members else user.phase
+        if user.thesis_id is not None or user.phase != phase or progress_service.standing(db, user).frozen:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, f"That group has a thesis in {phase.value if phase else 'another phase'}, which you can't join now"
+            )
+        user.thesis = thesis
     group.members.append(GroupMember(user=user))
     invitation.status = InvitationStatus.accepted
     _cancel_invitations_to(db, user.id, keep_id=invitation.id)
@@ -222,13 +249,19 @@ def leave(db: Session, user: User) -> MyGroupOut:
     member = membership(db, user.id)
     if member is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "You are not in a group")
+    thesis = thesis_of(db, _lock_group(db, member.group_id))
+    if _locked(thesis):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Your group is registered for P1, so members can't leave")
+    if thesis is not None and user.thesis_id == thesis.id:
+        progress_service.release_thesis(db, user)  # leaving the group means leaving its thesis
     _remove(db, user, member)
     db.commit()
     return mine(db, user)
 
 
 def drop_membership(db: Session, user: User) -> None:
-    """Called before an account is deleted (account_service): leave the group so it keeps a leader. No commit."""
+    """Called before an account is deleted or a restart (no lock applies): leave the group so it keeps a leader.
+    The caller deals with the thesis. No commit."""
     if member := membership(db, user.id):
         _remove(db, user, member)
 
