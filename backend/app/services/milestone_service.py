@@ -114,6 +114,10 @@ def set_milestone(db: Session, phase: Phase, data: MilestoneIn) -> None:
         # A new due date in the past makes everyone late at once. Keeping a passed due date (to change grace or
         # penalty during grace) is fine.
         raise HTTPException(422, "The due date must be in the future")
+    if current and due_at <= now and data.penalty_per_day > current.penalty_per_day:
+        # Penalties are worked out from the current rate, so raising it after the due date would make work already
+        # handed in late cost more. Before the due date nobody is late yet; lowering it only helps students.
+        raise HTTPException(422, "The due date has passed, so the late penalty can only be lowered now")
     registration_closes = progress_service.semester_registration_window(semester)[1]
     if phase == Phase.P1 and due_at <= registration_closes:
         # Groups can still register until then, so an earlier P1 deadline would catch them mid-registration.

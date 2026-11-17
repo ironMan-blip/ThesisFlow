@@ -30,6 +30,19 @@ def test_grace_countdown_targets_closes_at(client, db):
     assert (p1["status"], p1["countdown_to"], p1["countdown_label"]) == ("grace", p1["closes_at"], "Grace ends in")
 
 
+def test_penalty_can_only_be_lowered_after_the_due_date(client, db):
+    coord = auth(client, db, "c@x.com", Role.coordinator)
+    close_registration(db)
+    due = datetime.now(timezone.utc) - timedelta(minutes=5)
+    set_past(db, "P2", due, grace=2, penalty=10)
+    # Raising it would make work already handed in late cost more.
+    res = put(client, coord, "P2", due, grace=2, penalty=20)
+    assert (res.status_code, res.json()["detail"]) == (422, "The due date has passed, so the late penalty can only be lowered now")
+    assert by_phase(put(client, coord, "P2", due, grace=2, penalty=5))["P2"]["penalty_per_day"] == 5
+    # Moving the due date into the future makes nobody late, so any penalty is fine again.
+    assert by_phase(put(client, coord, "P2", F, penalty=30))["P2"]["penalty_per_day"] == 30
+
+
 def set_past(db, phase, due_at, grace=0, penalty=10):
     # The API refuses due dates in the past, so tests that start mid-grace write the deadline directly.
     db.merge(MilestoneTemplate(semester_id=current_semester_id(db), phase=Phase(phase), due_at=due_at, grace_days=grace, penalty_per_day=penalty))
@@ -127,8 +140,10 @@ def test_student_late_days_and_penalty(client, db):
     assert rows["P1"]["submitted_at"] is not None
     assert (rows["P1"]["late_days"], rows["P1"]["penalty_percent"]) == (3, 45)
 
-    # Same passed due date: the coordinator may still change the penalty during grace.
-    assert put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=40).status_code == 200
+    # Same passed due date: the coordinator may still lower the penalty during grace (raising it is refused).
+    assert put(client, coord, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=5).status_code == 200
+    assert by_phase(client.get("/api/milestones", headers=s))["P1"]["penalty_percent"] == 15  # 3 x 5%
+    set_past(db, "P1", now - timedelta(days=3) + timedelta(minutes=1), grace=4, penalty=40)
     assert by_phase(client.get("/api/milestones", headers=s))["P1"]["penalty_percent"] == 100  # 3 x 40% capped
 
     # Grace over and never submitted: a missed deadline, not a late one.

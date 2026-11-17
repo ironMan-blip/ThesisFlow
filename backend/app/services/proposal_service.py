@@ -23,7 +23,13 @@ CHUNK = 1024 * 1024
 # Content a PDF viewer could run or hand to the OS: scripts, launch actions, attached files, XFA forms.
 ACTIVE_KEYS = {"/JS", "/JavaScript", "/EmbeddedFiles", "/EmbeddedFile", "/XFA", "/RichMedia"}
 # /GoToR opens another file: a UNC path (\\host\share) makes Windows send the reader's login hash to that host.
-ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToE", "/GoToR", "/RichMediaExecute", "/SubmitForm"}
+# Sound, Movie and Rendition play embedded media, more parser surface in the reader for no proposal content.
+ACTIVE_ACTIONS = {
+    "/JavaScript", "/Launch", "/ImportData", "/GoToE", "/GoToR", "/RichMediaExecute", "/SubmitForm",
+    "/Sound", "/Movie", "/Rendition",
+}
+# Annotations that hold or play media.
+MEDIA_ANNOTATIONS = {"/Sound", "/Movie", "/Screen"}
 LINK_SCHEMES = ("http://", "https://", "mailto:")
 # Bounds the object walk, so a crafted file with millions of tiny objects can't tie up a worker.
 MAX_PDF_OBJECTS = 200_000
@@ -166,6 +172,15 @@ def _web_link(uri: object) -> bool:
     return text.strip().lower().startswith(LINK_SCHEMES)
 
 
+def _goto_only(open_action: object) -> bool:
+    # What LaTeX and Word write: a page to open at (a destination array) or a GoTo action with nothing chained after it.
+    if isinstance(open_action, ArrayObject):
+        return True
+    if not isinstance(open_action, DictionaryObject) or "/S" not in open_action:
+        return False
+    return open_action["/S"] == "/GoTo" and "/Next" not in open_action  # [], not .get: resolves an indirect /S
+
+
 def _check_pdf(path: Path) -> None:
     """Refuse anything a PDF reader can't open, an encrypted file (it can't be checked), or one with active content.
     Then replace the file with a clean rewrite of what was checked."""
@@ -189,10 +204,18 @@ def _check_pdf(path: Path) -> None:
             elif isinstance(obj, DictionaryObject):
                 # obj["/S"], not .get: it resolves an indirect /S, which viewers follow too.
                 action = obj["/S"] if "/S" in obj else None
-                if ACTIVE_KEYS.intersection(obj) or action in ACTIVE_ACTIONS:
+                subtype = obj["/Subtype"] if "/Subtype" in obj else None
+                if ACTIVE_KEYS.intersection(obj) or action in ACTIVE_ACTIONS or subtype in MEDIA_ANNOTATIONS:
                     raise HTTPException(
                         status.HTTP_422_UNPROCESSABLE_CONTENT,
-                        "PDF must not contain scripts, attached files or interactive forms",
+                        "PDF must not contain scripts, attached files, media or interactive forms",
+                    )
+                if "/AA" in obj or ("/OpenAction" in obj and not _goto_only(obj["/OpenAction"])):
+                    # Actions that run without a click (on open, on page view, on hover) could call a web link and
+                    # tell the uploader when and from where the supervisor opened the file. Clicked links stay allowed.
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        "PDF must not run actions by itself when opened; links must only open when clicked",
                     )
                 if action == "/URI" and not _web_link(obj["/URI"] if "/URI" in obj else None):
                     raise HTTPException(
@@ -247,12 +270,21 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     return stored, path.stat().st_size, digest.hexdigest()
 
 
+def _check_version_cap(db: Session, user: User) -> None:
+    if db.scalar(select(func.count()).where(progress_service.phase_uploads(user))) >= MAX_VERSIONS_PER_PHASE:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"You've uploaded {MAX_VERSIONS_PER_PHASE} versions this phase, the most allowed",
+        )
+
+
 def upload_version(db: Session, user: User, title: str, abstract: str, file: UploadFile) -> ProposalOut:
     # Uploads always go to the student's current phase, under their thesis ID.
     if block := _upload_block(db, user)[0]:
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = _clean(title, abstract)
     _check_title(user.thesis, title, abstract)  # before storing the file, so a wrong title fails fast
+    _check_version_cap(db, user)  # also before storing: a student at the cap can't make the server save and scan files
 
     stored, size, sha256 = _save_pdf(file)
     keep_new_file = True
@@ -273,13 +305,9 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         gm = progress_service.group_milestone(db, user, create=True)
         last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.proposal_id == proposal.id))
         name = Path(file.filename or "").name[:255]
-        # Every upload is a new version (SRS F11), even an identical file. Counted under the thesis lock,
+        # Every upload is a new version (SRS F11), even an identical file. Counted again under the thesis lock,
         # so parallel uploads can't both slip under the cap.
-        if db.scalar(select(func.count()).where(progress_service.phase_uploads(user))) >= MAX_VERSIONS_PER_PHASE:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                f"You've uploaded {MAX_VERSIONS_PER_PHASE} versions this phase, the most allowed",
-            )
+        _check_version_cap(db, user)
         db.add(ProposalVersion(
             proposal_id=proposal.id,
             version_no=(last or 0) + 1,

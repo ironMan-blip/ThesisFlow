@@ -184,6 +184,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
   - a **grace period** in days (0 to 7),
   - a **late penalty** in percent per day (0 to 100).
 - A deadline must end (due date plus grace) in the future, and P1 can only be due after P1 registration closes.
+- Once the due date has passed, the late penalty can only be lowered, never raised, so work already handed in late never costs more.
 - Phase deadlines are independent: any phase can be due before or after another. In one semester P1, P2 and P3 students each work to their own phase's deadline.
 - Each semester has its own P1, P2 and P3 deadlines; the coordinator picks which semester to view and edit on **Deadlines**. A semester's deadlines fall in week 2 of the next one, so a group works to the deadline of the semester it registered for P1 in (or moved into its phase in), even after the next semester starts. New groups registering in the next semester get that semester's deadlines.
 - Everyone sees each phase's status: **not set**, **open**, **in grace**, or **closed**, with a live countdown ("Due in" while open, "Grace ends in" during grace).
@@ -218,7 +219,8 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF is a new version too, and it becomes the latest. Final submissions from earlier phases are never touched.
 - Title and abstract: set by the first upload and stored on the thesis; every later upload (any phase) must match them exactly. To change them the student sends a request (new title and abstract) from **Proposal**. Only the thesis's **supervisor** can accept or reject it on **Theses**, and only within 3 days; after that it expires. A rejected or expired request can be sent again; once one is accepted, no more changes. Versions uploaded before the change keep their old title and abstract; the first version after it shows a "Title changed" / "Abstract changed" badge. Waiting requests count in the supervisor's **Theses** badge.
-- Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions, re-uploads included.
+- Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions, re-uploads included. At the cap, an upload is refused before the file is saved or scanned.
+- PDFs with scripts, attached files, media (sound, movie, screen) or interactive forms are refused. So are PDFs that run actions by themselves (page or hover actions, or an open action other than "go to a page"): links must only open when clicked.
 - Students see only their own theses. Only the thesis's group and its supervisors can download its versions, not the coordinator.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
 
