@@ -15,6 +15,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Each role sees only its own tools; the API returns the tool list.
 - Count badges on tools with waiting work (registration, deletion, restart, supervision requests).
 - Fixed sidebar on desktop, slide-out drawer on phones.
+- Dashboard "up next" panel: waiting requests to decide, else the nearest deadline with time left.
 - Each page's rules fold away under a "How this works" toggle; on long pages, success and error messages float at the bottom of the screen and can be dismissed.
 
 **Accounts and login**
@@ -32,7 +33,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Student requests a group with a supervisor; the supervisor accepting forms it (thesis active, ID like `T12345678`).
 - A co-supervisor (optional) can only be added to a formed group, and joins once both they and the supervisor accept.
 - Student can cancel a pending request and choose again.
-- P1 registration window: first week of each semester; only registered groups can upload for P1.
+- P1 registration window per semester (coordinator can set it for any semester); only registered groups can upload for P1.
 - Faculty see theses they supervise or co-supervise. The coordinator never sees individual theses: they run semesters and accounts.
 
 **Deadlines and phases**
@@ -141,7 +142,7 @@ There are three roles. Each one sees only its own tools in the navigation and on
 | Faculty | Theses, Deadlines, Account |
 | Coordinator | Deadlines, Accounts, Registration requests, Deletion requests, Restart requests |
 
-Tools with waiting work (registration, deletion, restart or supervision requests) show a count badge in the nav and on the dashboard. The nav is a fixed sidebar on desktop and a slide-out drawer on phones.
+Tools with waiting work (registration, deletion, restart or supervision requests) show a count badge in the nav and on the dashboard. The top of the dashboard shows what matters now: if requests wait for a decision, a link to the first one; otherwise the next deadline (the student's own running phase, else the countdown that ends soonest, from `next_deadline` in `GET /api/milestones`) with days, or hours on the last day, left. The nav is a fixed sidebar on desktop and a slide-out drawer on phones.
 
 Supervisor and panel member are not account roles. A supervisor is a faculty user linked to a thesis group; panel members will be linked to a defense.
 
@@ -198,7 +199,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 
 - A student needs a **thesis group** to upload: a student group of 3 to 5 and a **supervisor** (faculty). Once the group has at least 3 members (all in the same phase, none frozen), **any member** sends the request on the **Thesis group** page; the thesis belongs to the whole group and every member shares it (uploads, deadlines, meetings). Any member can cancel the request or add a co-supervisor.
 - **Membership:** until the group registers for P1, students can join (they share the group's thesis) or leave (they lose it; the last one out removes an unregistered request). Registering needs at least 3 members. **After P1 registration nobody joins or leaves**; only an approved restart (the student starts fresh with no group) or an account deletion takes a member out, and the others keep the thesis.
-- **P1 registration:** students sign up, ask for a group, and faculty accept any time. But an accepted group can only **register for P1** (button on the Thesis group page) in the **first week of each semester** (from the semester rollover; the first one starts when the database is set up). Only a registered group can upload for P1. A P1 group that didn't register has nothing due that semester and stays at P1; registration is cleared at every rollover.
+- **P1 registration:** students sign up, ask for a group, and faculty accept any time. But an accepted group can only **register for P1** (button on the Thesis group page) in the **first week of each semester** (from the semester rollover; the first one starts when the database is set up). The coordinator can change any semester's window on **Deadlines** (`PUT /api/milestones/registration` with `semester_id`); it must close before that semester's P1 is due. Only a registered group can upload for P1. A P1 group that didn't register has nothing due that semester and stays at P1; registration is cleared at every rollover.
 - The supervisor accepts or declines under **Theses**. Accepting forms the group; groups can be formed at any time. The formed group then registers for P1, which makes it active and gives it its **thesis ID** (e.g. `T12345678`: "T" + 8 random digits, unique), kept from then on. Only then can it upload proposals. A decline, or the student cancelling while it waits, lets the student choose again.
 - A **co-supervisor** (optional, faculty) can only be added once the group is formed, from **Thesis group**. They join only when **both** they and the supervisor accept (in either order, each under **Theses**). If either declines, or the student withdraws it first, the group stays as it is without a co-supervisor and the student can pick someone else. A co-supervisor who joined sees the thesis and its versions, but decides nothing.
 - Every proposal version is stored under the thesis ID, so nothing is lost: deleting an account or restarting keeps the thesis and its versions as an archive. Faculty see the theses they supervise or co-supervise; the coordinator sees none.
@@ -218,7 +219,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - Only the student uploads. The group (the student, the supervisor, and the co-supervisor once joined) can view and download its versions; the coordinator can't.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
 - Re-submitting the exact same PDF is a new version too, and it becomes the latest. Final submissions from earlier phases are never touched.
-- Title and abstract: set by the first upload and stored on the thesis; every later upload (any phase) must match them exactly. To change them the student sends a request (new title and abstract) from **Proposal**. Only the thesis's **supervisor** can accept or reject it on **Theses**, and only within 3 days; after that it expires. A rejected or expired request can be sent again; once one is accepted, no more changes. Versions uploaded before the change keep their old title and abstract; the first version after it shows a "Title changed" / "Abstract changed" badge. Waiting requests count in the supervisor's **Theses** badge.
+- Title and abstract: set by the first upload and stored on the thesis; every later upload (any phase) must match them exactly. To change them the student sends a request (new title and abstract) from **Proposal**. Only the thesis's **supervisor** can accept or reject it on **Theses**, and only within 3 days; after that it expires. A rejected or expired request can be sent again; once one is accepted, no more changes. When a request can't be sent, **Proposal** shows why (`title_change_block`). Versions uploaded before the change keep their old title and abstract; the first version after it shows a "Title changed" / "Abstract changed" badge. Waiting requests count in the supervisor's **Theses** badge.
 - Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions, re-uploads included. At the cap, an upload is refused before the file is saved or scanned.
 - PDFs with scripts, attached files, media (sound, movie, screen) or interactive forms are refused. So are PDFs that run actions by themselves (page or hover actions, or an open action other than "go to a page"): links must only open when clicked.
 - Students see only their own theses. Only the thesis's group and its supervisors can download its versions, not the coordinator.
@@ -356,6 +357,7 @@ docs/           SRS, class diagram (draw.io source + exports), contribution trac
 | POST | `/api/auth/me/restart-request` | frozen student |
 | GET / POST / DELETE | `/api/auth/restart-requests[/{id}[/approve]]` | coordinator |
 | GET | `/api/milestones` | logged in |
+| PUT | `/api/milestones/registration` | coordinator |
 | PUT | `/api/milestones/{phase}` | coordinator |
 | POST | `/api/milestones/next-semester` | coordinator |
 | GET / POST / DELETE | `/api/theses/mine` (status with the faculty the student can pick, request a group, cancel a pending one) | student |
