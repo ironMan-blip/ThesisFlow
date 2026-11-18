@@ -26,7 +26,7 @@ class Proposal(Base):
 
 
 class ProposalVersion(Base):
-    """One upload of a proposal. Re-submitting the same PDF, title and abstract moves that version to the top."""
+    """One upload of a proposal. Every upload is a new version; versions are never changed or deleted."""
 
     __tablename__ = "proposal_versions"
     __table_args__ = (UniqueConstraint("proposal_id", "version_no"),)

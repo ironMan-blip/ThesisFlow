@@ -5,7 +5,7 @@ import { Alerts, EmptyState, Icon, ICONS, PageHeader, Person, ReasonDialog, Skel
 import { when } from "../format";
 import { useAction } from "../useAction";
 
-const TABS = { student: "students", faculty: "faculties" }; // role -> tab label
+const TABS = { student: "students", faculty: "faculty" }; // role -> tab label
 
 // Coordinator's list of every approved student and faculty account; any of them can be scheduled for deletion.
 export default function AccountsPage() {

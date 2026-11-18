@@ -52,6 +52,10 @@ class Thesis(Base):
     phase_started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now()
     )
+    # The semester whose deadline the group works to in its current phase. None means the current semester: the rollover
+    # pins it on groups that stay in their phase (still working to last semester's deadline) and clears it when a
+    # group moves on or loses its P1 registration. See progress_service.deadline_semester_id.
+    deadline_semester_id: Mapped[int | None] = mapped_column(ForeignKey("semesters.id", ondelete="SET NULL"))
     # Set at the semester rollover when the group missed its deadline; members can then ask to restart.
     frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # P3 deferrals by the supervisor (panel members later): the second one cancels the thesis.

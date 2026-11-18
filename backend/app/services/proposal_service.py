@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,13 @@ CHUNK = 1024 * 1024
 # Content a PDF viewer could run or hand to the OS: scripts, launch actions, attached files, XFA forms.
 ACTIVE_KEYS = {"/JS", "/JavaScript", "/EmbeddedFiles", "/EmbeddedFile", "/XFA", "/RichMedia"}
 # /GoToR opens another file: a UNC path (\\host\share) makes Windows send the reader's login hash to that host.
-ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToE", "/GoToR", "/RichMediaExecute", "/SubmitForm"}
+# Sound, Movie and Rendition play embedded media, more parser surface in the reader for no proposal content.
+ACTIVE_ACTIONS = {
+    "/JavaScript", "/Launch", "/ImportData", "/GoToE", "/GoToR", "/RichMediaExecute", "/SubmitForm",
+    "/Sound", "/Movie", "/Rendition",
+}
+# Annotations that hold or play media.
+MEDIA_ANNOTATIONS = {"/Sound", "/Movie", "/Screen"}
 LINK_SCHEMES = ("http://", "https://", "mailto:")
 # Bounds the object walk, so a crafted file with millions of tiny objects can't tie up a worker.
 MAX_PDF_OBJECTS = 200_000
@@ -62,8 +68,12 @@ def _upload_block(
         return "Your group isn't registered for P1, and P1 registration is closed, so wait for next semester", s
     if s.template is None:
         return f"The {user.phase.value} timeline is not set yet", s
-    if datetime.now(timezone.utc) > s.closes_at:
+    now = datetime.now(timezone.utc)
+    if now > s.closes_at:
         return f"The {user.phase.value} deadline and grace period have passed", s
+    if s.submitted_at is not None and s.submitted_at <= s.due_at < now:
+        # Grace is for groups that are late; a new upload now would turn an on-time submission late.
+        return f"You submitted {user.phase.value} on time, so it is final now that the due date has passed", s
     return None, s
 
 
@@ -71,6 +81,7 @@ def get_mine(db: Session, user: User) -> ProposalOut:
     block, s = _upload_block(db, user)
     thesis = user.thesis
     latest = thesis.title_changes[0] if thesis and thesis.title_changes else None
+    title_block = _title_change_block(db, thesis) if thesis else None
     return ProposalOut(
         versions=thesis.versions if thesis else [],
         thesis_code=thesis and thesis.code,
@@ -80,7 +91,8 @@ def get_mine(db: Session, user: User) -> ProposalOut:
         title=thesis and thesis.title,
         abstract=thesis and thesis.abstract,
         title_change=latest and TitleChangeOut.model_validate(latest),
-        can_request_title_change=thesis is not None and _title_change_block(thesis) is None,
+        can_request_title_change=thesis is not None and title_block is None,
+        title_change_block=title_block,
     )
 
 
@@ -107,12 +119,14 @@ def _check_title(thesis: Thesis | None, title: str, abstract: str) -> None:
         )
 
 
-def _title_change_block(thesis: Thesis) -> str | None:
+def _title_change_block(db: Session, thesis: Thesis) -> str | None:
     """Why this thesis can't request a title and abstract change now (None means it can)."""
     if thesis.title is None:
         return "Upload your first version first: it sets your title and abstract"
     if thesis.status != ThesisStatus.active:
         return "Only an active thesis can change its title and abstract"
+    if progress_service.thesis_standing(db, thesis).frozen:
+        return "Your group is frozen, so it can't change its title and abstract"
     if thesis.supervisor_id is None:
         return "Your thesis has no supervisor to approve a change"
     statuses = {c.status for c in thesis.title_changes}
@@ -160,6 +174,15 @@ def _web_link(uri: object) -> bool:
     return text.strip().lower().startswith(LINK_SCHEMES)
 
 
+def _goto_only(open_action: object) -> bool:
+    # What LaTeX and Word write: a page to open at (a destination array) or a GoTo action with nothing chained after it.
+    if isinstance(open_action, ArrayObject):
+        return True
+    if not isinstance(open_action, DictionaryObject) or "/S" not in open_action:
+        return False
+    return open_action["/S"] == "/GoTo" and "/Next" not in open_action  # [], not .get: resolves an indirect /S
+
+
 def _check_pdf(path: Path) -> None:
     """Refuse anything a PDF reader can't open, an encrypted file (it can't be checked), or one with active content.
     Then replace the file with a clean rewrite of what was checked."""
@@ -183,10 +206,18 @@ def _check_pdf(path: Path) -> None:
             elif isinstance(obj, DictionaryObject):
                 # obj["/S"], not .get: it resolves an indirect /S, which viewers follow too.
                 action = obj["/S"] if "/S" in obj else None
-                if ACTIVE_KEYS.intersection(obj) or action in ACTIVE_ACTIONS:
+                subtype = obj["/Subtype"] if "/Subtype" in obj else None
+                if ACTIVE_KEYS.intersection(obj) or action in ACTIVE_ACTIONS or subtype in MEDIA_ANNOTATIONS:
                     raise HTTPException(
                         status.HTTP_422_UNPROCESSABLE_CONTENT,
-                        "PDF must not contain scripts, attached files or interactive forms",
+                        "PDF must not contain scripts, attached files, media or interactive forms",
+                    )
+                if "/AA" in obj or ("/OpenAction" in obj and not _goto_only(obj["/OpenAction"])):
+                    # Actions that run without a click (on open, on page view, on hover) could call a web link and
+                    # tell the uploader when and from where the supervisor opened the file. Clicked links stay allowed.
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        "PDF must not run actions by itself when opened; links must only open when clicked",
                     )
                 if action == "/URI" and not _web_link(obj["/URI"] if "/URI" in obj else None):
                     raise HTTPException(
@@ -237,20 +268,16 @@ def _save_pdf(file: UploadFile) -> tuple[str, int, str]:
     except BaseException:
         path.unlink(missing_ok=True)
         raise
-    # sha256 stays the upload's, so re-uploading the same file is still recognised; size is what is stored.
+    # sha256 is the upload's (as sent); size is what is stored.
     return stored, path.stat().st_size, digest.hexdigest()
 
 
-def _close_gap(db: Session, proposal_id: int, removed_no: int) -> None:
-    # Later versions move down by one. Two steps through negatives because
-    # Postgres checks the (proposal_id, version_no) unique constraint row by row.
-    later = (ProposalVersion.proposal_id == proposal_id) & (ProposalVersion.version_no > removed_no)
-    db.execute(update(ProposalVersion).where(later).values(version_no=1 - ProposalVersion.version_no))
-    db.execute(
-        update(ProposalVersion)
-        .where(ProposalVersion.proposal_id == proposal_id, ProposalVersion.version_no < 0)
-        .values(version_no=-ProposalVersion.version_no)
-    )
+def _check_version_cap(db: Session, user: User) -> None:
+    if db.scalar(select(func.count()).where(progress_service.phase_uploads(user))) >= MAX_VERSIONS_PER_PHASE:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"You've uploaded {MAX_VERSIONS_PER_PHASE} versions this phase, the most allowed",
+        )
 
 
 def upload_version(db: Session, user: User, title: str, abstract: str, file: UploadFile) -> ProposalOut:
@@ -259,6 +286,7 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     title, abstract = _clean(title, abstract)
     _check_title(user.thesis, title, abstract)  # before storing the file, so a wrong title fails fast
+    _check_version_cap(db, user)  # also before storing: a student at the cap can't make the server save and scan files
 
     stored, size, sha256 = _save_pdf(file)
     keep_new_file = True
@@ -279,53 +307,22 @@ def upload_version(db: Session, user: User, title: str, abstract: str, file: Upl
         gm = progress_service.group_milestone(db, user, create=True)
         last = db.scalar(select(func.max(ProposalVersion.version_no)).where(ProposalVersion.proposal_id == proposal.id))
         name = Path(file.filename or "").name[:255]
-        fields = dict(
+        # Every upload is a new version (SRS F11), even an identical file. Counted again under the thesis lock,
+        # so parallel uploads can't both slip under the cap.
+        _check_version_cap(db, user)
+        db.add(ProposalVersion(
+            proposal_id=proposal.id,
+            version_no=(last or 0) + 1,
             phase=user.phase,
+            title=title,
+            abstract=abstract,
             # "..", "." or only dots and spaces is no file name: fall back to a plain one.
             original_filename=name if name.strip(". ") else "proposal.pdf",
+            stored_filename=stored,
+            size_bytes=size,
+            sha256=sha256,
             uploaded_by_id=user.id,
-        )
-        # Same PDF with a different title or abstract is a real new version. Only this phase's uploads are
-        # reused, so a final submission from an earlier phase or semester is never rewritten.
-        same = db.scalar(
-            select(ProposalVersion).where(
-                progress_service.phase_uploads(user),
-                ProposalVersion.sha256 == sha256,
-                ProposalVersion.title == title,
-                ProposalVersion.abstract == abstract,
-            )
-        )
-        if same is None:
-            # Counted under the thesis lock, so parallel uploads can't both slip under the cap.
-            if db.scalar(select(func.count()).where(progress_service.phase_uploads(user))) >= MAX_VERSIONS_PER_PHASE:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    f"You've uploaded {MAX_VERSIONS_PER_PHASE} versions this phase, the most allowed. "
-                    "Re-upload one of them unchanged to make it the latest again",
-                )
-            version = ProposalVersion(
-                proposal_id=proposal.id,
-                version_no=(last or 0) + 1,
-                title=title,
-                abstract=abstract,
-                stored_filename=stored,
-                size_bytes=size,
-                sha256=sha256,
-                **fields,
-            )
-            db.add(version)
-        else:
-            # Identical submission already stored: reuse its file and move that version to the top.
-            keep_new_file = False
-            moved_from = same.version_no
-            same.version_no = 0
-            db.flush()
-            _close_gap(db, proposal.id, moved_from)
-            db.execute(
-                update(ProposalVersion)
-                .where(ProposalVersion.id == same.id)
-                .values(version_no=last, created_at=datetime.now(timezone.utc), **fields)
-            )
+        ))
         progress_service.sync_deliverable(db, gm, user)
         db.commit()
     except BaseException as exc:
@@ -348,7 +345,7 @@ def request_title_change(db: Session, user: User, title: str, abstract: str) -> 
     thesis = _lock_thesis(db, user)
     if thesis is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Form a thesis group first")
-    if block := _title_change_block(thesis):
+    if block := _title_change_block(db, thesis):
         raise HTTPException(status.HTTP_409_CONFLICT, block)
     if (title, abstract) == (thesis.title, thesis.abstract):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That is already your title and abstract")
@@ -374,6 +371,8 @@ def decide_title_change(db: Session, supervisor: User, change_id: int, approve: 
     if approve and thesis.status != ThesisStatus.active:
         # Same rule as asking: a dropped or completed thesis keeps its title. Rejecting still clears the request.
         raise HTTPException(status.HTTP_409_CONFLICT, "Only an active thesis can change its title and abstract")
+    if approve and progress_service.thesis_standing(db, thesis).frozen:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This group is frozen, so it can't change its title and abstract")
     change.decided_at, change.approved = datetime.now(timezone.utc), approve
     if approve:
         thesis.title, thesis.abstract = change.title, change.abstract

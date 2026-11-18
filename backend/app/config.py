@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     max_upload_mb: int = 20
 
+    @field_validator("admin_id_number")
+    @classmethod
+    def eight_digit_admin_id(cls, v: str) -> str:
+        # Same rule as sign-up: the login form only takes 8 digits, so any other ID locks the coordinator out.
+        if not (len(v) == 8 and v.isascii() and v.isdigit()):
+            raise ValueError("ADMIN_ID_NUMBER must be exactly 8 digits")
+        return v
+
     @field_validator("admin_password")
     @classmethod
     def strong_admin_password(cls, v: str) -> str:

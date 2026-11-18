@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -88,17 +86,11 @@ def create_semester(db: Session, data: SemesterCreateIn) -> tuple[Semester, dict
             "P1 registration must close after it opens",
         )
 
-    rollover_summary: dict[str, int] | None = None
-    if data.rollover:
-        rollover_summary = progress_service.next_semester(db)
-        semester = get_active_semester(db)
-        semester.name = data.name
-    else:
-        semester = Semester(
-            name=data.name,
-            started_at=datetime.now(timezone.utc),
-        )
-        db.add(semester)
+    # Always the rollover: a new semester without it would leave every group's submissions on the old semester's
+    # milestones (as if nothing was handed in) and keep last semester's P1 registrations.
+    rollover_summary = progress_service.next_semester(db)
+    semester = get_active_semester(db)
+    semester.name = data.name
 
     semester.registration_opens_at = opens_at
     semester.registration_closes_at = closes_at

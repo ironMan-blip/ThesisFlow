@@ -79,6 +79,7 @@ class ProposalOut(BaseModel):
     abstract: str | None = None
     title_change: TitleChangeOut | None = None  # the latest change request, if any
     can_request_title_change: bool = False  # the one approved change isn't used and no request is waiting
+    title_change_block: str | None = None  # why a change can't be requested now; None when it can (or no thesis)
     title_change_days: int = TITLE_CHANGE_WINDOW.days
 
     @model_validator(mode="after")

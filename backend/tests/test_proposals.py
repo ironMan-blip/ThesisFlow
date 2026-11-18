@@ -4,16 +4,18 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from pypdf import PdfReader
-from pypdf.generic import DictionaryObject, NameObject, TextStringObject
+from pypdf.annotations import Link
+from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
 from sqlalchemy import select, update
 
 from app import virus_scan
 from app.config import settings
 from app.models.milestone import MilestoneTemplate, Phase
 from app.models.proposal import ProposalVersion
-from app.models.user import Role
+from app.models.user import Role, User
 from app.schemas.proposal import MAX_ABSTRACT_CHARS
 from app.services import proposal_service
+from app.services.progress_service import current_semester_id
 from tests.helpers import ask_supervisor, PDF, REASON, make_pdf, auth, me, student, supervised_student, upload
 
 
@@ -119,23 +121,21 @@ def test_only_students_upload(client, db):
     assert upload(client, faculty).status_code == 403
 
 
-def test_resubmitting_identical_upload_moves_it_to_latest(client, db, tmp_path):
+def test_resubmitting_identical_upload_is_a_new_version(client, db, tmp_path):
     h = student(client, db, "s@x.com")
-    for t in ("a", "b", "c"):
+    for t in ("a", "b"):
         upload(client, h, content=_tagged(t), name=f"{t}.pdf")
-    a_id = client.get("/api/proposals/mine", headers=h).json()["versions"][2]["id"]
+    a = client.get("/api/proposals/mine", headers=h).json()["versions"][1]
 
     res = upload(client, h, content=_tagged("a"), name="a.pdf")
     assert res.status_code == 201
     versions = res.json()["versions"]
-    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
-    assert (versions[0]["id"], versions[0]["is_latest"]) == (a_id, True)
+    # Every upload is kept as its own version, with its own upload time; the older ones are untouched.
+    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("b.pdf", 2), ("a.pdf", 1)]
+    assert versions[0]["is_latest"] and versions[0]["id"] != a["id"]
+    assert (versions[2]["id"], versions[2]["created_at"]) == (a["id"], a["created_at"])
     assert len(list((tmp_path / "proposals").iterdir())) == 3
-    assert _tag(client.get(f"/api/proposals/versions/{a_id}/file", headers=h).content) == "a"
-
-    # Re-submitting the current latest keeps the order.
-    versions = upload(client, h, content=_tagged("a"), name="a.pdf").json()["versions"]
-    assert [(v["original_filename"], v["version_no"]) for v in versions] == [("a.pdf", 3), ("c.pdf", 2), ("b.pdf", 1)]
+    assert _tag(client.get(f"/api/proposals/versions/{versions[0]['id']}/file", headers=h).content) == "a"
 
 
 def _upload_as(client, h, title, abstract="About it", content=PDF):
@@ -171,7 +171,8 @@ def test_one_title_change_needs_the_supervisors_ok_within_3_days(client, db):
     r = _ask_title(client, h, "b")
     assert r.status_code == 409 and "first version" in r.json()["detail"]
     _upload_as(client, h, "a")
-    assert client.get("/api/proposals/mine", headers=h).json()["can_request_title_change"] is True
+    body = client.get("/api/proposals/mine", headers=h).json()
+    assert (body["can_request_title_change"], body["title_change_block"]) == (True, None)
     assert _ask_title(client, h, "a", "About it").status_code == 422  # nothing would change
 
     res = _ask_title(client, h, "b")
@@ -204,6 +205,7 @@ def test_one_title_change_needs_the_supervisors_ok_within_3_days(client, db):
     assert client.post(f"/api/proposals/title-changes/{change['id']}/approve", headers=sup).status_code == 204
     body = client.get("/api/proposals/mine", headers=h).json()
     assert (body["title"], body["abstract"], body["can_request_title_change"]) == ("b", "New abstract", False)
+    assert "already used" in body["title_change_block"]
     assert _upload_as(client, h, "a", content=PDF + b"2").status_code == 422  # the old title is gone
     versions = _upload_as(client, h, "b", "New abstract", content=PDF + b"2").json()["versions"]
     # Older versions keep the title they were uploaded with; the first one after the change is marked.
@@ -241,7 +243,7 @@ def test_line_endings_dont_break_the_exact_title_match(client, db, timelines):
 
 def test_upload_needs_the_phase_timeline(client, db):
     h = student(client, db, "s@x.com")
-    db.delete(db.get(MilestoneTemplate, Phase.P1))
+    db.delete(db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db))))
     db.flush()
     mine = client.get("/api/proposals/mine", headers=h).json()
     assert mine["upload_block"] == "The P1 timeline is not set yet"
@@ -251,7 +253,7 @@ def test_upload_needs_the_phase_timeline(client, db):
 
 def test_grace_period_warns_and_then_uploads_close(client, db):
     h = student(client, db, "s@x.com")
-    p1 = db.get(MilestoneTemplate, Phase.P1)
+    p1 = db.get(MilestoneTemplate, (Phase.P1, current_semester_id(db)))
     p1.due_at, p1.grace_days = datetime.now(timezone.utc) - timedelta(minutes=5), 1  # past due, still in grace
     db.flush()
     mine = client.get("/api/proposals/mine", headers=h).json()
@@ -303,6 +305,17 @@ def test_only_real_pdfs_without_active_content_are_stored(client, db, tmp_path):
         make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": "file:///C:/Windows/System32/calc.exe"})),
         make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": "\\\\attacker\\share"})),
         make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": "ms-msdt:/id PCWDiagnostic"})),
+        # A web link that opens by itself (on open, on page view) tells the uploader when and where it was read.
+        make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": "https://tracker.example/pixel"})),
+        make_pdf(lambda w: _open_action(w, {"/S": "/GoTo", "/D": "/x", "/Next": "/x"})),
+        make_pdf(lambda w: w.pages[0].__setitem__(NameObject("/AA"), DictionaryObject())),
+        # Embedded media.
+        make_pdf(lambda w: _open_action(w, {"/S": "/Sound"})),
+        make_pdf(lambda w: _open_action(w, {"/S": "/Rendition"})),
+        make_pdf(lambda w: w.add_annotation(0, DictionaryObject({
+            NameObject("/Type"): NameObject("/Annot"), NameObject("/Subtype"): NameObject("/Screen"),
+            NameObject("/Rect"): ArrayObject(),
+        }))),
         make_pdf(lambda w: w.add_attachment("run.exe", b"MZ")),
         make_pdf(lambda w: w.encrypt("secret")),
     ):
@@ -315,7 +328,16 @@ def test_only_real_pdfs_without_active_content_are_stored(client, db, tmp_path):
 def test_web_links_are_kept(client, db):
     h = student(client, db, "links@x.com")
     for uri in ("https://example.com/paper", "mailto:a@b.com"):
-        assert upload(client, h, content=make_pdf(lambda w: _open_action(w, {"/S": "/URI", "/URI": uri}))).status_code == 201
+        content = make_pdf(lambda w: w.add_annotation(0, Link(rect=(0, 0, 10, 10), url=uri)))  # opens only on click
+        assert upload(client, h, content=content).status_code == 201
+    # What LaTeX and Word write: open at a page, as a destination or a plain GoTo.
+    for open_action in (
+        lambda w: w._root_object.__setitem__(NameObject("/OpenAction"), ArrayObject([w.pages[0].indirect_reference, NameObject("/Fit")])),
+        lambda w: w._root_object.__setitem__(NameObject("/OpenAction"), DictionaryObject({
+            NameObject("/S"): NameObject("/GoTo"), NameObject("/D"): ArrayObject([w.pages[0].indirect_reference, NameObject("/Fit")]),
+        })),
+    ):
+        assert upload(client, h, content=make_pdf(open_action)).status_code == 201
 
 
 def test_stored_pdf_is_the_checked_rewrite(client, db, tmp_path):
@@ -338,8 +360,11 @@ def test_uploads_per_phase_are_capped(client, db, monkeypatch):
     assert upload(client, h, content=PDF + b"2").status_code == 201
     r = upload(client, h, content=PDF + b"3")
     assert r.status_code == 409 and "2 versions" in r.json()["detail"]
-    # Re-sending a stored version adds nothing, so it still works at the cap.
-    assert upload(client, h, content=PDF + b"1").status_code == 201
+    # Re-sending a stored file is a new version too, so the cap holds it back.
+    assert upload(client, h, content=PDF + b"1").status_code == 409
+    # Refused before the file is saved or scanned, so uploads at the cap cost the server nothing.
+    monkeypatch.setattr(virus_scan, "scan", lambda path: pytest.fail("scanned an upload over the cap"))
+    assert upload(client, h, content=PDF + b"4").status_code == 409
 
 
 def test_infected_uploads_are_refused_and_uploads_pause_without_a_scanner(client, db, tmp_path, monkeypatch):
@@ -375,3 +400,19 @@ def test_recheck_rewrites_old_files_and_keeps_failures(client, db, tmp_path):
     data = (tmp_path / "proposals" / good.stored_filename).read_bytes()
     assert b"app.alert" not in data and db.get(ProposalVersion, good.id).size_bytes == len(data)
     assert (tmp_path / "proposals" / bad.stored_filename).read_bytes() == linked  # never deleted (SRS F11)
+
+
+def test_a_frozen_group_cannot_change_its_title(client, db):
+    h, sup = supervised_student(client, db, "s@x.com")
+    assert upload(client, h).status_code == 201
+    res = client.post("/api/proposals/mine/title-change", headers=h, json={"title": "New", "abstract": "New one"})
+    assert res.status_code == 201
+    change_id = res.json()["title_change"]["id"]
+    thesis = db.get(User, me(client, h)["id"]).thesis
+    thesis.frozen_at = datetime.now(timezone.utc)
+    db.flush()
+    assert client.post(f"/api/proposals/title-changes/{change_id}/approve", headers=sup).status_code == 409
+    assert client.get("/api/proposals/mine", headers=h).json()["can_request_title_change"] is False
+    assert client.delete(f"/api/proposals/title-changes/{change_id}", headers=sup).status_code == 204  # rejecting still works
+    res = client.post("/api/proposals/mine/title-change", headers=h, json={"title": "New", "abstract": "New one"})
+    assert (res.status_code, res.json()["detail"]) == (409, "Your group is frozen, so it can't change its title and abstract")

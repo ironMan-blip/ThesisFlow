@@ -43,7 +43,7 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 - Missed deadline freezes the account (warning shown during grace; extending the deadline lifts it).
 - Frozen students can request a restart; once approved, they start fresh at P1 next semester (old thesis archived).
 - P3 deferral by the supervisor (panel members later): once = P3 again, twice = frozen, never = completed.
-- **Start next semester** (coordinator) applies progression, clears deadlines and opens a new P1 registration week.
+- **Start next semester** (coordinator) applies progression, keeps deadlines and opens a new P1 registration week.
 
 **Proposal submission**
 - Upload title, abstract and PDF to the current phase while its grace period is open.
@@ -184,7 +184,9 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
   - a **grace period** in days (0 to 7),
   - a **late penalty** in percent per day (0 to 100).
 - A deadline must end (due date plus grace) in the future, and P1 can only be due after P1 registration closes.
+- Once the due date has passed, the late penalty can only be lowered, never raised, so work already handed in late never costs more.
 - Phase deadlines are independent: any phase can be due before or after another. In one semester P1, P2 and P3 students each work to their own phase's deadline.
+- Each semester has its own P1, P2 and P3 deadlines; the coordinator picks which semester to view and edit on **Deadlines**. A semester's deadlines fall in week 2 of the next one, so a group works to the deadline of the semester it registered for P1 in (or moved into its phase in), even after the next semester starts. New groups registering in the next semester get that semester's deadlines.
 - Everyone sees each phase's status: **not set**, **open**, **in grace**, or **closed**, with a live countdown ("Due in" while open, "Grace ends in" during grace).
 - Students also see, for their own phase (marked **Your phase**), their submission status:
   - **on time**, **late**, or **not submitted**,
@@ -204,7 +206,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - **Missed deadline:** if grace ends with no upload, the account is **frozen**. The student can still log in, but cannot upload or form a group. During grace they see a warning with the freeze time. Extending the deadline lifts the freeze until the semester ends. A student who couldn't upload (phase started after the deadline closed, or a P1 group that didn't register) is not frozen; they wait for next semester.
 - **Restart:** a frozen student can ask to restart at any time on the Thesis group page. Once the coordinator approves under **Restart requests**, the next semester rollover starts them fresh at P1. Asking is final: the account stays frozen even if the deadline is extended later (unless the coordinator rejects the request). At the rollover: the old thesis is archived, they have no group, and the next group gets a new thesis ID.
 - **P3 deferral** (no panel members yet): after a P3 submission the thesis's **supervisor** can **defer** it under Theses (for now; panel members later) (and undo it until the semester ends). Removing the P3 submission undoes the deferral. Deferred once: P3 again next semester, and last semester's upload no longer counts. Deferred twice: the account is frozen. Not deferred: the thesis is **completed**.
-- **Start next semester** (coordinator, on Deadlines) applies all of this once every grace time has ended, then clears the deadlines so the new ones can be set and opens a new week of P1 registration.
+- **Start next semester** (coordinator, on Deadlines) applies all of this, keeps every deadline (groups still working to one carry on) and opens a new week of P1 registration. The new semester's deadlines are set separately.
 
 ### 7. Proposal submission
 
@@ -215,10 +217,11 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 - If a student can't upload, the page shows the exact reason from the API (thesis complete, frozen, no group, supervisor hasn't accepted, not registered for P1, deadline not set, or deadline passed).
 - Only the student uploads. The group (the student, the supervisor, and the co-supervisor once joined) can view and download its versions; the coordinator can't.
 - Every upload becomes a new numbered version (v1, v2, …). The page lists all past versions, newest first, with a download link.
-- Re-submitting the exact same PDF with the same title and abstract in the same phase does not store a copy: that existing version moves to the top as the latest. Final submissions from earlier phases are never touched.
+- Re-submitting the exact same PDF is a new version too, and it becomes the latest. Final submissions from earlier phases are never touched.
 - Title and abstract: set by the first upload and stored on the thesis; every later upload (any phase) must match them exactly. To change them the student sends a request (new title and abstract) from **Proposal**. Only the thesis's **supervisor** can accept or reject it on **Theses**, and only within 3 days; after that it expires. A rejected or expired request can be sent again; once one is accepted, no more changes. Versions uploaded before the change keep their old title and abstract; the first version after it shows a "Title changed" / "Abstract changed" badge. Waiting requests count in the supervisor's **Theses** badge.
-- Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions; re-uploading one unchanged still works at the cap.
-- Students see only their own theses. A thesis's supervisors and the coordinator can download its versions.
+- Versions are kept (SRS F11). Nobody can delete one, the supervisor and coordinator included. Each phase allows up to 20 versions, re-uploads included. At the cap, an upload is refused before the file is saved or scanned.
+- PDFs with scripts, attached files, media (sound, movie, screen) or interactive forms are refused. So are PDFs that run actions by themselves (page or hover actions, or an open action other than "go to a page"): links must only open when clicked.
+- Students see only their own theses. Only the thesis's group and its supervisors can download its versions, not the coordinator.
 - Uploads on the same thesis are locked against each other, so version numbers never clash.
 
 ### 8. Security
@@ -252,7 +255,7 @@ Supervisor and panel member are not account roles. A supervisor is a faculty use
 | `proposals` | One per thesis, made on its first upload. |
 | `proposal_versions` | One per upload: `version_no`, `phase`, title, abstract, original and stored file name, size, SHA-256, uploader, time. |
 | `semesters` | One row per semester; the newest is the current one. Its `started_at` opens the one-week P1 registration. |
-| `milestone_templates` | The deadline for each phase this semester (one row per phase): due time, grace days, penalty per day. |
+| `milestone_templates` | The deadline for each phase and semester (one row per phase and semester): due time, grace days, penalty per day. `theses.deadline_semester_id` says which semester's deadline a group works to (empty = the current one). |
 | `group_milestones` | A thesis group's milestone for its phase in one semester: `submitted_at` and an optional `extended_due_at` (for future deadline extensions, F15). |
 | `deliverables` | Links a group milestone to the version that counts: always the latest upload for that phase. |
 
@@ -283,7 +286,7 @@ It refuses (`409`) while any phase, or any group's extended deadline, is still o
 | Submitted P3, deferred | 1st deferral: P3 again (old upload no longer counts). 2nd: frozen. |
 | Submitted P3, not deferred | Thesis `completed`, phase cleared. |
 
-Then it deletes all phase deadlines, clears every group's P1 registration and adds a new semester row (which opens a new P1 registration week). The response gives counts: `advanced`, `completed`, `deferred`, `frozen`, `restarted`.
+Then it keeps all deadlines, clears the P1 registration of groups not still working to an open P1 deadline and adds a new semester row (which opens a new P1 registration week). The response gives counts: `advanced`, `completed`, `deferred`, `frozen`, `restarted`.
 
 ### Frontend behavior
 

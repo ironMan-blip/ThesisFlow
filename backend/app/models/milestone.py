@@ -14,14 +14,19 @@ class Phase(str, enum.Enum):
 
 
 class MilestoneTemplate(Base):
-    """Deadline for one thesis phase this semester, set by the coordinator. One row per phase."""
+    """Deadline for one thesis phase in one semester, set by the coordinator by hand. One row per phase and semester:
+    a semester's deadlines fall in week 2 of the next one, so two semesters' deadlines for a phase run at once.
+    Each group works to its own semester's deadline (Thesis.deadline_semester_id)."""
 
     __tablename__ = "milestone_templates"
 
     phase: Mapped[Phase] = mapped_column(Enum(Phase, name="phase"), primary_key=True)
+    # Which semester's groups this deadline is for. The rollover neither waits for nor clears deadlines.
+    semester_id: Mapped[int] = mapped_column(ForeignKey("semesters.id", ondelete="CASCADE"), primary_key=True)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     grace_days: Mapped[int] = mapped_column(Integer)
     penalty_per_day: Mapped[int] = mapped_column(Integer)  # percent of the phase mark
+    semester = relationship("Semester")
 
     @property
     def closes_at(self) -> datetime:
@@ -48,7 +53,8 @@ class GroupMilestone(Base):
     deliverable = relationship("Deliverable", back_populates="group_milestone", uselist=False, passive_deletes=True)
 
     def effective_due_at(self, template: MilestoneTemplate) -> datetime:
-        return self.extended_due_at or template.due_at
+        # An extension only adds time: if the coordinator later moves the deadline past it, the later date wins.
+        return max(self.extended_due_at, template.due_at) if self.extended_due_at else template.due_at
 
 
 class Deliverable(Base):
