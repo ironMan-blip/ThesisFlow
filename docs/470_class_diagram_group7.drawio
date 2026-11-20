@@ -1,1 +1,541 @@
-<mxfile host="drawio"><diagram id="member3" name="Member 3"><mxGraphModel grid="1" gridSize="10" page="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="title" value="&lt;b style='font-size:20px'&gt;ThesisFlow — Class Diagram (Member 3)&lt;/b&gt;&lt;br/&gt;Auth &amp;amp; accounts · F11 Proposal upload · F12 P1/P2/P3 deadlines · F13 Proposal review · F14 Notifications + email · F15 Deadline extension&lt;br/&gt;&lt;i&gt;Dashed classes belong to teammates and are shown only where they connect.&lt;/i&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=13;" vertex="1" parent="1"><mxGeometry x="40" y="10" width="1600" height="80" as="geometry"/></mxCell><mxCell id="lg0" value="Accounts &amp; roles" style="rounded=0;html=1;fontSize=11;fillColor=#dbeafe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1700" y="14" width="310" height="26" as="geometry"/></mxCell><mxCell id="lg1" value="F11 Proposal upload" style="rounded=0;html=1;fontSize=11;fillColor=#dcfce7;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="2030" y="14" width="310" height="26" as="geometry"/></mxCell><mxCell id="lg2" value="F12 Deadlines · F15 Extensions" style="rounded=0;html=1;fontSize=11;fillColor=#fef9c3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="2360" y="14" width="310" height="26" as="geometry"/></mxCell><mxCell id="lg3" value="F13 Proposal review" style="rounded=0;html=1;fontSize=11;fillColor=#fce7f3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1700" y="48" width="310" height="26" as="geometry"/></mxCell><mxCell id="lg4" value="F14 Notifications + email" style="rounded=0;html=1;fontSize=11;fillColor=#ede9fe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="2030" y="48" width="310" height="26" as="geometry"/></mxCell><mxCell id="lg5" value="Enumerations" style="rounded=0;html=1;fontSize=11;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="2360" y="48" width="310" height="26" as="geometry"/></mxCell><mxCell id="settings" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;EmailSettings&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- emailEnabled: Boolean&lt;br/&gt;- deadlineReminders: Boolean&lt;br/&gt;- reviewUpdates: Boolean&lt;br/&gt;- extensionUpdates: Boolean&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ wants(type: NotificationType): Boolean&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="40" y="140" width="440" height="141" as="geometry"/></mxCell><mxCell id="user" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;User&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- email: String {unique}&lt;br/&gt;- idNumber: String[8] {unique}&lt;br/&gt;- fullName: String&lt;br/&gt;- passwordHash: String&lt;br/&gt;- role: Role&lt;br/&gt;- approved: Boolean&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- deletionRequestedAt: DateTime [0..1]&lt;br/&gt;- deletionApprovedAt: DateTime [0..1]&lt;br/&gt;- deletionReason: String [0..1]&lt;br/&gt;- deletionRequestedBy: User [0..1]&lt;br/&gt;- /deletionExecutesAt: DateTime [0..1]&lt;br/&gt;- /firstName: String&lt;br/&gt;- /monogram: String&lt;br/&gt;- /tools: String [*]&lt;br/&gt;- /deletionPending: Boolean&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ register(data: UserCreate): User&lt;br/&gt;+ login(idNumber: String, password: String): String&lt;br/&gt;+ me(): User&lt;br/&gt;+ requestDeletion(reason: String): User&lt;br/&gt;+ viewTimeline(): Timeline&lt;br/&gt;+ downloadVersion(versionId: int): File&lt;br/&gt;+ getNotifications(unreadOnly: Boolean): Notification [*]&lt;br/&gt;+ markRead(notificationId: int): Notification&lt;br/&gt;+ markAllRead(): void&lt;br/&gt;+ updateEmailSettings(s: EmailSettings): EmailSettings&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1120" y="140" width="440" height="447" as="geometry"/></mxCell><mxCell id="notif" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Notification&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- type: NotificationType&lt;br/&gt;- message: String&lt;br/&gt;- link: String [0..1]&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- readAt: DateTime [0..1]&lt;br/&gt;- /unread: Boolean&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ markRead(): void&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1660" y="140" width="440" height="192" as="geometry"/></mxCell><mxCell id="outbox" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;EmailOutbox&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- toEmail: String&lt;br/&gt;- subject: String&lt;br/&gt;- body: String&lt;br/&gt;- dedupeKey: String {unique}&lt;br/&gt;- status: EmailStatus&lt;br/&gt;- attempts: int&lt;br/&gt;- sentAt: DateTime [0..1]&lt;br/&gt;- lastError: String [0..1]&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ send(): Boolean   (Brevo, backup on failure)&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="2200" y="140" width="440" height="226" as="geometry"/></mxCell><mxCell id="student" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Student&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- phase: Phase [0..1]&lt;br/&gt;- phaseStartedAt: DateTime&lt;br/&gt;- frozenAt: DateTime [0..1]&lt;br/&gt;- restartRequestedAt: DateTime [0..1]&lt;br/&gt;- restartApproved: Boolean&lt;br/&gt;- /restartPending: Boolean&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ uploadVersion(title: String, abstract: String, pdf: File): Proposal&lt;br/&gt;+ getMyProposal(): Proposal&lt;br/&gt;+ requestVersionDelete(versionId: int, reason: String): Proposal&lt;br/&gt;+ addCoSupervisor(facultyId: int): Thesis&lt;br/&gt;+ requestRestart(): User&lt;br/&gt;+ replyToFeedback(threadId: int, body: String): FeedbackComment&lt;br/&gt;+ requestExtension(phase: Phase, dueAt: DateTime, reason: String): ExtensionRequest&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="580" y="720" width="440" height="277" as="geometry"/></mxCell><mxCell id="faculty" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Faculty&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- initials: String {unique}&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ addFeedback(versionId: int, section: ProposalSection, body: String): FeedbackThread&lt;br/&gt;+ replyToFeedback(threadId: int, body: String): FeedbackComment&lt;br/&gt;+ approveProposal(versionId: int): ProposalVersion&lt;br/&gt;+ requestChanges(versionId: int, note: String): ProposalVersion&lt;br/&gt;+ rejectProposal(versionId: int, note: String): ProposalVersion&lt;br/&gt;+ scheduleVersionDelete(versionId: int, reason: String): void&lt;br/&gt;+ approveVersionDelete(versionId: int): void&lt;br/&gt;+ cancelVersionDelete(versionId: int): void&lt;br/&gt;+ setDefer(thesisId: int, defer: Boolean): Thesis&lt;br/&gt;+ giveOpinion(requestId: int, supports: Boolean, note: String): ExtensionRequest&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1120" y="720" width="440" height="269" as="geometry"/></mxCell><mxCell id="coord" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Coordinator&lt;/b&gt;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;font-size:10px;&#x27;&gt;&lt;i&gt;only one instance&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ approveRegistration(userId: int): User&lt;br/&gt;+ rejectRegistration(userId: int): void&lt;br/&gt;+ approveDeletion(userId: int): User&lt;br/&gt;+ cancelDeletion(userId: int): User&lt;br/&gt;+ scheduleDeletion(userId: int, reason: String): User&lt;br/&gt;+ listAccounts(role: Role, idPrefix: String): User [*]&lt;br/&gt;+ approveRestart(userId: int): User&lt;br/&gt;+ rejectRestart(userId: int): User&lt;br/&gt;+ setDeadline(phase: Phase, dueAt: DateTime, graceDays: int, penaltyPerDay: int): void&lt;br/&gt;+ nextSemester(): void&lt;br/&gt;+ listExtensionRequests(status: ExtensionStatus): ExtensionRequest [*]&lt;br/&gt;+ decideExtension(requestId: int, approve: Boolean, dueAt: DateTime [0..1], note: String): ExtensionRequest&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1660" y="720" width="440" height="345" as="geometry"/></mxCell><mxCell id="svc" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;service&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;NotificationService&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ notify(to: User, type: NotificationType, message: String, link: String): Notification&lt;br/&gt;+ sendDueReminders(now: DateTime): int   {3 days and 1 day before each due date}&lt;br/&gt;+ flushOutbox(): int   {runs in the background}&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="2200" y="720" width="440" height="175" as="geometry"/></mxCell><mxCell id="thesis" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Thesis&lt;/b&gt;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;font-size:10px;&#x27;&gt;&lt;i&gt;owned by Member 2 (F6)&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- code: String[9] [0..1] {unique}&lt;br/&gt;- status: ThesisStatus&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ffffff;strokeColor=#1f2937;dashed=1;" vertex="1" parent="1"><mxGeometry x="40" y="1400" width="440" height="158" as="geometry"/></mxCell><mxCell id="proposal" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Proposal&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dcfce7;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="580" y="1400" width="440" height="107" as="geometry"/></mxCell><mxCell id="version" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;ProposalVersion&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- versionNo: int&lt;br/&gt;- phase: Phase&lt;br/&gt;- title: String&lt;br/&gt;- abstract: String&lt;br/&gt;- originalFilename: String&lt;br/&gt;- storedFilename: String {unique}&lt;br/&gt;- sizeBytes: int&lt;br/&gt;- sha256: String [0..1]&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- deleteRequestedAt: DateTime [0..1]&lt;br/&gt;- deleteApprovedAt: DateTime [0..1]&lt;br/&gt;- deleteRequestedBy: User [0..1]&lt;br/&gt;- deleteRejectedAt: DateTime [0..1]&lt;br/&gt;- deleteReason: String [0..1]&lt;br/&gt;- /deleteExecutesAt: DateTime [0..1]&lt;br/&gt;- reviewStatus: ReviewStatus&lt;br/&gt;- reviewNote: String [0..1]&lt;br/&gt;- reviewedAt: DateTime [0..1]&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dcfce7;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="580" y="1607" width="440" height="340" as="geometry"/></mxCell><mxCell id="milestone" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;MilestoneTemplate&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- phase: Phase {id}&lt;br/&gt;- dueAt: DateTime&lt;br/&gt;- graceDays: int {0..7}&lt;br/&gt;- penaltyPerDay: int {0..100}&lt;br/&gt;- /closesAt: DateTime&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1660" y="1400" width="440" height="158" as="geometry"/></mxCell><mxCell id="gm" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;GroupMilestone&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- phase: Phase&lt;br/&gt;- extendedDueAt: DateTime [0..1]&lt;br/&gt;- submittedAt: DateTime [0..1]&lt;br/&gt;- /lateDays: int&lt;br/&gt;- /penalty: int&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ effectiveDueAt(t: MilestoneTemplate): DateTime&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1660" y="1658" width="440" height="175" as="geometry"/></mxCell><mxCell id="deliv" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Deliverable&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1120" y="1718" width="440" height="90" as="geometry"/></mxCell><mxCell id="semester" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;Semester&lt;/b&gt;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;font-size:10px;&#x27;&gt;&lt;i&gt;owned by Member 1 (F1)&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- startedAt: DateTime&lt;br/&gt;- /registrationClosesAt: DateTime&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ registrationOpen(): Boolean&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ffffff;strokeColor=#1f2937;dashed=1;" vertex="1" parent="1"><mxGeometry x="2200" y="1658" width="440" height="141" as="geometry"/></mxCell><mxCell id="comment" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;FeedbackComment&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- body: String&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fce7f3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="40" y="2041" width="440" height="124" as="geometry"/></mxCell><mxCell id="thread" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;FeedbackThread&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- section: ProposalSection&lt;br/&gt;- resolved: Boolean&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ addComment(author: User, body: String): FeedbackComment&lt;br/&gt;+ resolve(): void&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fce7f3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="580" y="2041" width="440" height="158" as="geometry"/></mxCell><mxCell id="ext" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&lt;b&gt;ExtensionRequest&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;- id: int {id}&lt;br/&gt;- phase: Phase&lt;br/&gt;- reason: String&lt;br/&gt;- requestedDueAt: DateTime&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- supervisorSupports: Boolean [0..1]&lt;br/&gt;- supervisorNote: String [0..1]&lt;br/&gt;- status: ExtensionStatus&lt;br/&gt;- grantedDueAt: DateTime [0..1]&lt;br/&gt;- decisionNote: String [0..1]&lt;br/&gt;- decidedAt: DateTime [0..1]&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;+ apply(gm: GroupMilestone): void   {sets extendedDueAt}&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1660" y="2041" width="440" height="260" as="geometry"/></mxCell><mxCell id="eRole" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;Role&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;student&lt;br/&gt;faculty&lt;br/&gt;coordinator&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="40" y="2421" width="440" height="124" as="geometry"/></mxCell><mxCell id="ePhase" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;Phase&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;P1&lt;br/&gt;P2&lt;br/&gt;P3&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="580" y="2421" width="440" height="124" as="geometry"/></mxCell><mxCell id="eTS" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;ThesisStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;pending&lt;br/&gt;active&lt;br/&gt;completed&lt;br/&gt;dropped&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1120" y="2421" width="440" height="141" as="geometry"/></mxCell><mxCell id="eRS" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;ReviewStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;pending&lt;br/&gt;approved&lt;br/&gt;changesRequested&lt;br/&gt;rejected&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1660" y="2421" width="440" height="141" as="geometry"/></mxCell><mxCell id="ePS" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;ProposalSection&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;general&lt;br/&gt;abstract&lt;br/&gt;problemStatement&lt;br/&gt;objectives&lt;br/&gt;methodology&lt;br/&gt;timeline&lt;br/&gt;references&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="40" y="2651" width="440" height="192" as="geometry"/></mxCell><mxCell id="eNT" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;NotificationType&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;account&lt;br/&gt;proposal&lt;br/&gt;review&lt;br/&gt;feedback&lt;br/&gt;deadlineReminder&lt;br/&gt;extension&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="580" y="2651" width="440" height="175" as="geometry"/></mxCell><mxCell id="eES" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;EmailStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;queued&lt;br/&gt;sent&lt;br/&gt;failed&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1120" y="2651" width="440" height="124" as="geometry"/></mxCell><mxCell id="eXS" value="&lt;p style=&#x27;margin:0;margin-top:4px;text-align:center;&#x27;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#x27;margin:0;text-align:center;&#x27;&gt;&lt;b&gt;ExtensionStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#x27;1&#x27;/&gt;&lt;p style=&#x27;margin:0;margin-left:6px;&#x27;&gt;pending&lt;br/&gt;approved&lt;br/&gt;rejected&lt;/p&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="1660" y="2651" width="440" height="124" as="geometry"/></mxCell><mxCell id="e1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;endArrow=block;endFill=0;endSize=14;startArrow=none;" edge="1" parent="1" source="student" target="user"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;endArrow=block;endFill=0;endSize=14;startArrow=none;" edge="1" parent="1" source="faculty" target="user"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;endArrow=block;endFill=0;endSize=14;startArrow=none;" edge="1" parent="1" source="coord" target="user"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e4" value="◂ approves sign-up of / cancels deletion of" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.7;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.9;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="coord" target="user"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e4s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e4"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e4t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e4"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.2;exitDx=0;exitDy=0;entryX=1;entryY=0.2;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" edge="1" parent="1" source="user" target="settings"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e5s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e5"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e5t" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e5"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e6" value="receives ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="user" target="notif"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e6s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e6"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e6t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e6"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e7" value="emailed as ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="notif" target="outbox"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e7s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e7"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e7t" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e7"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e8" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.1;exitY=0;exitDx=0;exitDy=0;entryX=0.9;entryY=1;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" edge="1" parent="1" source="svc" target="notif"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e9" value="queues" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.6;exitY=0;exitDx=0;exitDy=0;entryX=0.6;entryY=1;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" edge="1" parent="1" source="svc" target="outbox"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e10" value="checks" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" edge="1" parent="1" source="svc" target="settings"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2700" y="800"/><mxPoint x="2700" y="110"/><mxPoint x="260.0" y="110"/></Array></mxGeometry></mxCell><mxCell id="e11" value="reads due dates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" edge="1" parent="1" source="svc" target="milestone"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e12" value="◂ belongs to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.15;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="student" target="thesis"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e12s" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e12"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e12t" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e12"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e13" value="has ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="thesis" target="proposal"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e13s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e13"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e13t" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e13"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e14" value="versions {ordered}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" edge="1" parent="1" source="proposal" target="version"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e14s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e14"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e14t" value="1..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e14"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e15" value="uploads ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.85;exitY=1;exitDx=0;exitDy=0;entryX=0.85;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="student" target="version"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e15s" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e15"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e15t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e15"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e16" value="supervises ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.9;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="faculty" target="thesis"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="392.0" y="1080"/></Array></mxGeometry></mxCell><mxCell id="e16s" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e16"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e16t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e16"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e17" value="reviews ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.15;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.2;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="faculty" target="version"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e17s" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e17"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e17t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e17"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e18" value="feedback ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" edge="1" parent="1" source="version" target="thread"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e18s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e18"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e18t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e18"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e19" value="{ordered}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" edge="1" parent="1" source="thread" target="comment"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e19s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e19"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e19t" value="1..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e19"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e20" value="◂ written by" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.6;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="user" target="comment"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="172.0" y="470"/></Array></mxGeometry></mxCell><mxCell id="e20s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e20"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e20t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e20"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e21" value="sets ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="coord" target="milestone"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e21s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e21"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e21t" value="0..3" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e21"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e22" value="applies to ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="milestone" target="gm"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e22s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e22"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e22t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e22"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e23" value="tracks" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" edge="1" parent="1" source="thesis" target="gm"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="260.0" y="1991"/><mxPoint x="1792.0" y="1991"/></Array></mxGeometry></mxCell><mxCell id="e23s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e23"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e23t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e23"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e24" value="has" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" edge="1" parent="1" source="semester" target="gm"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e24s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e24"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e24t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e24"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e25" value="is submitted as" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" edge="1" parent="1" source="gm" target="deliv"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e25s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e25"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e25t" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e25"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e26" value="◂ submits" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.6;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="deliv" target="version"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e26s" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e26"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e26t" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e26"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e27" value="extends ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.7;exitY=0;exitDx=0;exitDy=0;entryX=0.7;entryY=1;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="ext" target="gm"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="e27s" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e27"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e27t" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e27"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e28" value="asks for ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.85;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="thesis" target="ext"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="15" y="1540"/><mxPoint x="15" y="2341"/></Array></mxGeometry></mxCell><mxCell id="e28s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e28"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e28t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e28"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e29" value="requests ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.15;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="student" target="ext"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="800.0" y="1050"/><mxPoint x="1595" y="1050"/><mxPoint x="1595" y="1961"/><mxPoint x="1726.0" y="1961"/></Array></mxGeometry></mxCell><mxCell id="e29s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e29"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e29t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e29"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e30" value="gives opinion on ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="faculty" target="ext"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1428.0" y="1120"/><mxPoint x="1630" y="1120"/><mxPoint x="1630" y="2131"/></Array></mxGeometry></mxCell><mxCell id="e30s" value="0..1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e30"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e30t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e30"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e31" value="decides ▸" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.9;exitDx=0;exitDy=0;entryX=1;entryY=0.25;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" edge="1" parent="1" source="coord" target="ext"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2150" y="970"/><mxPoint x="2150" y="2111"/></Array></mxGeometry></mxCell><mxCell id="e31s" value="1" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e31"><mxGeometry x="-0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="e31t" value="0..*" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e31"><mxGeometry x="0.85" relative="1" as="geometry"><mxPoint x="8" y="-8" as="offset"/></mxGeometry></mxCell></root></mxGraphModel></diagram></mxfile>
+<mxfile host="app.diagrams.net" scale="1" border="0">
+  <diagram id="member3" name="Member 3">
+    <mxGraphModel dx="3433" dy="1878" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=left;verticalAlign=top;fontSize=13;" value="&lt;b style=&#39;font-size:20px&#39;&gt;ThesisFlow — Class Diagram (Member 1 F1–F5 + Member 3)&lt;/b&gt;&lt;br/&gt;F1–F5 (Semester, Archive, Originality, Guidelines Chat, Health Score) · Auth &amp;amp; accounts · F11 Proposal upload · F12 P1/P2/P3 deadlines · F13 Proposal review · F14 Notifications + email · F15 Deadline extension&lt;br/&gt;&lt;i&gt;Dashed classes belong to teammates and are shown only where they connect.&lt;/i&gt;" vertex="1">
+          <mxGeometry height="80" width="1600" x="40" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="lg0" parent="1" style="rounded=0;html=1;fontSize=11;fillColor=#dbeafe;strokeColor=#1f2937;" value="Accounts &amp; roles" vertex="1">
+          <mxGeometry height="26" width="310" x="1700" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1" parent="1" style="rounded=0;html=1;fontSize=11;fillColor=#dcfce7;strokeColor=#1f2937;" value="F11 Proposal upload" vertex="1">
+          <mxGeometry height="26" width="310" x="2030" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2" parent="1" style="rounded=0;html=1;fontSize=11;fillColor=#fef9c3;strokeColor=#1f2937;" value="F12 Deadlines · F15 Extensions" vertex="1">
+          <mxGeometry height="26" width="310" x="2360" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="lg3" parent="1" style="rounded=0;html=1;fontSize=11;fillColor=#fce7f3;strokeColor=#1f2937;" value="F13 Proposal review" vertex="1">
+          <mxGeometry height="26" width="310" x="1700" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="lg4" parent="1" style="rounded=0;html=1;fontSize=11;fillColor=#ede9fe;strokeColor=#1f2937;" value="F14 Notifications + email" vertex="1">
+          <mxGeometry height="26" width="310" x="2030" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="lg5" parent="1" style="rounded=0;html=1;fontSize=11;fillColor=#f3f4f6;strokeColor=#1f2937;" value="Enumerations" vertex="1">
+          <mxGeometry height="26" width="310" x="2360" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="lg6" parent="1" style="rounded=0;html=1;fontSize=11;fillColor=#e0f2fe;strokeColor=#1f2937;" value="F1–F5 Semester, Archive, AI &amp; Health" vertex="1">
+          <mxGeometry height="26" width="310" x="2720" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="settings" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;EmailSettings&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- emailEnabled: Boolean&lt;br/&gt;- deadlineReminders: Boolean&lt;br/&gt;- reviewUpdates: Boolean&lt;br/&gt;- extensionUpdates: Boolean&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ wants(type: NotificationType): Boolean&lt;/p&gt;" vertex="1">
+          <mxGeometry height="141" width="440" x="40" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="user" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;User&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- email: String {unique}&lt;br/&gt;- idNumber: String[8] {unique}&lt;br/&gt;- fullName: String&lt;br/&gt;- passwordHash: String&lt;br/&gt;- role: Role&lt;br/&gt;- approved: Boolean&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- deletionRequestedAt: DateTime [0..1]&lt;br/&gt;- deletionApprovedAt: DateTime [0..1]&lt;br/&gt;- deletionReason: String [0..1]&lt;br/&gt;- deletionRequestedBy: User [0..1]&lt;br/&gt;- /deletionExecutesAt: DateTime [0..1]&lt;br/&gt;- /firstName: String&lt;br/&gt;- /monogram: String&lt;br/&gt;- /tools: String [*]&lt;br/&gt;- /deletionPending: Boolean&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ register(data: UserCreate): User&lt;br/&gt;+ login(idNumber: String, password: String): String&lt;br/&gt;+ me(): User&lt;br/&gt;+ requestDeletion(reason: String): User&lt;br/&gt;+ viewTimeline(): Timeline&lt;br/&gt;+ downloadVersion(versionId: int): File&lt;br/&gt;+ getNotifications(unreadOnly: Boolean): Notification [*]&lt;br/&gt;+ markRead(notificationId: int): Notification&lt;br/&gt;+ markAllRead(): void&lt;br/&gt;+ updateEmailSettings(s: EmailSettings): EmailSettings&lt;/p&gt;" vertex="1">
+          <mxGeometry height="447" width="440" x="1120" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="notif" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Notification&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- type: NotificationType&lt;br/&gt;- message: String&lt;br/&gt;- link: String [0..1]&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- readAt: DateTime [0..1]&lt;br/&gt;- /unread: Boolean&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ markRead(): void&lt;/p&gt;" vertex="1">
+          <mxGeometry height="192" width="440" x="1660" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="outbox" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;EmailOutbox&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- toEmail: String&lt;br/&gt;- subject: String&lt;br/&gt;- body: String&lt;br/&gt;- dedupeKey: String {unique}&lt;br/&gt;- status: EmailStatus&lt;br/&gt;- attempts: int&lt;br/&gt;- sentAt: DateTime [0..1]&lt;br/&gt;- lastError: String [0..1]&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ send(): Boolean   (Brevo, backup on failure)&lt;/p&gt;" vertex="1">
+          <mxGeometry height="226" width="440" x="2200" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="student" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Student&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- phase: Phase [0..1]&lt;br/&gt;- phaseStartedAt: DateTime&lt;br/&gt;- frozenAt: DateTime [0..1]&lt;br/&gt;- restartRequestedAt: DateTime [0..1]&lt;br/&gt;- restartApproved: Boolean&lt;br/&gt;- /restartPending: Boolean&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ uploadVersion(title: String, abstract: String, pdf: File): Proposal&lt;br/&gt;+ getMyProposal(): Proposal&lt;br/&gt;+ requestVersionDelete(versionId: int, reason: String): Proposal&lt;br/&gt;+ addCoSupervisor(facultyId: int): Thesis&lt;br/&gt;+ requestRestart(): User&lt;br/&gt;+ replyToFeedback(threadId: int, body: String): FeedbackComment&lt;br/&gt;+ requestExtension(phase: Phase, dueAt: DateTime, reason: String): ExtensionRequest&lt;/p&gt;" vertex="1">
+          <mxGeometry height="277" width="440" x="580" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="faculty" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Faculty&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- initials: String {unique}&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ addFeedback(versionId: int, section: ProposalSection, body: String): FeedbackThread&lt;br/&gt;+ replyToFeedback(threadId: int, body: String): FeedbackComment&lt;br/&gt;+ approveProposal(versionId: int): ProposalVersion&lt;br/&gt;+ requestChanges(versionId: int, note: String): ProposalVersion&lt;br/&gt;+ rejectProposal(versionId: int, note: String): ProposalVersion&lt;br/&gt;+ scheduleVersionDelete(versionId: int, reason: String): void&lt;br/&gt;+ approveVersionDelete(versionId: int): void&lt;br/&gt;+ cancelVersionDelete(versionId: int): void&lt;br/&gt;+ setDefer(thesisId: int, defer: Boolean): Thesis&lt;br/&gt;+ giveOpinion(requestId: int, supports: Boolean, note: String): ExtensionRequest&lt;/p&gt;" vertex="1">
+          <mxGeometry height="269" width="440" x="1120" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="coord" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dbeafe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Coordinator&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;only one instance&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ approveRegistration(userId: int): User&lt;br/&gt;+ rejectRegistration(userId: int): void&lt;br/&gt;+ approveDeletion(userId: int): User&lt;br/&gt;+ cancelDeletion(userId: int): User&lt;br/&gt;+ scheduleDeletion(userId: int, reason: String): User&lt;br/&gt;+ listAccounts(role: Role, idPrefix: String): User [*]&lt;br/&gt;+ approveRestart(userId: int): User&lt;br/&gt;+ rejectRestart(userId: int): User&lt;br/&gt;+ setDeadline(phase: Phase, dueAt: DateTime, graceDays: int, penaltyPerDay: int): void&lt;br/&gt;+ nextSemester(): void&lt;br/&gt;+ listExtensionRequests(status: ExtensionStatus): ExtensionRequest [*]&lt;br/&gt;+ decideExtension(requestId: int, approve: Boolean, dueAt: DateTime [0..1], note: String): ExtensionRequest&lt;/p&gt;" vertex="1">
+          <mxGeometry height="345" width="440" x="1660" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="svc" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ede9fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;service&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;NotificationService&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ notify(to: User, type: NotificationType, message: String, link: String): Notification&lt;br/&gt;+ sendDueReminders(now: DateTime): int   {3 days and 1 day before each due date}&lt;br/&gt;+ flushOutbox(): int   {runs in the background}&lt;/p&gt;" vertex="1">
+          <mxGeometry height="175" width="440" x="2200" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="thesis" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#ffffff;strokeColor=#1f2937;dashed=1;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Thesis&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;owned by Member 2 (F6)&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- code: String[9] [0..1] {unique}&lt;br/&gt;- status: ThesisStatus&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;" vertex="1">
+          <mxGeometry height="158" width="440" x="40" y="1400" as="geometry" />
+        </mxCell>
+        <mxCell id="proposal" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dcfce7;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Proposal&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;" vertex="1">
+          <mxGeometry height="107" width="440" x="580" y="1400" as="geometry" />
+        </mxCell>
+        <mxCell id="version" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#dcfce7;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;ProposalVersion&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- versionNo: int&lt;br/&gt;- phase: Phase&lt;br/&gt;- title: String&lt;br/&gt;- abstract: String&lt;br/&gt;- originalFilename: String&lt;br/&gt;- storedFilename: String {unique}&lt;br/&gt;- sizeBytes: int&lt;br/&gt;- sha256: String [0..1]&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- deleteRequestedAt: DateTime [0..1]&lt;br/&gt;- deleteApprovedAt: DateTime [0..1]&lt;br/&gt;- deleteRequestedBy: User [0..1]&lt;br/&gt;- deleteRejectedAt: DateTime [0..1]&lt;br/&gt;- deleteReason: String [0..1]&lt;br/&gt;- /deleteExecutesAt: DateTime [0..1]&lt;br/&gt;- reviewStatus: ReviewStatus&lt;br/&gt;- reviewNote: String [0..1]&lt;br/&gt;- reviewedAt: DateTime [0..1]&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;" vertex="1">
+          <mxGeometry height="340" width="440" x="580" y="1607" as="geometry" />
+        </mxCell>
+        <mxCell id="milestone" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;MilestoneTemplate&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- phase: Phase {id}&lt;br/&gt;- dueAt: DateTime&lt;br/&gt;- graceDays: int {0..7}&lt;br/&gt;- penaltyPerDay: int {0..100}&lt;br/&gt;- /closesAt: DateTime&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;" vertex="1">
+          <mxGeometry height="158" width="440" x="1660" y="1400" as="geometry" />
+        </mxCell>
+        <mxCell id="gm" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;GroupMilestone&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- phase: Phase&lt;br/&gt;- extendedDueAt: DateTime [0..1]&lt;br/&gt;- submittedAt: DateTime [0..1]&lt;br/&gt;- /lateDays: int&lt;br/&gt;- /penalty: int&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ effectiveDueAt(t: MilestoneTemplate): DateTime&lt;/p&gt;" vertex="1">
+          <mxGeometry height="175" width="440" x="1660" y="1658" as="geometry" />
+        </mxCell>
+        <mxCell id="deliv" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Deliverable&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;" vertex="1">
+          <mxGeometry height="90" width="440" x="1120" y="1718" as="geometry" />
+        </mxCell>
+        <mxCell id="semester" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#e0f2fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;Semester&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;F1 · owned by Member 1&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- name: String&lt;br/&gt;- startedAt: DateTime&lt;br/&gt;- registrationOpensAt: DateTime [0..1]&lt;br/&gt;- registrationClosesAt: DateTime [0..1]&lt;br/&gt;- formGroupOpen: Boolean&lt;br/&gt;- pickSupervisorOpen: Boolean&lt;br/&gt;- p1Open: Boolean&lt;br/&gt;- p2Open: Boolean&lt;br/&gt;- p3Open: Boolean&lt;br/&gt;- defenseOpen: Boolean&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ isPhaseOpen(phase: Phase): Boolean&lt;br/&gt;+ registrationOpen(): Boolean&lt;/p&gt;" vertex="1">
+          <mxGeometry height="252" width="440" x="2200" y="1658" as="geometry" />
+        </mxCell>
+        <mxCell id="archThesis" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#e0f2fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;ArchivedThesis&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;F2 · Semester Archive&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- title: String&lt;br/&gt;- abstract: String&lt;br/&gt;- semesterLabel: String&lt;br/&gt;- year: int&lt;br/&gt;- fileUrl: String&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ uploadArchive(title: String, abstract: String, file: File): ArchivedThesis&lt;br/&gt;+ semanticSearch(query: String): ArchivedThesis [*]&lt;/p&gt;" vertex="1">
+          <mxGeometry height="210" width="440" x="2760" y="1400" as="geometry" />
+        </mxCell>
+        <mxCell id="docChunk" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#e0f2fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;DocChunk&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;F2 &amp;amp; F4 · Embeddings &amp;amp; Guidelines&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- sourceType: String&lt;br/&gt;- sourceRef: String&lt;br/&gt;- content: String&lt;br/&gt;- embedding: float [*]&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ matchSimilar(query: String, topK: int): DocChunk [*]&lt;br/&gt;+ askGuidelines(question: String): String&lt;/p&gt;" vertex="1">
+          <mxGeometry height="210" width="440" x="2760" y="1658" as="geometry" />
+        </mxCell>
+        <mxCell id="origReport" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#e0f2fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;OriginalityReport&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;F3 · Proposal Originality Check&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- maxSimilarity: float&lt;br/&gt;- flagged: Boolean&lt;br/&gt;- checkedAt: DateTime&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ runCheck(proposalVersionId: int): OriginalityReport&lt;/p&gt;" vertex="1">
+          <mxGeometry height="185" width="440" x="2760" y="1916" as="geometry" />
+        </mxCell>
+        <mxCell id="extPaper" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#e0f2fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;ExternalPaper&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;F3 · OpenAlex / Semantic Scholar / arXiv&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- source: String&lt;br/&gt;- externalId: String&lt;br/&gt;- title: String&lt;br/&gt;- url: String&lt;br/&gt;- similarityScore: float&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ searchExternal(query: String): ExternalPaper [*]&lt;/p&gt;" vertex="1">
+          <mxGeometry height="205" width="440" x="2760" y="2148" as="geometry" />
+        </mxCell>
+        <mxCell id="healthScore" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#e0f2fe;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;HealthScore&lt;/b&gt;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;font-size:10px;&#39;&gt;&lt;i&gt;F5 · Group Health (0–100)&lt;/i&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- score: int {0..100}&lt;br/&gt;- warningActive: Boolean&lt;br/&gt;- computedAt: DateTime&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ recalculate(thesisId: int): HealthScore&lt;br/&gt;+ isBehind(): Boolean&lt;/p&gt;" vertex="1">
+          <mxGeometry height="195" width="440" x="2760" y="2400" as="geometry" />
+        </mxCell>
+        <mxCell id="comment" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fce7f3;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;FeedbackComment&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- body: String&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;&lt;/p&gt;" vertex="1">
+          <mxGeometry height="124" width="440" x="40" y="2041" as="geometry" />
+        </mxCell>
+        <mxCell id="thread" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fce7f3;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;FeedbackThread&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- section: ProposalSection&lt;br/&gt;- resolved: Boolean&lt;br/&gt;- createdAt: DateTime&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ addComment(author: User, body: String): FeedbackComment&lt;br/&gt;+ resolve(): void&lt;/p&gt;" vertex="1">
+          <mxGeometry height="158" width="440" x="580" y="2041" as="geometry" />
+        </mxCell>
+        <mxCell id="ext" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#fef9c3;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&lt;b&gt;ExtensionRequest&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;- id: int {id}&lt;br/&gt;- phase: Phase&lt;br/&gt;- reason: String&lt;br/&gt;- requestedDueAt: DateTime&lt;br/&gt;- createdAt: DateTime&lt;br/&gt;- supervisorSupports: Boolean [0..1]&lt;br/&gt;- supervisorNote: String [0..1]&lt;br/&gt;- status: ExtensionStatus&lt;br/&gt;- grantedDueAt: DateTime [0..1]&lt;br/&gt;- decisionNote: String [0..1]&lt;br/&gt;- decidedAt: DateTime [0..1]&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;+ apply(gm: GroupMilestone): void   {sets extendedDueAt}&lt;/p&gt;" vertex="1">
+          <mxGeometry height="260" width="440" x="1660" y="2041" as="geometry" />
+        </mxCell>
+        <mxCell id="eRole" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;Role&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;student&lt;br/&gt;faculty&lt;br/&gt;coordinator&lt;/p&gt;" vertex="1">
+          <mxGeometry height="124" width="440" x="40" y="2421" as="geometry" />
+        </mxCell>
+        <mxCell id="ePhase" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;Phase&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;P1&lt;br/&gt;P2&lt;br/&gt;P3&lt;/p&gt;" vertex="1">
+          <mxGeometry height="124" width="440" x="580" y="2421" as="geometry" />
+        </mxCell>
+        <mxCell id="eTS" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;ThesisStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;pending&lt;br/&gt;active&lt;br/&gt;completed&lt;br/&gt;dropped&lt;/p&gt;" vertex="1">
+          <mxGeometry height="141" width="440" x="1120" y="2421" as="geometry" />
+        </mxCell>
+        <mxCell id="eRS" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;ReviewStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;pending&lt;br/&gt;approved&lt;br/&gt;changesRequested&lt;br/&gt;rejected&lt;/p&gt;" vertex="1">
+          <mxGeometry height="141" width="440" x="1660" y="2421" as="geometry" />
+        </mxCell>
+        <mxCell id="ePS" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;ProposalSection&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;general&lt;br/&gt;abstract&lt;br/&gt;problemStatement&lt;br/&gt;objectives&lt;br/&gt;methodology&lt;br/&gt;timeline&lt;br/&gt;references&lt;/p&gt;" vertex="1">
+          <mxGeometry height="192" width="440" x="40" y="2651" as="geometry" />
+        </mxCell>
+        <mxCell id="eNT" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;NotificationType&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;account&lt;br/&gt;proposal&lt;br/&gt;review&lt;br/&gt;feedback&lt;br/&gt;deadlineReminder&lt;br/&gt;extension&lt;/p&gt;" vertex="1">
+          <mxGeometry height="175" width="440" x="580" y="2651" as="geometry" />
+        </mxCell>
+        <mxCell id="eES" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;EmailStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;queued&lt;br/&gt;sent&lt;br/&gt;failed&lt;/p&gt;" vertex="1">
+          <mxGeometry height="124" width="440" x="1120" y="2651" as="geometry" />
+        </mxCell>
+        <mxCell id="eXS" parent="1" style="verticalAlign=top;align=left;overflow=fill;html=1;whiteSpace=wrap;fontSize=12;fillColor=#f3f4f6;strokeColor=#1f2937;" value="&lt;p style=&#39;margin:0;margin-top:4px;text-align:center;&#39;&gt;&amp;#171;enumeration&amp;#187;&lt;/p&gt;&lt;p style=&#39;margin:0;text-align:center;&#39;&gt;&lt;b&gt;ExtensionStatus&lt;/b&gt;&lt;/p&gt;&lt;hr size=&#39;1&#39;/&gt;&lt;p style=&#39;margin:0;margin-left:6px;&#39;&gt;pending&lt;br/&gt;approved&lt;br/&gt;rejected&lt;/p&gt;" vertex="1">
+          <mxGeometry height="124" width="440" x="1660" y="2651" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="student" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;endArrow=block;endFill=0;endSize=14;startArrow=none;" target="user" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="faculty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;endArrow=block;endFill=0;endSize=14;startArrow=none;" target="user" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="coord" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;endArrow=block;endFill=0;endSize=14;startArrow=none;" target="user" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="coord" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.7;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.9;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="user" value="◂ approves sign-up of / cancels deletion of">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4s" connectable="0" parent="e4" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4t" connectable="0" parent="e4" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.2;exitDx=0;exitDy=0;entryX=1;entryY=0.2;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="settings" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5s" connectable="0" parent="e5" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5t" connectable="0" parent="e5" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="notif" value="receives ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6s" connectable="0" parent="e6" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6t" connectable="0" parent="e6" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="notif" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="outbox" value="emailed as ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7s" connectable="0" parent="e7" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7t" connectable="0" parent="e7" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="svc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.1;exitY=0;exitDx=0;exitDy=0;entryX=0.9;entryY=1;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" target="notif" value="creates">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="svc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.6;exitY=0;exitDx=0;exitDy=0;entryX=0.6;entryY=1;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" target="outbox" value="queues">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="svc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" target="settings" value="checks">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2700" y="800" />
+              <mxPoint x="2700" y="110" />
+              <mxPoint x="260" y="110" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="svc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;dashed=1;endArrow=open;endSize=12;startArrow=none;" target="milestone" value="reads due dates">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="student" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.15;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="thesis" value="◂ belongs to">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12s" connectable="0" parent="e12" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12t" connectable="0" parent="e12" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="thesis" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="proposal" value="has ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13s" connectable="0" parent="e13" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13t" connectable="0" parent="e13" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="proposal" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="version" value="versions {ordered}">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14s" connectable="0" parent="e14" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14t" connectable="0" parent="e14" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="student" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.85;exitY=1;exitDx=0;exitDy=0;entryX=0.85;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="version" value="uploads ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15s" connectable="0" parent="e15" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15t" connectable="0" parent="e15" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="faculty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.9;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="thesis" value="supervises ▸">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="392" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16s" connectable="0" parent="e16" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16t" connectable="0" parent="e16" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="faculty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.15;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.2;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="version" value="reviews ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17s" connectable="0" parent="e17" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17t" connectable="0" parent="e17" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="version" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="thread" value="feedback ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18s" connectable="0" parent="e18" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18t" connectable="0" parent="e18" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="thread" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="comment" value="{ordered}">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19s" connectable="0" parent="e19" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e19t" connectable="0" parent="e19" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.6;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="comment" value="◂ written by">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="172" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20s" connectable="0" parent="e20" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20t" connectable="0" parent="e20" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e21" edge="1" parent="1" source="coord" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="milestone" value="sets ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21s" connectable="0" parent="e21" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e21t" connectable="0" parent="e21" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..3" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e22" edge="1" parent="1" source="milestone" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="gm" value="applies to ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e22s" connectable="0" parent="e22" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e22t" connectable="0" parent="e22" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e23" edge="1" parent="1" source="thesis" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="gm" value="tracks">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="1991" />
+              <mxPoint x="1792" y="1991" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e23s" connectable="0" parent="e23" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e23t" connectable="0" parent="e23" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e24" edge="1" parent="1" source="semester" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="gm" value="has">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24s" connectable="0" parent="e24" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e24t" connectable="0" parent="e24" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e25" edge="1" parent="1" source="gm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="deliv" value="is submitted as">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e25s" connectable="0" parent="e25" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e25t" connectable="0" parent="e25" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e26" edge="1" parent="1" source="deliv" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.6;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="version" value="◂ submits">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26s" connectable="0" parent="e26" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e26t" connectable="0" parent="e26" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e27" edge="1" parent="1" source="ext" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.7;exitY=0;exitDx=0;exitDy=0;entryX=0.7;entryY=1;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="gm" value="extends ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e27s" connectable="0" parent="e27" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e27t" connectable="0" parent="e27" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e28" edge="1" parent="1" source="thesis" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.85;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="ext" value="asks for ▸">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="15" y="1540" />
+              <mxPoint x="15" y="2341" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e28s" connectable="0" parent="e28" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e28t" connectable="0" parent="e28" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e29" edge="1" parent="1" source="student" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.15;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="ext" value="requests ▸">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="800" y="1050" />
+              <mxPoint x="1595" y="1050" />
+              <mxPoint x="1595" y="1961" />
+              <mxPoint x="1726" y="1961" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e29s" connectable="0" parent="e29" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e29t" connectable="0" parent="e29" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e30" edge="1" parent="1" source="faculty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="ext" value="gives opinion on ▸">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1428" y="1120" />
+              <mxPoint x="1630" y="1120" />
+              <mxPoint x="1630" y="2131" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e30s" connectable="0" parent="e30" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e30t" connectable="0" parent="e30" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e31" edge="1" parent="1" source="coord" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.9;exitDx=0;exitDy=0;entryX=1;entryY=0.25;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="ext" value="decides ▸">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2150" y="970" />
+              <mxPoint x="2150" y="2111" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e31s" connectable="0" parent="e31" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e31t" connectable="0" parent="e31" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e32" edge="1" parent="1" source="version" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="origReport" value="checks originality ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e32s" connectable="0" parent="e32" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e32t" connectable="0" parent="e32" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e33" edge="1" parent="1" source="origReport" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;startArrow=none;" target="extPaper" value="matches ▸">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e33s" connectable="0" parent="e33" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e33t" connectable="0" parent="e33" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e34" edge="1" parent="1" source="thesis" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;startArrow=diamondThin;startFill=1;startSize=16;endArrow=none;" target="healthScore" value="monitors">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e34s" connectable="0" parent="e34" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e34t" connectable="0" parent="e34" style="edgeLabel;html=1;fontSize=11;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.85" as="geometry">
+            <mxPoint x="8" y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
