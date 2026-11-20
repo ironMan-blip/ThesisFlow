@@ -70,9 +70,9 @@ Short list of everything ThesisFlow does. Full rules for each item are in [Featu
 
 ## Class Diagram
 
-![ThesisFlow class diagram](docs/470_class_diagram_g7.svg)
+![ThesisFlow class diagram](docs/470_class_diagram_group7.svg)
 
-Member 3's part (auth & accounts, F11–F15), made in draw.io. Edit `docs/470_class_diagram_g7.drawio` in draw.io, then export the `.svg` and `.png`. The other members' parts will be added to this same file.
+Group 7's combined class diagram, made in draw.io: Member 1's part (F1–F5: semester, archive, originality check, guidelines chat, health score) and Member 3's part (auth & accounts, F11–F15). Edit `docs/470_class_diagram_group7.drawio` in draw.io, then export the `.svg` and `.png`. The other members' parts will be added to this same file.
 
 ## Architecture
 
